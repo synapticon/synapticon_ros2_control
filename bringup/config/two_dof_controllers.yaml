@@ -10,6 +10,7 @@ forward_torque_controller:
     type: forward_command_controller/ForwardCommandController
     joints:
       - joint1
+      - joint2
     interface_name: effort
 
 forward_velocity_controller:
@@ -17,6 +18,7 @@ forward_velocity_controller:
     type: forward_command_controller/ForwardCommandController
     joints:
       - joint1
+      - joint2
     interface_name: velocity
 
 forward_position_controller:
@@ -24,6 +26,7 @@ forward_position_controller:
     type: forward_command_controller/ForwardCommandController
     joints:
       - joint1
+      - joint2
     interface_name: position
 
 quick_stop_controller:
@@ -31,4 +34,5 @@ quick_stop_controller:
     type: forward_command_controller/ForwardCommandController
     joints:
       - joint1
+      - joint2
     interface_name: quick_stop
