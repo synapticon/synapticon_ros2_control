@@ -126,24 +126,30 @@ private:
   std::optional<std::thread> somanet_control_thread_;
 
   size_t num_joints_;
+  size_t num_gpio_;
 
   // Objects for logging
   std::shared_ptr<rclcpp::Logger> logger_;
 
-  // Store the commands for the simulated robot
+  // Store the commands for the robot
   std::vector<double> hw_commands_positions_;
   std::vector<double> hw_commands_velocities_;
   std::vector<double> hw_commands_efforts_;
+  std::vector<double> hw_gpio_out_;
   // hw_commands_quick_stop_ is never actually used, just a placeholder for compilation
   std::vector<double> hw_commands_quick_stop_;
   std::vector<double> hw_states_positions_;
   std::vector<double> hw_states_velocities_;
   std::vector<double> hw_states_accelerations_;
   std::vector<double> hw_states_efforts_;
+  // TODO: for now, there's only 1 gpio_in. It simply reflects the state of hw_gpio_out_
+  // In the future, some gpio_in should function as inputs that are read in the ethercat loop
+  std::vector<double> hw_gpio_in_;
   // Threadsafe deques to share commands with somanet control loop thread
   std::deque<std::atomic<double>> threadsafe_commands_efforts_;
   std::deque<std::atomic<double>> threadsafe_commands_velocities_;
   std::deque<std::atomic<double>> threadsafe_commands_positions_;
+  std::deque<std::atomic<double>> threadsafe_gpio_out_;
 
   // Enum defining current control level
   enum control_level_t : std::uint8_t {

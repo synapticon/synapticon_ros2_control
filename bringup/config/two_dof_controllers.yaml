@@ -5,6 +5,9 @@ controller_manager:
     joint_state_broadcaster:
       type: joint_state_broadcaster/JointStateBroadcaster
 
+    gpio_controller:
+      type: gpio_controllers/GpioCommandController
+
 forward_torque_controller:
   ros__parameters:
     type: forward_command_controller/ForwardCommandController
@@ -36,3 +39,12 @@ quick_stop_controller:
       - joint1
       - joint2
     interface_name: quick_stop
+
+gpio_controller:
+  ros__parameters:
+    gpios:
+      - gpio1
+    command_interfaces:
+      gpio1:
+        - interfaces:
+          - gpio1.1

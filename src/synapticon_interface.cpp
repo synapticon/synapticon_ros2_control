@@ -50,6 +50,7 @@ hardware_interface::CallbackReturn SynapticonSystemInterface::on_init(
       rclcpp::get_logger("synapticon_interface"));
 
   num_joints_ = info_.joints.size();
+  num_gpio_ = info_.gpios.size();
 
   hw_states_positions_.resize(num_joints_,
                               std::numeric_limits<double>::quiet_NaN());
@@ -59,6 +60,7 @@ hardware_interface::CallbackReturn SynapticonSystemInterface::on_init(
                                   std::numeric_limits<double>::quiet_NaN());
   hw_states_efforts_.resize(num_joints_,
                             std::numeric_limits<double>::quiet_NaN());
+  hw_gpio_in_.resize(num_gpio_, std::numeric_limits<double>::quiet_NaN());
   hw_commands_positions_.resize(num_joints_,
                                 std::numeric_limits<double>::quiet_NaN());
   hw_commands_velocities_.resize(num_joints_, 0);
@@ -66,6 +68,7 @@ hardware_interface::CallbackReturn SynapticonSystemInterface::on_init(
                               std::numeric_limits<double>::quiet_NaN());
   hw_commands_quick_stop_.resize(num_joints_,
                               std::numeric_limits<double>::quiet_NaN());
+  hw_gpio_out_.resize(num_gpio_, std::numeric_limits<double>::quiet_NaN());
   control_level_.resize(num_joints_, control_level_t::UNDEFINED);
   // Atomic deques are difficult to initialize
   threadsafe_commands_efforts_.resize(num_joints_);
@@ -79,6 +82,10 @@ hardware_interface::CallbackReturn SynapticonSystemInterface::on_init(
   threadsafe_commands_positions_.resize(num_joints_);
   for (auto &position : threadsafe_commands_positions_) {
     position.store(std::numeric_limits<double>::quiet_NaN());
+  }
+  threadsafe_gpio_out_.resize(num_gpio_);
+  for (auto &gpio : threadsafe_gpio_out_) {
+    gpio.store(std::numeric_limits<double>::quiet_NaN());
   }
 
   for (const hardware_interface::ComponentInfo &joint : info_.joints) {
@@ -237,19 +244,6 @@ SynapticonSystemInterface::prepare_command_mode_switch(
       }
     }
   }
-  // All joints must be given new command mode at the same time
-  if (!start_interfaces.empty() && (new_modes.size() != num_joints_)) {
-    RCLCPP_FATAL(get_logger(),
-                 "All joints must be given a new mode at the same time.");
-    return hardware_interface::return_type::ERROR;
-  }
-  // All joints must have the same command mode
-  if (!std::all_of(
-          new_modes.begin() + 1, new_modes.end(),
-          [&](control_level_t mode) { return mode == new_modes[0]; })) {
-    RCLCPP_FATAL(get_logger(), "All joints must have the same command mode.");
-    return hardware_interface::return_type::ERROR;
-  }
 
   // Stop motion on all relevant joints
   for (const std::string& key : stop_interfaces) {
@@ -289,7 +283,7 @@ hardware_interface::CallbackReturn SynapticonSystemInterface::on_activate(
     const rclcpp_lifecycle::State & /*previous_state*/) {
 
   // Set some default values
-  for (std::size_t i = 0; i < num_joints_; i++) {
+  for (size_t i = 0; i < num_joints_; ++i) {
     if (std::isnan(hw_states_velocities_[i])) {
       hw_states_velocities_[i] = 0;
     }
@@ -306,6 +300,13 @@ hardware_interface::CallbackReturn SynapticonSystemInterface::on_activate(
     threadsafe_commands_efforts_[i] = std::numeric_limits<double>::quiet_NaN();
     threadsafe_commands_velocities_[i] = 0;
     threadsafe_commands_positions_[i] =
+        std::numeric_limits<double>::quiet_NaN();
+  }
+
+  for (size_t i = 0; i < num_gpio_; ++i) {
+    hw_gpio_in_[i] = std::numeric_limits<double>::quiet_NaN();
+    hw_gpio_out_[i] = std::numeric_limits<double>::quiet_NaN();
+    threadsafe_gpio_out_[i] =
         std::numeric_limits<double>::quiet_NaN();
   }
 
@@ -329,6 +330,13 @@ hardware_interface::CallbackReturn SynapticonSystemInterface::on_deactivate(
         std::numeric_limits<double>::quiet_NaN();
   }
 
+  for (size_t i = 0; i < num_gpio_; ++i) {
+    hw_gpio_in_[i] = std::numeric_limits<double>::quiet_NaN();
+    hw_gpio_out_[i] = std::numeric_limits<double>::quiet_NaN();
+    threadsafe_gpio_out_[i] =
+        std::numeric_limits<double>::quiet_NaN();
+  }
+
   return hardware_interface::CallbackReturn::SUCCESS;
 }
 
@@ -342,6 +350,10 @@ SynapticonSystemInterface::read(const rclcpp::Time & /*time*/,
     hw_states_velocities_[i] = in_somanet_1_[i]->VelocityValue * RPM_TO_RAD_PER_S;
     hw_states_positions_[i] = in_somanet_1_[i]->PositionValue * 2 * 3.14159 / encoder_resolutions_[i];
     hw_states_efforts_[i] = in_somanet_1_[i]->TorqueValue;
+  }
+
+  for (size_t i = 0; i < num_gpio_; ++i) {
+    hw_gpio_in_[i] = hw_gpio_out_[i];
   }
 
   return hardware_interface::return_type::OK;
@@ -372,13 +384,17 @@ SynapticonSystemInterface::write(const rclcpp::Time & /*time*/,
     }
   }
 
+  for (size_t i = 0; i < num_gpio_; ++i) {
+    threadsafe_gpio_out_[i] = hw_gpio_out_[i];
+  }
+
   return hardware_interface::return_type::OK;
 }
 
 std::vector<hardware_interface::StateInterface>
 SynapticonSystemInterface::export_state_interfaces() {
   std::vector<hardware_interface::StateInterface> state_interfaces;
-  for (std::size_t i = 0; i < num_joints_; i++) {
+  for (std::size_t i = 0; i < num_joints_; ++i) {
     state_interfaces.emplace_back(hardware_interface::StateInterface(
         info_.joints[i].name, hardware_interface::HW_IF_POSITION,
         &hw_states_positions_[i]));
@@ -392,13 +408,22 @@ SynapticonSystemInterface::export_state_interfaces() {
         info_.joints[i].name, hardware_interface::HW_IF_EFFORT,
         &hw_states_efforts_[i]));
   }
+  size_t ct = 0;
+  for (size_t i = 0; i < info_.gpios.size(); i++)
+  {
+    for (auto& state_if : info_.gpios.at(i).state_interfaces)
+    {
+      state_interfaces.emplace_back(hardware_interface::StateInterface(
+        info_.gpios.at(i).name, state_if.name, &hw_gpio_in_[ct++]));
+    }
+  }
   return state_interfaces;
 }
 
 std::vector<hardware_interface::CommandInterface>
 SynapticonSystemInterface::export_command_interfaces() {
   std::vector<hardware_interface::CommandInterface> command_interfaces;
-  for (std::size_t i = 0; i < num_joints_; i++) {
+  for (size_t i = 0; i < num_joints_; ++i) {
     command_interfaces.emplace_back(hardware_interface::CommandInterface(
         info_.joints[i].name, hardware_interface::HW_IF_POSITION,
         &hw_commands_positions_[i]));
@@ -411,6 +436,14 @@ SynapticonSystemInterface::export_command_interfaces() {
     command_interfaces.emplace_back(hardware_interface::CommandInterface(
         info_.joints[i].name, "quick_stop",
         &hw_commands_quick_stop_[i]));
+  }
+  size_t ct = 0;
+  for (size_t i = 0; i < num_gpio_; ++i) {
+    for (auto& command_if : info_.gpios.at(i).command_interfaces)
+    {
+      command_interfaces.emplace_back(hardware_interface::CommandInterface(
+        info_.gpios.at(i).name, command_if.name, &hw_gpio_out_[ct++]));
+    }
   }
   return command_interfaces;
 }
@@ -442,10 +475,6 @@ OSAL_THREAD_FUNC SynapticonSystemInterface::ecatCheck(void * /*ptr*/) {
       ec_group[currentgroup].docheckstate = false;
       ec_readstate();
       for (slave = 1; slave <= ec_slavecount; slave++) {
-        if (ec_slave[slave].name != EXPECTED_SLAVE_NAME)
-        {
-          continue;
-        }
         if ((ec_slave[slave].group == currentgroup) &&
             (ec_slave[slave].state != EC_STATE_OPERATIONAL)) {
           ec_group[currentgroup].docheckstate = true;
@@ -492,13 +521,41 @@ OSAL_THREAD_FUNC SynapticonSystemInterface::ecatCheck(void * /*ptr*/) {
   }
 }
 
+/**
+ * @brief Set the digital output of a slave named "Dig_16IN_16OUT"
+ */
+void set_digital_output(uint32_t value, uint16_t address) {
+  for(int i = 1; i <= ec_slavecount ; i++) {
+    if (!(strcmp(ec_slave[i].name, "Dig_16IN_16OUT"))) {
+      uint8_t *pdo_output;
+      // Get process data pointer for the output PDO
+      pdo_output = (uint8_t*) ec_slave[i].outputs;
+      // Ensure the offset matches the actual mapped PDO position
+      // Digital IO start at 0x0F00
+      *(uint32_t *)(pdo_output + (address - 0x0F00)) = value;
+    }
+  }
+}
+
 void SynapticonSystemInterface::somanetCyclicLoop(
     std::atomic<bool> &in_normal_op_mode) {
   std::vector<bool> first_iteration(num_joints_ , true);
 
   while (rclcpp::ok()) {
     {
+      // GPIO
+      if (!std::isnan(threadsafe_gpio_out_[0]))
+      {
+        if (threadsafe_gpio_out_[0] != 0.0) {
+          set_digital_output(1, 0x0F00);
+        }
+        else {
+          set_digital_output(0, 0x0F00);
+        }
+      }
+
       std::lock_guard<std::mutex> lock(in_somanet_mtx_);
+
       ec_send_processdata();
       wkc_ = ec_receive_processdata(EC_TIMEOUTRET);
 
@@ -512,8 +569,7 @@ void SynapticonSystemInterface::somanetCyclicLoop(
             first_iteration.at(joint_idx) = false;
           }
 
-          // Fault reset: Fault -> Switch on disabled, if the drive is in fault
-          // state
+          // Fault reset: Fault -> Switch on disabled, if the drive is in fault state
           if ((in_somanet_1_[joint_idx]->Statusword & 0b0000000001001111) ==
               0b0000000000001000)
             out_somanet_1_[joint_idx]->Controlword = 0b10000000;
