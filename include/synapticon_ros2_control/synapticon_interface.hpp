@@ -165,7 +165,7 @@ private:
   std::mutex in_somanet_mtx_;
   std::vector<OutSomanet50t *> out_somanet_1_;
 
-  uint32_t encoder_resolution_;
+  std::vector<uint32_t> encoder_resolutions_;
 
   // For coordination between threads
   volatile std::atomic<int> wkc_;

@@ -61,8 +61,7 @@ hardware_interface::CallbackReturn SynapticonSystemInterface::on_init(
                             std::numeric_limits<double>::quiet_NaN());
   hw_commands_positions_.resize(num_joints_,
                                 std::numeric_limits<double>::quiet_NaN());
-  hw_commands_velocities_.resize(num_joints_,
-                                 std::numeric_limits<double>::quiet_NaN());
+  hw_commands_velocities_.resize(num_joints_, 0);
   hw_commands_efforts_.resize(num_joints_,
                               std::numeric_limits<double>::quiet_NaN());
   hw_commands_quick_stop_.resize(num_joints_,
@@ -177,22 +176,35 @@ hardware_interface::CallbackReturn SynapticonSystemInterface::on_init(
     out_somanet_1_.push_back((OutSomanet50t *)ec_slave[joint_idx].outputs);
   }
 
-  // Read encoder resolution
-  uint8_t encoder_source;
-  int size = sizeof(encoder_source);
-  ec_SDOread(1, 0x2012, 0x09, false, &size, &encoder_source, EC_TIMEOUTRXM);
-  size = sizeof(encoder_resolution_);
-  if (encoder_source == 1) {
-    ec_SDOread(1, 0x2110, 0x03, false, &size, &encoder_resolution_,
-               EC_TIMEOUTRXM);
-  } else if (encoder_source == 2) {
-    ec_SDOread(1, 0x2112, 0x03, false, &size, &encoder_resolution_,
-               EC_TIMEOUTRXM);
-  } else {
-    RCLCPP_FATAL(
-        get_logger(),
-        "No encoder configured for position control. Terminating the program");
-    return hardware_interface::CallbackReturn::ERROR;
+  // Read encoder resolution for each joint
+  encoder_resolutions_.resize(num_joints_);
+  for (size_t joint_idx = 1; joint_idx < (num_joints_ + 1); ++joint_idx) {
+    // Verify slave name
+    if (strcmp(ec_slave[joint_idx].name, EXPECTED_SLAVE_NAME) != 0) {
+      RCLCPP_FATAL(
+          get_logger(),
+          "Expected slave %s at position %zu, but got %s instead",
+          EXPECTED_SLAVE_NAME, joint_idx, ec_slave[joint_idx].name);
+      return hardware_interface::CallbackReturn::ERROR;
+    }
+
+    uint8_t encoder_source;
+    int size = sizeof(encoder_source);
+    ec_SDOread(joint_idx, 0x2012, 0x09, false, &size, &encoder_source, EC_TIMEOUTRXM);
+    size = sizeof(encoder_resolutions_[joint_idx-1]);
+    if (encoder_source == 1) {
+      ec_SDOread(joint_idx, 0x2110, 0x03, false, &size, &encoder_resolutions_[joint_idx-1],
+                EC_TIMEOUTRXM);
+    } else if (encoder_source == 2) {
+      ec_SDOread(joint_idx, 0x2112, 0x03, false, &size, &encoder_resolutions_[joint_idx-1],
+                EC_TIMEOUTRXM);
+    } else {
+      RCLCPP_FATAL(
+          get_logger(),
+          "No encoder configured for position control on joint %zu. Terminating the program",
+          joint_idx);
+      return hardware_interface::CallbackReturn::ERROR;
+    }
   }
 
   // Start the control loop, wait for it to reach normal operation mode
@@ -323,13 +335,12 @@ hardware_interface::CallbackReturn SynapticonSystemInterface::on_deactivate(
 hardware_interface::return_type
 SynapticonSystemInterface::read(const rclcpp::Time & /*time*/,
                                 const rclcpp::Duration & /*period*/) {
-
+  std::lock_guard<std::mutex> lock(in_somanet_mtx_);
   for (std::size_t i = 0; i < num_joints_; i++) {
-    std::lock_guard<std::mutex> lock(in_somanet_mtx_);
     // InSomanet50t doesn't include acceleration
     hw_states_accelerations_[i] = 0;
     hw_states_velocities_[i] = in_somanet_1_[i]->VelocityValue * RPM_TO_RAD_PER_S;
-    hw_states_positions_[i] = in_somanet_1_[0]->PositionValue * 2 * 3.14159 / encoder_resolution_;
+    hw_states_positions_[i] = in_somanet_1_[i]->PositionValue * 2 * 3.14159 / encoder_resolutions_[i];
     hw_states_efforts_[i] = in_somanet_1_[i]->TorqueValue;
   }
 
@@ -357,7 +368,7 @@ SynapticonSystemInterface::write(const rclcpp::Time & /*time*/,
     }
     if (!std::isnan(hw_commands_positions_[i]))
     {
-      threadsafe_commands_positions_[i] = hw_commands_positions_[i] * encoder_resolution_ / (2 * 3.14159);
+      threadsafe_commands_positions_[i] = hw_commands_positions_[i] * encoder_resolutions_[i] / (2 * 3.14159);
     }
   }
 
