@@ -2,29 +2,32 @@
 
 ## Description
 
-This repository provides an example of using Synapticon drives (SOMANET Node, SOMANET Circulo and SOMANET Integro) in CSP, CSV, and CST modes using the ROS2 package. It utilizes `SOEM Ethercat Master`.
+This repository provides an example of using Synapticon drives (SOMANET Node, SOMANET Circulo and SOMANET Integro) in CSP, CSV, and CST modes using the ROS2 package. It utilizes `SOEM Ethercat Master`. 
+ROS2 package was originally developed by Andy Zelenak. Synapticon GmbH adds examples, simulation and adds the extended instructions for easier installation as well as support for containerization using Docker.
+
+![Alt text](https://github.com/synapticon/synapticon_ros2_control/blob/humble/images/rviz.png)
 
 ## Table of Contents
-
 
 1. [Intention](#intention)
 2. [Overview](#overview)
    - [Hardware](#hardware)
    - [Software](#software)
-   	- [Ubuntu 22.04 with ROS2](#ubuntu-2204-with-ros2)
-   		- [ROS2 Installation](#ros2install)
-   		- [Synapticon Package Installation](#package_install_ub22)
-   		- [Demo](#demo_ub_22)
-   	- [Isolated Environment (Docker)](#isolated-environment-docker)
-   		- [Docker Installation](#docker_install)
-   		- [Synapticon Package Installation](#package_install_dock)
-   		- [Demo](#demo_dock)
+      - [Ubuntu 22.04 with ROS2](#ubuntu-2204-with-ros2)
+         - [ROS2 Installation](#ros2-installation)
+         - [Synapticon Package Installation](#synapticon-package-installation)
+         - [Demo](#demo)
+      - [Isolated Environment (Docker)](#isolated-environment-docker)
+         - [Docker Installation](#docker-installation)
+         - [Synapticon Package Installation](#synapticon-package-installation-docker)
+         - [Demo](#demo-docker)
 3. [Disclaimer](#disclaimer)
+
 
 
 ## Intention
 
-The intention of this README is to provide instructions on how to quickly start using Synapticon Devices with ROS2 using Synapticon library.
+The intention of this document is to provide instructions on how to quickly start using Synapticon Devices with ROS2 package using Synapticon library.
 
 Additionally, in order to make it compatible with other Linux distributions, we provide Docker file and script for automatic interface recognition and quick set-up of the package inside the container.
 
@@ -34,7 +37,7 @@ Additionally, in order to make it compatible with other Linux distributions, we 
 >
 >The provided package assumes that the laptop on which the setup is used has only one Ethernet port and that only one device is connected at the time. Connection of the external encoders (if internal ones are not used) is labeled with cyan color. Hardware can be used once the parameters are configured with [OBLAC tools](https://www.synapticon.com/en/products/oblac-drives). Detailed instructions and wiring diagrams for all the devices are available at our [official web page](https://www.synapticon.com/en/support/dokumentation) documentation. The simplified block diagram of the wiring used in this setup is given below: 
 >
->![Alt text](https://cdn.prod.website-files.com/651ab5ec2db08ef390555f5a/67ac9fd5cfdd05cdbe2c0a4d_ROS2_Overview.jpg)
+>![Alt text](https://github.com/synapticon/synapticon_ros2_control/blob/humble/images/hardware.jpg)
 >
 >
 >### Software
@@ -102,6 +105,9 @@ Additionally, in order to make it compatible with other Linux distributions, we 
 >>>
 >>>##### Synapticon Package Installation
 >>>
+>>>OPTION 1: Installing from source
+
+>>>
 >>>Create a ROS2 workspace:
 >>>```bash
 >>>mkdir -p ~/ros2_ws/src
@@ -113,11 +119,12 @@ Additionally, in order to make it compatible with other Linux distributions, we 
 >>>```
 >>>After cloning it, you need to set up the ethernet interface. To do so, first execute `ifconfig` and remember the interface name.
 >>>
->>>After that, replace the `eno0`  with your ethernet interface in `/home/USER/ros2_ws/src/synapticon_ros2_control/src/torque_control_executable.cpp` and `/home/USER/ros2_ws/src/synapticon_ros2_control/description/ros2_control/single_dof.ros2_control.xacro`. 
+>>>After that, replace the `eno0`  with your ethernet interface in `/home/YOUR_USER/ros2_ws/src/synapticon_ros2_control/src/torque_control_executable.cpp` and `/home/YOUR_USER/ros2_ws/src/synapticon_ros2_control/description/ros2_control/single_dof.ros2_control.xacro` and `/home/YOUR_USER/ros2_ws/src/synapticon_ros2_control/description/ros2_control/two_dof.ros2_control.xacro`. 
 >>>Alternatively, you can do it with commands:
 >>>```bash
->>>sed -i "s/eno0/YOUR_ETHERNET_INTERFACE/g" /home/USER/ros2_ws/src/synapticon_ros2_control/src/torque_control_executable.cpp 
->>>sed -i "s/eno0/YOUR_ETHERNET_INTERFACE/g" /home/USER/ros2_ws/src/synapticon_ros2_control/description/ros2_control/single_dof.ros2_control.xacro
+>>>sed -i "s/eno0/YOUR_ETHERNET_INTERFACE/g" /home/YOUR_USER/ros2_ws/src/synapticon_ros2_control/src/torque_control_executable.cpp 
+>>>sed -i "s/eno0/YOUR_ETHERNET_INTERFACE/g" /home/YOUR_USER/ros2_ws/src/synapticon_ros2_control/description/ros2_control/single_dof.ros2_control.xacro
+>>>sed -i "s/eno0/YOUR_ETHERNET_INTERFACE/g" /home/YOUR_USER/ros2_ws/src/synapticon_ros2_control/description/ros2_control/two_dof.ros2_control.xacro
 >>>```
 >>>Install build tools:
 >>>```bash
@@ -133,7 +140,42 @@ Additionally, in order to make it compatible with other Linux distributions, we 
 >>>```bash
 >>>source /home/USER/ros2_ws/install/setup.bash
 >>>```
->>>To check if the master could be run and if the slaves are found, in the container terminal execute:
+>>>
+>>>OPTION 2: Binary installation
+>>>
+>>>If needed, add the ROS repository (this is done only once):
+>>>
+>>>``bash
+>>>sudo apt install software-properties-common 
+>>>sudo add-apt-repository universe 
+>>>sudo apt update
+>>>```
+>>>
+>>>Install Synapticon package:
+>>>``bash
+>>>sudo apt install ros-humble-synapticon-ros2-control
+>>>```
+>>>
+>>>Make sure your rosdep is initialized and updated:
+>>>``bash
+>>>sudo rosdep init 
+>>>rosdep update
+>>>```
+>>>
+>>>Install its dependencies:
+>>>``bash
+>>>rosdep install synapticon_ros2_control
+>>>```
+>>>The package will get installed to `/opt/ros/humble/share/synapticon_ros2_control/`.
+>>>
+>>>
+>>>
+>>>To check if the master could be run and if the slaves are found, in the container terminal execute the following.
+>>>If you installed from source:
+>>>```bash
+>>>./opt/ros/humble/share/synapticon_ros2_control/bin/torque_control_executable
+>>>```
+>>>or if you installed using binary installation:
 >>>```bash
 >>>./home/YOUR_USER/ros2_ws/install/synapticon_ros2_control/bin/torque_control_executable
 >>>```
@@ -146,12 +188,22 @@ Additionally, in order to make it compatible with other Linux distributions, we 
 >>>source /home/application/.bashrc
 >>>```
 >>>- Terminal 1:
+>>>If you are running demo with one motor: 
 >>>```bash
 >>>ros2 launch synapticon_ros2_control elevated_permissions.launch.py
 >>>```
->>>- Terminal 2: 
+>>>If you are running demo with two motors:
+>>>```bash
+>>>ros2 launch synapticon_ros2_control elevated_permissions_2_dof.launch.py
+>>>```
+>>>- Terminal 2:
+>>>If you are running demo with one motor: 
 >>>```bash
 >>>ros2 launch synapticon_ros2_control single_dof.launch.py
+>>>```
+>>>If you are running demo with two motors:
+>>>```bash
+>>>ros2 launch synapticon_ros2_control two_dof.launch.py
 >>>```
 >>>- Terminal 3 - to show the running controllers 
 >>>```bash
@@ -159,7 +211,7 @@ Additionally, in order to make it compatible with other Linux distributions, we 
 >>>```
 >>>(Information does not automatically refresh - it can be refreshed each M seconds 
 >>>using `watch -n M ros2 control list_controllers`, but the output might be ugly)
->>>- Running the motor with different controllers:
+>>>- Running motors with different controllers:
 >>>
 >>>>CSV (Cyclic Sync Velocity) mode:
 >>>>
@@ -168,8 +220,13 @@ Additionally, in order to make it compatible with other Linux distributions, we 
 >>>>ros2 service call /controller_manager/switch_controller controller_manager_msgs/srv/SwitchController "{activate_controllers: ['forward_velocity_controller'], deactivate_controllers: []}"
 >>>>```
 >>>>Terminal 5 to create a publisher:
+>>>>If you are running demo with one motor:
 >>>>```bash
 >>>>ros2 topic pub /forward_velocity_controller/commands std_msgs/msg/Float64MultiArray data:\ [100]
+>>>>```
+>>>>If you are running demo with two motors:
+>>>>```bash
+>>>>ros2 topic pub /forward_velocity_controller/commands std_msgs/msg/Float64MultiArray data:\ [100,100]
 >>>>```
 >>>>Stopping it: CTRL+C on Terminal 5 and in Terminal 4:
 >>>>```bash
@@ -182,8 +239,13 @@ Additionally, in order to make it compatible with other Linux distributions, we 
 >>>>ros2 service call /controller_manager/switch_controller controller_manager_msgs/srv/SwitchController "{activate_controllers: ['forward_position_controller'], deactivate_controllers: [quick_stop_controller]}"
 >>>>```
 >>>>Terminal 5 to create a publisher:
+>>>>If you are running demo with one motor:
 >>>>```bash
 >>>>ros2 topic pub /forward_position_controller/commands std_msgs/msg/Float64MultiArray data:\ [140]
+>>>>```
+>>>>If you are running demo with two motors:
+>>>>```bash
+>>>>ros2 topic pub /forward_position_controller/commands std_msgs/msg/Float64MultiArray data:\ [140, 140]
 >>>>```
 >>>>Stopping it: CTRL+C on Terminal 5 and in Terminal 4:
 >>>>```bash
@@ -197,8 +259,13 @@ Additionally, in order to make it compatible with other Linux distributions, we 
 >>>>ros2 service call /controller_manager/switch_controller controller_manager_msgs/srv/SwitchController "{activate_controllers: ['forward_torque_controller'], deactivate_controllers: [quick_stop_controller]}"	
 >>>>```
 >>>>Terminal 5 to create a publisher (value is in per mille of torque):
+>>>>If you are running demo with one motor:
 >>>>```bash
 >>>>ros2 topic pub /forward_torque_controller/commands std_msgs/msg/Float64MultiArray data:\ [100]	
+>>>>```
+>>>>If you are running demo with two motors:
+>>>>```bash
+>>>>ros2 topic pub /forward_torque_controller/commands std_msgs/msg/Float64MultiArray data:\ [100, 100]	
 >>>>```
 >>>>Stopping it: CTRL+C on Terminal 5 and in Terminal 4:
 >>>>```bash
@@ -237,13 +304,13 @@ Additionally, in order to make it compatible with other Linux distributions, we 
 >>>Environment="USER=YOUR_USER"
 >>>Environment="USERNAME=YOUR_USER"
 >>>
->>>ExecStart=/opt/ros/humble/bin/ros2 launch synapticon_ros2_control elevated_permissions.launch.py
+>>>ExecStart=/opt/ros/humble/bin/ros2 launch synapticon_ros2_control elevated_permissions_X_dof.launch.py
 >>>AmbientCapabilities=CAP_NET_RAW
 >>>
 >>>[Install]
 >>>WantedBy=multi-user.target
 >>>```
->>>After pasting, do not forget to replace YOUR_USER with your username and. Save the file, restart the daemon:
+>>>After pasting, do not forget to replace `YOUR_USER` with your username and `X_dof` with 1 or 2 in the line saying which launch file needs to be executed. Save the file, restart the daemon:
 >>>```bash
 >>>sudo systemctl daemon-reload
 >>>```
@@ -258,7 +325,14 @@ Additionally, in order to make it compatible with other Linux distributions, we 
 >>>Now, the example can be run by these two commands:
 >>>```bash
 >>>sudo systemctl restart ros2_control_node.service
+>>>```
+>>>and, if running demo with one motor:
+>>>```bash
 >>>ros2 launch synapticon_ros2_control single_dof.launch.py
+>>>```
+>>>If you are running demo with two motors:
+>>>```bash
+>>>ros2 launch synapticon_ros2_control two_dof.launch.py
 >>>```
 >>>Changing the controllers and publishing the desired position/velocity/torque can be now executed without sudo.
 >>>To stop the `ros2_control_node`:
@@ -315,12 +389,22 @@ Additionally, in order to make it compatible with other Linux distributions, we 
 >>>Connect Synapticon device configured with OBLAC Tools to your ethernet port as shown in Figure 1. For the demo, run 5 terminals in the container (`docker exec -it ros2_container bash` and `source /root/.bashrc`)
 >>>
 >>>- Terminal 1
+>>>If you are running demo with one motor:
 >>>```bash
->>>ros2 launch synapticon_ros2_control elevated_permissions.launch.py
+>>>ros2 launch synapticon_ros2_control elevated_permissions_1_dof.launch.py
+>>>```
+>>>If you are running demo with two motors:
+>>>```bash
+>>>ros2 launch synapticon_ros2_control elevated_permissions_2_dof.launch.py
 >>>```
 >>>- Terminal 2 - this one will open RViZ (if it fails, you forgot to execute `xhost +` on your host machine). If you spin the motor by hand, you should see the movement in RViZ.
+>>>If you are running demo with one motor:
 >>>```bash
 >>>ros2 launch synapticon_ros2_control single_dof.launch.py
+>>>```
+>>>If you are running demo with two motors:
+>>>```bash
+>>>ros2 launch synapticon_ros2_control two_dof.launch.py
 >>>```
 >>>- Terminal 3 - to show the running controllers 
 >>>```bash
@@ -329,28 +413,40 @@ Additionally, in order to make it compatible with other Linux distributions, we 
 >>>(Information does not automatically refresh - it can be refreshed each M seconds 
 >>>using `watch -n M ros2 control list_controllers`, but the output might be ugly)
 >>>
->>>>- Running the motor with different controllers:
+>>>>- Running motors with different controllers:
 >>>>CSV (Cyclic Sync Velocity) mode:
+>>>>
 >>>>Terminal 4 to turn on the controller :
 >>>>```bash
 >>>>ros2 service call /controller_manager/switch_controller controller_manager_msgs/srv/SwitchController "{activate_controllers: ['forward_velocity_controller'], deactivate_controllers: []}"
 >>>>```
 >>>>Terminal 5 to create a publisher:
+>>>>If you are running demo with one motor:
 >>>>```bash
 >>>>ros2 topic pub /forward_velocity_controller/commands std_msgs/msg/Float64MultiArray data:\ [100]
+>>>>```
+>>>>If you are running demo with two motors:
+>>>>```bash
+>>>>ros2 topic pub /forward_velocity_controller/commands std_msgs/msg/Float64MultiArray data:\ [100,100]
 >>>>```
 >>>>Stopping it: CTRL+C on Terminal 5 and in Terminal 4:
 >>>>```bash
 >>>>ros2 service call /controller_manager/switch_controller controller_manager_msgs/srv/SwitchController "{activate_controllers: ['quick_stop_controller'], deactivate_controllers: ['forward_velocity_controller']}"
 >>>>```
 >>>>- CSP (Cyclic Sync Position) mode:
+>>>>
 >>>>Terminal 4 to turn on the controller :	
 >>>>```bash
 >>>>ros2 service call /controller_manager/switch_controller controller_manager_msgs/srv/SwitchController "{activate_controllers: ['forward_position_controller'], deactivate_controllers: [quick_stop_controller]}"
 >>>>```
 >>>>Terminal 5 to create a publisher:
+>>>>If you are running demo with one motor:
 >>>>```bash
 >>>>ros2 topic pub /forward_position_controller/commands std_msgs/msg/Float64MultiArray data:\ [140]
+>>>>```
+>>>>If you are running demo with two motors:
+>>>>```bash
+>>>>ros2 topic pub /forward_position_controller/commands std_msgs/msg/Float64MultiArray data:\ [140, 140]
 >>>>```
 >>>>Stopping it: CTRL+C on Terminal 5 and in Terminal 4:
 >>>>```bash
@@ -364,8 +460,13 @@ Additionally, in order to make it compatible with other Linux distributions, we 
 >>>>ros2 service call /controller_manager/switch_controller controller_manager_msgs/srv/SwitchController "{activate_controllers: ['forward_torque_controller'], deactivate_controllers: [quick_stop_controller]}"	
 >>>>```
 >>>>Terminal 5 to create a publisher (value is in per mille of torque):
+>>>>If you are running demo with one motor:
 >>>>```bash
 >>>>ros2 topic pub /forward_torque_controller/commands std_msgs/msg/Float64MultiArray data:\ [100]	
+>>>>```
+>>>>If you are running demo with two motors:
+>>>>```bash
+>>>>ros2 topic pub /forward_torque_controller/commands std_msgs/msg/Float64MultiArray data:\ [100, 100]	
 >>>>```
 >>>>Stopping it: CTRL+C on Terminal 5 and in Terminal 4:
 >>>>```bash
@@ -375,3 +476,6 @@ Additionally, in order to make it compatible with other Linux distributions, we 
 ## Disclaimer
 
 This repository is an example of using SOMANET drives with ROS2 Humble. It does not guarantee compatibility with the latest ROS versions or SOMANET firmware. The included code is for demonstration purposes only. Synapticon GmbH refuses any responsibility for any problem or damage by the use of the example configuration and code!
+
+
+
