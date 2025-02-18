@@ -49,7 +49,7 @@ Additionally, in order to make it compatible with other Linux distributions, we 
 >
 >>#### Ubuntu 22.04 with ROS2
 >>
->>To install ROS2 on your Ubuntu machine, follow the steps from the [official website](https://docs.ros.org/en/humble/Installation/Ubuntu-Install-Debs.html) and install the full version. After the installation, some configuration steps as described [here](https://docs.ros.org/en/humble/Tutorials/Beginner-CLI-Tools/Configuring-ROS2-Environment.html) are needed. For the completeness of the demo, the following commands are copy-paste from the official website and should be executed for the ROS2 installation:
+>>To install ROS2 on your Ubuntu machine, follow the steps from the [official website](https://docs.ros.org/en/humble/Installation/Ubuntu-Install-Debs.html) and install the full version. After the installation, some configuration steps as described [here](https://docs.ros.org/en/humble/Tutorials/Beginner-CLI-Tools/Configuring-ROS2-Environment.html) are needed. For the completeness of the demo, the commands in the following subsection are copied from the official website and should be executed for the ROS2 installation.
 >>
 >>>##### ROS2 Installation
 >>>
@@ -105,8 +105,7 @@ Additionally, in order to make it compatible with other Linux distributions, we 
 >>>
 >>>##### Synapticon Package Installation
 >>>
->>>OPTION 1: Installing from source
-
+>>>OPTION 1: Installing from Source
 >>>
 >>>Create a ROS2 workspace:
 >>>```bash
@@ -141,7 +140,7 @@ Additionally, in order to make it compatible with other Linux distributions, we 
 >>>source /home/USER/ros2_ws/install/setup.bash
 >>>```
 >>>
->>>OPTION 2: Binary installation
+>>>OPTION 2: Binary Installation
 >>>
 >>>If needed, add the ROS repository (this is done only once):
 >>>
@@ -150,25 +149,27 @@ Additionally, in order to make it compatible with other Linux distributions, we 
 >>>sudo add-apt-repository universe 
 >>>sudo apt update
 >>>```
->>>
 >>>Install Synapticon package:
+>>>
 >>>``bash
 >>>sudo apt install ros-humble-synapticon-ros2-control
 >>>```
 >>>
 >>>Make sure your rosdep is initialized and updated:
+>>>
 >>>``bash
 >>>sudo rosdep init 
 >>>rosdep update
 >>>```
 >>>
 >>>Install its dependencies:
+>>>
 >>>``bash
 >>>rosdep install synapticon_ros2_control
 >>>```
 >>>The package will get installed to `/opt/ros/humble/share/synapticon_ros2_control/`.
 >>>
->>>
+>>>VERIFICATION
 >>>
 >>>To check if the master could be run and if the slaves are found, in the container terminal execute the following.
 >>>If you installed from source:
