@@ -48,7 +48,6 @@ RUN source /opt/ros/${ROS_DISTRO}/setup.bash && rosdep install --from-paths src 
 RUN source /opt/ros/${ROS_DISTRO}/setup.bash && colcon build --symlink-install --cmake-args -DCMAKE_CXX_FLAGS="-w" -DCMAKE_C_FLAGS="-w"
 
 # Set up entrypoint to source the environment
-#RUN echo "source /opt/ros/${ROS_DISTRO}/setup.bash" >> ~/.bashrc
 RUN echo "source /synapticon_ros2_control_ws/install/setup.bash" >> ~/.bashrc
 ENTRYPOINT ["/bin/bash"]
 
