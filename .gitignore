@@ -49,6 +49,6 @@ Thumbs.db
 *.wmv
 
 # ROS2 temporary build artifacts
-build/
+# build/
 install/
 log/
