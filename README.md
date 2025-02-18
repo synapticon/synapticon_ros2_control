@@ -144,27 +144,27 @@ Additionally, in order to make it compatible with other Linux distributions, we 
 >>>
 >>>If needed, add the ROS repository (this is done only once):
 >>>
->>>``bash
+>>>```bash
 >>>sudo apt install software-properties-common 
 >>>sudo add-apt-repository universe 
 >>>sudo apt update
 >>>```
 >>>Install Synapticon package:
 >>>
->>>``bash
+>>>```bash
 >>>sudo apt install ros-humble-synapticon-ros2-control
 >>>```
 >>>
 >>>Make sure your rosdep is initialized and updated:
 >>>
->>>``bash
+>>>```bash
 >>>sudo rosdep init 
 >>>rosdep update
 >>>```
 >>>
 >>>Install its dependencies:
 >>>
->>>``bash
+>>>```bash
 >>>rosdep install synapticon_ros2_control
 >>>```
 >>>The package will get installed to `/opt/ros/humble/share/synapticon_ros2_control/`.
