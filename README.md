@@ -174,11 +174,11 @@ Additionally, in order to make it compatible with other Linux distributions, we 
 >>>To check if the master could be run and if the slaves are found, in the container terminal execute the following.
 >>>If you installed from source:
 >>>```bash
->>>./opt/ros/humble/share/synapticon_ros2_control/bin/torque_control_executable
+>>>sudo ./home/YOUR_USER/ros2_ws/install/synapticon_ros2_control/bin/torque_control_executable
 >>>```
 >>>or if you installed using binary installation:
 >>>```bash
->>>./home/YOUR_USER/ros2_ws/install/synapticon_ros2_control/bin/torque_control_executable
+>>>sudo ./opt/ros/humble/share/synapticon_ros2_control/bin/torque_control_executable
 >>>```
 >>>Before running other scripts, stop this one by CTRL+C (or wait, it will shutdown automatically after a while).
 >>>
@@ -189,15 +189,17 @@ Additionally, in order to make it compatible with other Linux distributions, we 
 >>>source /home/application/.bashrc
 >>>```
 >>>- Terminal 1:
+>>>
 >>>If you are running demo with one motor: 
 >>>```bash
->>>ros2 launch synapticon_ros2_control elevated_permissions.launch.py
+>>>ros2 launch synapticon_ros2_control elevated_permissions_1_dof.launch.py
 >>>```
 >>>If you are running demo with two motors:
 >>>```bash
 >>>ros2 launch synapticon_ros2_control elevated_permissions_2_dof.launch.py
 >>>```
 >>>- Terminal 2:
+>>>
 >>>If you are running demo with one motor: 
 >>>```bash
 >>>ros2 launch synapticon_ros2_control single_dof.launch.py
@@ -211,7 +213,7 @@ Additionally, in order to make it compatible with other Linux distributions, we 
 >>>ros2 control list_controllers
 >>>```
 >>>(Information does not automatically refresh - it can be refreshed each M seconds 
->>>using `watch -n M ros2 control list_controllers`, but the output might be ugly)
+>>>using `watch -n M ros2 control list_controllers`, but the output format might be ugly)
 >>>- Running motors with different controllers:
 >>>
 >>>>CSV (Cyclic Sync Velocity) mode:
@@ -221,6 +223,7 @@ Additionally, in order to make it compatible with other Linux distributions, we 
 >>>>ros2 service call /controller_manager/switch_controller controller_manager_msgs/srv/SwitchController "{activate_controllers: ['forward_velocity_controller'], deactivate_controllers: []}"
 >>>>```
 >>>>Terminal 5 to create a publisher:
+>>>>
 >>>>If you are running demo with one motor:
 >>>>```bash
 >>>>ros2 topic pub /forward_velocity_controller/commands std_msgs/msg/Float64MultiArray data:\ [100]
@@ -240,6 +243,7 @@ Additionally, in order to make it compatible with other Linux distributions, we 
 >>>>ros2 service call /controller_manager/switch_controller controller_manager_msgs/srv/SwitchController "{activate_controllers: ['forward_position_controller'], deactivate_controllers: [quick_stop_controller]}"
 >>>>```
 >>>>Terminal 5 to create a publisher:
+>>>>
 >>>>If you are running demo with one motor:
 >>>>```bash
 >>>>ros2 topic pub /forward_position_controller/commands std_msgs/msg/Float64MultiArray data:\ [140]
@@ -260,6 +264,7 @@ Additionally, in order to make it compatible with other Linux distributions, we 
 >>>>ros2 service call /controller_manager/switch_controller controller_manager_msgs/srv/SwitchController "{activate_controllers: ['forward_torque_controller'], deactivate_controllers: [quick_stop_controller]}"	
 >>>>```
 >>>>Terminal 5 to create a publisher (value is in per mille of torque):
+>>>>
 >>>>If you are running demo with one motor:
 >>>>```bash
 >>>>ros2 topic pub /forward_torque_controller/commands std_msgs/msg/Float64MultiArray data:\ [100]	
@@ -343,7 +348,7 @@ Additionally, in order to make it compatible with other Linux distributions, we 
 >
 >>#### Isolated Environment (Docker)
 >>
->>For users with different Linux distributions or those preferring isolation, Docker can be used. Installation steps can be found in the [Docker Documentation](https://docs.docker.com/engine/install/ubuntu/). For the completeness of the documentation, we provide those steps here also:
+>>For users with different Linux distributions or those preferring isolated environment, Docker can be used. Installation steps can be found in the [Docker Documentation](https://docs.docker.com/engine/install/ubuntu/). For the completeness of the documentation, we provide those steps here also:
 >>
 >>>##### Docker Installation
 >>>

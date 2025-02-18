@@ -1,0 +1,17 @@
+<?xml version="1.0"?>
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro" name="single_dof">
+  <xacro:arg name="prefix" default="" />
+
+  <xacro:include filename="$(find synapticon_ros2_control)/urdf/single_dof_macro.urdf.xacro" />
+
+  <xacro:include filename="$(find synapticon_ros2_control)/ros2_control/single_dof.ros2_control.xacro" />
+
+  <link name="world"/>
+
+  <xacro:single_dof parent="world" prefix="$(arg prefix)">
+    <origin xyz="0 0 0" rpy="0 0 0" />
+  </xacro:single_dof>
+
+  <xacro:single_dof_ros2_control name="SingleDofRos2Control" prefix="$(arg prefix)" />
+
+</robot>
