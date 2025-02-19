@@ -257,14 +257,14 @@ OSAL_THREAD_FUNC ecatcheck(void *ptr) {
   }
 }
 
-int main(int /*argc*/, char * /*argv*/[]) {
+int main(int argc, char* argv[]) {
   printf("SOEM (Simple Open EtherCAT Master)\nSimple test\n");
 
   if (argc > 1)
   {
       /* create thread to handle slave error handling in OP */
 //      pthread_create( &thread1, NULL, (void *) &ecatcheck, (void*) &ctime);
-      osal_thread_create(&thread1, 128000, &ecatcheck, (void*)&ctime);
+      osal_thread_create(&thread1, 128000, (void*)&ecatcheck, (void*)&ctime);
       /* start cyclic part */
       simpletest(argv[1]);
   }
