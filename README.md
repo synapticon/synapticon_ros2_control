@@ -5,7 +5,7 @@
 This repository provides an example of using Synapticon drives (SOMANET Node, SOMANET Circulo and SOMANET Integro) in CSP, CSV, and CST modes using the ROS2 package. It utilizes `SOEM Ethercat Master`. 
 ROS2 package was originally developed by Andy Zelenak. Synapticon GmbH adds examples, simulation and adds the extended instructions for easier installation as well as support for containerization using Docker.
 
-![Alt text](https://github.com/synapticon/synapticon_ros2_control/blob/humble/images/rviz.png)
+![Alt text](docs/images/rviz.png)
 
 ## Table of Contents
 
@@ -37,7 +37,7 @@ Additionally, in order to make it compatible with other Linux distributions, we 
 >
 >In the figure below, a block diagram of the wiring used in this setup is given. The provided package assumes that the laptop on which the setup is used has only one Ethernet port. Hardware can be used once the parameters are configured with [OBLAC tools](https://www.synapticon.com/en/products/oblac-drives). Detailed instructions and wiring diagrams for all the devices are available at our [official web page](https://www.synapticon.com/en/support/dokumentation) documentation. Software allows daisy chaining of all the Synapticon drives in any order.
 >
->![Alt text](https://github.com/synapticon/synapticon_ros2_control/blob/humble/images/hardware.jpg)
+>![Alt text](docs/images/hardware.jpg)
 >
 >
 >### Software
