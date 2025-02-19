@@ -99,7 +99,7 @@ def generate_launch_description():
         ],
     )
 
-    # Delay event handlers for starting nodes in order
+    # Delay rviz start after `joint_state_broadcaster`
     delay_rviz_after_joint_state_broadcaster_spawner = RegisterEventHandler(
         event_handler=OnProcessExit(
             target_action=joint_state_broadcaster_spawner,
@@ -107,10 +107,14 @@ def generate_launch_description():
         )
     )
 
-    delay_joint_state_broadcaster_after_inactive_controller_spawner = RegisterEventHandler(
-        event_handler=OnProcessExit(
-            target_action=inactive_controller_spawner,
-            on_exit=[joint_state_broadcaster_spawner],
+    # Delay start of joint_state_broadcaster after `robot_controller`
+    # TODO(anyone): This is a workaround for flaky tests. Remove when fixed.
+    delay_joint_state_broadcaster_after_inactive_controller_spawner = (
+        RegisterEventHandler(
+            event_handler=OnProcessExit(
+                target_action=inactive_controller_spawner,
+                on_exit=[joint_state_broadcaster_spawner],
+            )
         )
     )
 
