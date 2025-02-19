@@ -260,11 +260,28 @@ OSAL_THREAD_FUNC ecatcheck(void *ptr) {
 int main(int /*argc*/, char * /*argv*/[]) {
   printf("SOEM (Simple Open EtherCAT Master)\nSimple test\n");
 
-  // create thread to handle slave error handling in OP
-  osal_thread_create(&thread1, 128000, (void *)&ecatcheck, (void *)&ctime);
-  // start cyclic part
-  const char interface_name[] = "eno0";
-  simpletest(interface_name);
+  if (argc > 1)
+  {
+      /* create thread to handle slave error handling in OP */
+//      pthread_create( &thread1, NULL, (void *) &ecatcheck, (void*) &ctime);
+      osal_thread_create(&thread1, 128000, &ecatcheck, (void*)&ctime);
+      /* start cyclic part */
+      simpletest(argv[1]);
+  }
+  else
+  {
+      printf("TODO: Add instructions on how this executable should be used. Maybe add the following example\n");
+      printf("ros2 run synapticon_ros2_control torque_control_executable -- eno0\n");
+      ec_adaptert* adapter = NULL;
+      printf("\nAvailable adapters:\n");
+      adapter = ec_find_adapters();
+      while (adapter != NULL)
+      {
+          printf("    - %s  (%s)\n", adapter->name, adapter->desc);
+          adapter = adapter->next;
+      }
+      ec_free_adapters(adapter);
+  }
 
   printf("End program\n");
   return (0);

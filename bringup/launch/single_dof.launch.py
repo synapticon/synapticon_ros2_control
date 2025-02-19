@@ -8,13 +8,11 @@ from launch.substitutions import (
     LaunchConfiguration,
     PathJoinSubstitution,
 )
-
 from launch_ros.actions import Node
 from launch_ros.substitutions import FindPackageShare
 
-
 def generate_launch_description():
-    # Declare arguments
+    # Declare launch arguments, including one for the interface name
     declared_arguments = []
     declared_arguments.append(
         DeclareLaunchArgument(
@@ -23,11 +21,19 @@ def generate_launch_description():
             description="Start RViz2 automatically with this launch file.",
         )
     )
+    declared_arguments.append(
+        DeclareLaunchArgument(
+            "interface_name",
+            default_value="eno0",
+            description="Ethernet interface name (e.g., eno0, eth0)",
+        )
+    )
 
-    # Initialize Arguments
+    # Initialize LaunchConfigurations
     gui = LaunchConfiguration("gui")
+    interface_name = LaunchConfiguration("interface_name")
 
-    # Get URDF via xacro
+    # Get URDF via xacro, passing the interface_name argument
     robot_description_content = Command(
         [
             PathJoinSubstitution([FindExecutable(name="xacro")]),
@@ -39,10 +45,13 @@ def generate_launch_description():
                     "single_dof_in_world.urdf.xacro",
                 ]
             ),
+            " interface_name:=",
+            interface_name,
         ]
     )
     robot_description = {"robot_description": robot_description_content}
 
+    # Other configurations (controllers, rviz config, etc.)
     robot_controllers = PathJoinSubstitution(
         [
             FindPackageShare("synapticon_ros2_control"),
@@ -50,7 +59,6 @@ def generate_launch_description():
             "single_dof_controllers.yaml",
         ]
     )
-
     rviz_config_file = PathJoinSubstitution(
         [FindPackageShare("synapticon_ros2_control"), "config", "single_dof.rviz"]
     )
@@ -91,7 +99,7 @@ def generate_launch_description():
         ],
     )
 
-    # Delay rviz start after `joint_state_broadcaster`
+    # Delay event handlers for starting nodes in order
     delay_rviz_after_joint_state_broadcaster_spawner = RegisterEventHandler(
         event_handler=OnProcessExit(
             target_action=joint_state_broadcaster_spawner,
@@ -99,14 +107,10 @@ def generate_launch_description():
         )
     )
 
-    # Delay start of joint_state_broadcaster after `robot_controller`
-    # TODO(anyone): This is a workaround for flaky tests. Remove when fixed.
-    delay_joint_state_broadcaster_after_inactive_controller_spawner = (
-        RegisterEventHandler(
-            event_handler=OnProcessExit(
-                target_action=inactive_controller_spawner,
-                on_exit=[joint_state_broadcaster_spawner],
-            )
+    delay_joint_state_broadcaster_after_inactive_controller_spawner = RegisterEventHandler(
+        event_handler=OnProcessExit(
+            target_action=inactive_controller_spawner,
+            on_exit=[joint_state_broadcaster_spawner],
         )
     )
 
