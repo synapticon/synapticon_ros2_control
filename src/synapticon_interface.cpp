@@ -127,12 +127,12 @@ hardware_interface::CallbackReturn SynapticonSystemInterface::on_init(
 
   // Ethercat initialization
   // Define the interface name (e.g. eth0 or eno0) in the ros2_control.xacro
-  std::string interface_name = info_.hardware_parameters["interface_name"];
-  int ec_init_status = ec_init(interface_name.c_str());
+  std::string eth_device = info_.hardware_parameters["eth_device"];
+  int ec_init_status = ec_init(eth_device.c_str());
   if (ec_init_status <= 0) {
     RCLCPP_FATAL_STREAM(get_logger(),
                         "Error during initialization of ethercat interface: "
-                            << interface_name.c_str() << " with status: "
+                            << eth_device.c_str() << " with status: "
                             << ec_init_status);
     return hardware_interface::CallbackReturn::ERROR;
   }

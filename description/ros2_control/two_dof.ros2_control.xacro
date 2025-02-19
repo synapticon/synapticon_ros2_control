@@ -1,13 +1,13 @@
 <?xml version="1.0"?>
 <robot xmlns:xacro="http://www.ros.org/wiki/xacro">
 
-  <xacro:macro name="two_dof_ros2_control" params="name prefix interface_name">
+  <xacro:macro name="two_dof_ros2_control" params="name prefix eth_device">
 
     <ros2_control name="${name}" type="system">
       <hardware>
         <plugin>synapticon_ros2_control/SynapticonSystemInterface</plugin>
 
-        <param name="interface_name">${interface_name}</param>
+        <param name="eth_device">${eth_device}</param>
       </hardware>
 
       <joint name="${prefix}joint1">
