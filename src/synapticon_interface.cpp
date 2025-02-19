@@ -132,6 +132,7 @@ hardware_interface::CallbackReturn SynapticonSystemInterface::on_init(
   if (ec_init_status <= 0) {
     RCLCPP_FATAL_STREAM(get_logger(),
                         "Error during initialization of ethercat interface: "
+                            << interface_name.c_str() << " with status: "
                             << ec_init_status);
     return hardware_interface::CallbackReturn::ERROR;
   }
