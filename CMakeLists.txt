@@ -20,12 +20,12 @@ endforeach()
 # SOEM library
 set(OS "linux")
 set(OS_LIBS pthread rt)
-file(GLOB OSAL_HEADERS osal/osal.h osal/${OS}/*.h)
-file(GLOB OSAL_SOURCES osal/${OS}/*.c)
-file(GLOB OSHW_HEADERS oshw/${OS}/*.h)
-file(GLOB OSHW_SOURCES oshw/${OS}/*.c)
-file(GLOB SOEM_HEADERS soem/*.h)
-file(GLOB SOEM_SOURCES soem/*.c)
+file(GLOB OSAL_HEADERS ${CMAKE_CURRENT_SOURCE_DIR}/src/osal/osal.h ${CMAKE_CURRENT_SOURCE_DIR}/src/osal/${OS}/*.h)
+file(GLOB OSAL_SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/src/osal/${OS}/*.c)
+file(GLOB OSHW_HEADERS ${CMAKE_CURRENT_SOURCE_DIR}/src/oshw/${OS}/*.h)
+file(GLOB OSHW_SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/src/oshw/${OS}/*.c)
+file(GLOB SOEM_HEADERS ${CMAKE_CURRENT_SOURCE_DIR}/src/soem/*.h)
+file(GLOB SOEM_SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/src/soem/*.c)
 
 add_library(synapticon_soem STATIC
   ${SOEM_SOURCES}
@@ -37,10 +37,10 @@ add_library(synapticon_soem STATIC
 set_property(TARGET synapticon_soem PROPERTY POSITION_INDEPENDENT_CODE ON)
 target_link_libraries(synapticon_soem ${OS_LIBS})
 target_include_directories(synapticon_soem PUBLIC
-  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/osal>
-  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/osal/${OS}>
-  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/oshw/${OS}>
-  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/soem>
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src/osal>
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src/osal/${OS}>
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src/oshw/${OS}>
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src/soem>
   $<INSTALL_INTERFACE:include/synapticon_ros2_control>
 )
 
@@ -52,10 +52,10 @@ add_library(
 )
 target_include_directories(synapticon_ros2_control PUBLIC
   $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/include>
-  $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/osal>
-  $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/osal/${OS}>
-  $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/oshw/${OS}>
-  $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/soem>
+  $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/src/osal>
+  $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/src/osal/${OS}>
+  $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/src/oshw/${OS}>
+  $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/src/soem>
 )
 target_link_libraries(synapticon_ros2_control synapticon_soem)
 ament_target_dependencies(
@@ -105,10 +105,10 @@ endif()
 ament_export_dependencies(${THIS_PACKAGE_INCLUDE_DEPENDS})
 ament_export_include_directories(
   include
-  ${CMAKE_CURRENT_SOURCE_DIR}/osal
-  ${CMAKE_CURRENT_SOURCE_DIR}/osal/${OS}
-  ${CMAKE_CURRENT_SOURCE_DIR}/oshw/${OS}
-  ${CMAKE_CURRENT_SOURCE_DIR}/soem
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/osal
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/osal/${OS}
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/oshw/${OS}
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/soem
 )
 
 # Install meshes directory
