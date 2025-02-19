@@ -31,6 +31,11 @@
         <state_interface name="acceleration"/>
         <state_interface name="effort"/>
       </joint>
+
+      <gpio name="gpio1">
+        <command_interface name="gpio1.1"/>
+        <state_interface name="gpio1.1"/>
+      </gpio>
     </ros2_control>
 
   </xacro:macro>
