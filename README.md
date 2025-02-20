@@ -165,11 +165,11 @@ VERIFICATION
 To check if the master could be run and if the slaves are found, in the container terminal execute the following.
 If you installed from source:
 ```bash
-sudo ./home/YOUR_USER/ros2_ws/install/synapticon_ros2_control/bin/torque_control_executable
+sudo ./home/YOUR_USER/ros2_ws/install/synapticon_ros2_control/bin/torque_control_executable YOUR_ETHERNET_INTERFACE
 ```
 or if you installed using binary installation:
 ```bash
-sudo ./opt/ros/humble/share/synapticon_ros2_control/bin/torque_control_executable
+sudo ./opt/ros/humble/share/synapticon_ros2_control/bin/torque_control_executable YOUR_ETHERNET_INTERFACE
 ```
 Before running other scripts, stop this one by CTRL+C (or wait, it will shutdown automatically after a while).
 
@@ -177,7 +177,7 @@ Before running other scripts, stop this one by CTRL+C (or wait, it will shutdown
 For turning the motor in different modes, you will need 5 terminals and in all of them execute:
 ```bash
 sudo -i
-source /home/application/.bashrc
+source /home/YOUR_USER/.bashrc
 ```
 - Terminal 1:
 
