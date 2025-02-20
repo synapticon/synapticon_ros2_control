@@ -12,7 +12,7 @@ from launch_ros.actions import Node
 from launch_ros.substitutions import FindPackageShare
 
 def generate_launch_description():
-    # Declare launch arguments, including one for the interface name
+    # Declare launch arguments, including one for the ethernet device name
     declared_arguments = []
     declared_arguments.append(
         DeclareLaunchArgument(
@@ -23,17 +23,17 @@ def generate_launch_description():
     )
     declared_arguments.append(
         DeclareLaunchArgument(
-            "interface_name",
+            "eth_device",
             default_value="eno0",
-            description="Ethernet interface name (e.g., eno0, eth0)",
+            description="Ethernet device name (e.g., eno0, eth0)",
         )
     )
 
     # Initialize LaunchConfigurations
     gui = LaunchConfiguration("gui")
-    interface_name = LaunchConfiguration("interface_name")
+    eth_device = LaunchConfiguration("eth_device")
 
-    # Get URDF via xacro, passing the interface_name argument
+    # Get URDF via xacro, passing the eth_device argument
     robot_description_content = Command(
         [
             PathJoinSubstitution([FindExecutable(name="xacro")]),
@@ -45,8 +45,8 @@ def generate_launch_description():
                     "single_dof_in_world.urdf.xacro",
                 ]
             ),
-            " interface_name:=",
-            interface_name,
+            " eth_device:=",
+            eth_device,
         ]
     )
     robot_description = {"robot_description": robot_description_content}
@@ -99,7 +99,7 @@ def generate_launch_description():
         ],
     )
 
-    # Delay event handlers for starting nodes in order
+    # Delay rviz start after `joint_state_broadcaster`
     delay_rviz_after_joint_state_broadcaster_spawner = RegisterEventHandler(
         event_handler=OnProcessExit(
             target_action=joint_state_broadcaster_spawner,
@@ -107,10 +107,14 @@ def generate_launch_description():
         )
     )
 
-    delay_joint_state_broadcaster_after_inactive_controller_spawner = RegisterEventHandler(
-        event_handler=OnProcessExit(
-            target_action=inactive_controller_spawner,
-            on_exit=[joint_state_broadcaster_spawner],
+    # Delay start of joint_state_broadcaster after `robot_controller`
+    # TODO(anyone): This is a workaround for flaky tests. Remove when fixed.
+    delay_joint_state_broadcaster_after_inactive_controller_spawner = (
+        RegisterEventHandler(
+            event_handler=OnProcessExit(
+                target_action=inactive_controller_spawner,
+                on_exit=[joint_state_broadcaster_spawner],
+            )
         )
     )
 
