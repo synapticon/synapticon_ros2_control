@@ -29,7 +29,7 @@ ROS2 package was originally developed by Andy Zelenak. Synapticon GmbH adds exam
 
 The intention of this document is to provide instructions on how to quickly start using Synapticon Devices with ROS2 package using Synapticon library.
 
-Additionally, in order to make it compatible with other Linux distributions, we provide Docker file and script for automatic interface recognition and quick set-up of the package inside the container.
+Additionally, in order to make it compatible with other Linux distributions, we provide a Docker file. You can specify your ethernet device name via a launch argument.
 
 ## Overview
 
@@ -116,15 +116,6 @@ Additionally, in order to make it compatible with other Linux distributions, we 
 >>>```bash
 >>>git clone https://github.com/synapticon/synapticon_ros2_control
 >>>```
->>>After cloning it, you need to set up the ethernet interface. To do so, first execute `ifconfig` and remember the interface name.
->>>
->>>After that, replace the `eno0`  with your ethernet interface in `/home/YOUR_USER/ros2_ws/src/synapticon_ros2_control/src/torque_control_executable.cpp` and `/home/YOUR_USER/ros2_ws/src/synapticon_ros2_control/description/ros2_control/single_dof.ros2_control.xacro` and `/home/YOUR_USER/ros2_ws/src/synapticon_ros2_control/description/ros2_control/two_dof.ros2_control.xacro`. 
->>>Alternatively, you can do it with commands:
->>>```bash
->>>sed -i "s/eno0/YOUR_ETHERNET_INTERFACE/g" /home/YOUR_USER/ros2_ws/src/synapticon_ros2_control/src/torque_control_executable.cpp 
->>>sed -i "s/eno0/YOUR_ETHERNET_INTERFACE/g" /home/YOUR_USER/ros2_ws/src/synapticon_ros2_control/description/ros2_control/single_dof.ros2_control.xacro
->>>sed -i "s/eno0/YOUR_ETHERNET_INTERFACE/g" /home/YOUR_USER/ros2_ws/src/synapticon_ros2_control/description/ros2_control/two_dof.ros2_control.xacro
->>>```
 >>>Install build tools:
 >>>```bash
 >>>sudo apt install python3-colcon-common-extensions
@@ -202,11 +193,11 @@ Additionally, in order to make it compatible with other Linux distributions, we 
 >>>
 >>>If you are running demo with one motor: 
 >>>```bash
->>>ros2 launch synapticon_ros2_control single_dof.launch.py
+>>>ros2 launch synapticon_ros2_control single_dof.launch.py eth_device:=YOUR_ETHERNET_DEVICE
 >>>```
 >>>If you are running demo with two motors:
 >>>```bash
->>>ros2 launch synapticon_ros2_control two_dof.launch.py
+>>>ros2 launch synapticon_ros2_control two_dof.launch.py eth_device:=YOUR_ETHERNET_DEVICE
 >>>```
 >>>- Terminal 3 - to show the running controllers 
 >>>```bash
@@ -334,11 +325,11 @@ Additionally, in order to make it compatible with other Linux distributions, we 
 >>>```
 >>>and, if running demo with one motor:
 >>>```bash
->>>ros2 launch synapticon_ros2_control single_dof.launch.py
+>>>ros2 launch synapticon_ros2_control single_dof.launch.py eth_device:=YOUR_ETHERNET_DEVICE
 >>>```
 >>>If you are running demo with two motors:
 >>>```bash
->>>ros2 launch synapticon_ros2_control two_dof.launch.py
+>>>ros2 launch synapticon_ros2_control two_dof.launch.py eth_device:=YOUR_ETHERNET_DEVICE
 >>>```
 >>>Changing the controllers and publishing the desired position/velocity/torque can be now executed without sudo.
 >>>To stop the `ros2_control_node`:
@@ -406,11 +397,11 @@ Additionally, in order to make it compatible with other Linux distributions, we 
 >>>- Terminal 2 - this one will open RViZ (if it fails, you forgot to execute `xhost +` on your host machine). If you spin the motor by hand, you should see the movement in RViZ.
 >>>If you are running demo with one motor:
 >>>```bash
->>>ros2 launch synapticon_ros2_control single_dof.launch.py
+>>>ros2 launch synapticon_ros2_control single_dof.launch.py eth_device:=YOUR_ETHERNET_DEVICE
 >>>```
 >>>If you are running demo with two motors:
 >>>```bash
->>>ros2 launch synapticon_ros2_control two_dof.launch.py
+>>>ros2 launch synapticon_ros2_control two_dof.launch.py eth_device:=YOUR_ETHERNET_DEVICE
 >>>```
 >>>- Terminal 3 - to show the running controllers 
 >>>```bash
