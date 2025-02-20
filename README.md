@@ -177,7 +177,7 @@ Before running other scripts, stop this one by CTRL+C (or wait, it will shutdown
 For turning the motor in different modes, you will need 5 terminals and in all of them execute:
 ```bash
 sudo -i
-source /home/YOUR_USER/.bashrc
+source ~/.bashrc
 ```
 - Terminal 1:
 
