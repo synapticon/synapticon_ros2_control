@@ -34,14 +34,6 @@ SHELL ["/bin/bash", "-c"]
 WORKDIR /synapticon_ros2_control_ws
 RUN git clone https://github.com/synapticon/synapticon_ros2_control src/synapticon_ros2_control
 
-# Modify CMakeLists.txt to suppress warnings
-RUN sed -i 's/-Wall -Wextra -Wpedantic/-Wno-pedantic -Wno-error=pedantic/g' src/synapticon_ros2_control/CMakeLists.txt
-
-# # Replace 'eno0' with actual Ethernet interface
-# RUN sed -i "s/eno0/${ETHERNET_INTERFACE}/g" src/synapticon_ros2_control/src/torque_control_executable.cpp
-# RUN sed -i "s/eno0/${ETHERNET_INTERFACE}/g" src/synapticon_ros2_control/description/ros2_control/single_dof.ros2_control.xacro
-RUN sed -i "s/eno0/${ETHERNET_INTERFACE}/g" /root/ws/src/synapticon_ros2_control/description/ros2_control/two_dof.ros2_control.xacro
-
 # Build the workspace
 RUN source /opt/ros/${ROS_DISTRO}/setup.bash && apt-get update -y
 RUN source /opt/ros/${ROS_DISTRO}/setup.bash && rosdep install --from-paths src --ignore-src --rosdistro ${ROS_DISTRO} -y
