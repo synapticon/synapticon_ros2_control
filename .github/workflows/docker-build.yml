@@ -22,18 +22,14 @@ jobs:
 
     steps:
       - name: Checkout Repository
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Log in to GitHub Container Registry
         run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
 
-      - name: Build and tag the Docker image
-        run: |
-          cd Docker  # Navigate to the Docker folder
-          docker build -f Dockerfile.${{ matrix.ros_distro }} -t ghcr.io/${{ github.repository_owner }}/synapticon_ros2_control:${{ matrix.ros_distro }} .
-          docker tag ghcr.io/${{ github.repository_owner }}/synapticon_ros2_control:${{ matrix.ros_distro }} ghcr.io/${{ github.repository_owner }}/synapticon_ros2_control:${{ matrix.ros_distro }}-${{ github.sha }}
-
-      - name: Push the Docker image to GitHub Container Registry
-        run: |
-          docker push ghcr.io/${{ github.repository_owner }}/synapticon_ros2_control:${{ matrix.ros_distro }}
-          docker push ghcr.io/${{ github.repository_owner }}/synapticon_ros2_control:${{ matrix.ros_distro }}-${{ github.sha }}
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          build-args: ROS_DISTRO=${{matrix.ROS_DISTRO}}
+          tags: synapticon/synapticon_ros2_control:${{matrix.ROS_DISTRO}}
+          push: true
