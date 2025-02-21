@@ -1,4 +1,4 @@
-name: Build and Push Docker Image
+name: Build and Push Docker Images
 
 on:
   push:
@@ -10,11 +10,15 @@ on:
 
 jobs:
   build-and-push:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04  # Use Ubuntu 22.04 for consistency
 
     permissions:
       contents: read
       packages: write  # Allows pushing to GHCR
+
+    strategy:
+      matrix:
+        ros_distro: [humble, jazzy, rolling]
 
     steps:
       - name: Checkout Repository
@@ -25,11 +29,11 @@ jobs:
 
       - name: Build and tag the Docker image
         run: |
-          cd Docker  # Navigate to the folder with Dockerfile
-          docker build -t ghcr.io/${{ github.repository_owner }}/synapticon_ros2_control:latest .
-          docker tag ghcr.io/${{ github.repository_owner }}/synapticon_ros2_control:latest ghcr.io/${{ github.repository_owner }}/synapticon_ros2_control:${{ github.sha }}
+          cd Docker  # Navigate to the Docker folder
+          docker build -f Dockerfile.${{ matrix.ros_distro }} -t ghcr.io/${{ github.repository_owner }}/synapticon_ros2_control:${{ matrix.ros_distro }} .
+          docker tag ghcr.io/${{ github.repository_owner }}/synapticon_ros2_control:${{ matrix.ros_distro }} ghcr.io/${{ github.repository_owner }}/synapticon_ros2_control:${{ matrix.ros_distro }}-${{ github.sha }}
 
       - name: Push the Docker image to GitHub Container Registry
         run: |
-          docker push ghcr.io/${{ github.repository_owner }}/synapticon_ros2_control:latest
-          docker push ghcr.io/${{ github.repository_owner }}/synapticon_ros2_control:${{ github.sha }}
+          docker push ghcr.io/${{ github.repository_owner }}/synapticon_ros2_control:${{ matrix.ros_distro }}
+          docker push ghcr.io/${{ github.repository_owner }}/synapticon_ros2_control:${{ matrix.ros_distro }}-${{ github.sha }}
