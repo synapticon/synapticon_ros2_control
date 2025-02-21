@@ -1,0 +1,35 @@
+name: Build and Push Docker Image
+
+on:
+  push:
+    branches:
+      - main  # Adjust if you're using a different branch
+  pull_request:
+    branches:
+      - main  # Also builds for PRs to validate
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+      packages: write  # Allows pushing to GHCR
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v3
+
+      - name: Log in to GitHub Container Registry
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+
+      - name: Build and tag the Docker image
+        run: |
+          cd Docker  # Navigate to the folder with Dockerfile
+          docker build -t ghcr.io/${{ github.repository_owner }}/synapticon_ros2_control:latest .
+          docker tag ghcr.io/${{ github.repository_owner }}/synapticon_ros2_control:latest ghcr.io/${{ github.repository_owner }}/synapticon_ros2_control:${{ github.sha }}
+
+      - name: Push the Docker image to GitHub Container Registry
+        run: |
+          docker push ghcr.io/${{ github.repository_owner }}/synapticon_ros2_control:latest
+          docker push ghcr.io/${{ github.repository_owner }}/synapticon_ros2_control:${{ github.sha }}
