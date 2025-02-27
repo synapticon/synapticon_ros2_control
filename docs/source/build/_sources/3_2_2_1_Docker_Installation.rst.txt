@@ -1,7 +1,0 @@
-====================
-Docker Installation
-====================
-
-This repository provides an example of using Synapticon drives (SOMANET Node, SOMANET Circulo and SOMANET Integro) in CSP, CSV, and CST modes using the ROS2 package. It utilizes SOEM Ethercat Master.
-
-
