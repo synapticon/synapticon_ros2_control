@@ -15,17 +15,3 @@ jobs:
       - uses: actions/checkout@v4
       - uses: 'ros-industrial/industrial_ci@master'
         env: ${{matrix.env}}
-
-  docker:
-    strategy:
-      matrix:
-          ROS_DISTRO: [humble, jazzy, rolling]
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - name: Build and push
-        uses: docker/build-push-action@v6
-        with:
-          build-args: ROS_DISTRO=${{matrix.ROS_DISTRO}}
-          tags: synapticon/synapticon_ros2_control:latest
-          push: false
