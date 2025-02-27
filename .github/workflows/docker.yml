@@ -4,10 +4,6 @@ on:
   # schedule:
   #   - cron: "0 1 * * *"
   push:
-    branches:
-      - "**"
-    tags:
-      - "v*.*.*"
   pull_request:
   workflow_dispatch:
 
@@ -19,23 +15,6 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      
-      - name: Docker meta
-        id: meta
-        uses: docker/metadata-action@v5
-        with:
-          # list of Docker images to use as base name for tags
-          images: |
-            ghcr.io/${{ github.repository_owner }}/synapticon_ros2_control
-          # generate Docker tags based on the following events/attributes
-          tags: |
-            type=schedule
-            type=ref,event=branch
-            type=ref,event=pr
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
-            type=semver,pattern={{major}}
-            type=sha
 
       - name: Login to GitHub Container Registry
         if: github.event_name != 'pull_request'
@@ -55,7 +34,5 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           build-args: ROS_DISTRO=${{matrix.ROS_DISTRO}}
-          push: ${{ github.event_name != 'pull_request' }} # only push from non-pull_request triggers
-          #tags: ghcr.io/synapticon/synapticon_ros2_control:latest
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
+          tags: ghcr.io/${{ github.repository_owner }}/synapticon_ros2_control:${{matrix.ROS_DISTRO}}
+          push: ${{ (github.event_name != 'pull_request') && (github.ref == 'refs/heads/main') }} # only push from non-pull_request triggers and if branch name is 'main'
