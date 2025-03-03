@@ -91,7 +91,7 @@ After the installation is complete, add the following line to the end of `/home/
 ```bash
 source /opt/ros/humble/setup.bash
 ```
-In order for ROS2 not to interfere with communication on other ports, we need to set Domain ID (detailed information is available [here](https://docs.ros.org/en/humble/Concepts/Intermediate/About-Domain-ID.html)). In our case, we just used 1. To do so, add the following at the end of `/home/YOUR_USER/.bashrc`
+In order for ROS2 not to interfere with communication on other ports, we need to set Domain ID (detailed information is available [here](https://docs.ros.org/en/humble/Concepts/Intermediate/About-Domain-ID.html)). In our case, we just used 1. To do so, add the following at the end of `/home/$USER/.bashrc`
 ```bash
 export ROS_DOMAIN_ID=1
 ```
@@ -165,7 +165,7 @@ VERIFICATION
 To check if the master could be run and if the slaves are found, in the container terminal execute the following.
 If you installed from source:
 ```bash
-sudo ./home/YOUR_USER/ros2_ws/install/synapticon_ros2_control/bin/torque_control_executable YOUR_ETHERNET_INTERFACE
+sudo ./home/$USER/ros2_ws/install/synapticon_ros2_control/bin/torque_control_executable YOUR_ETHERNET_INTERFACE
 ```
 or if you installed using binary installation:
 ```bash
@@ -177,7 +177,7 @@ Before running other scripts, stop this one by CTRL+C (or wait, it will shutdown
 For turning the motor in different modes, you will need 5 terminals and in all of them execute:
 ```bash
 sudo -i
-source ~/.bashrc
+source /home/YOUR_USER/.bashrc
 ```
 - Terminal 1:
 
