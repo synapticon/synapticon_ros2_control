@@ -1,7 +1,7 @@
 ARG ROS_DISTRO=humble
 
 # Use official OSRF ROS2 images
-FROM ros:${ROS_DISTRO}
+FROM osrf/ros:${ROS_DISTRO}-desktop
 
 # Set build argument for Ethernet interface
 ARG ETHERNET_INTERFACE
