@@ -10,8 +10,12 @@ jobs:
           - {ROS_DISTRO: humble, ROS_REPO: main}
           - {ROS_DISTRO: jazzy, ROS_REPO: main}
           - {ROS_DISTRO: rolling, ROS_REPO: main}
-    runs-on: ubuntu-latest
+        ubuntu_version:
+          - 20.04
+          - 22.04
+          - latest  # This will still include Ubuntu 24 (latest)
+    runs-on: ubuntu-${{ matrix.ubuntu_version }}
     steps:
       - uses: actions/checkout@v4
       - uses: 'ros-industrial/industrial_ci@master'
-        env: ${{matrix.env}}
+        env: ${{ matrix.env }}
