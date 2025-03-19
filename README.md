@@ -85,12 +85,12 @@ This command is for updating the packages on your system and if the commands aft
 ```bash
 sudo apt upgrade
 ```
-Finally, install ROS and compilers (replace ROS_DISTRO with the the ROS distribution you want - humble, jazzy or rolling):
+Finally, install ROS and compilers (replace `ROS_DISTRO` with the the ROS distribution you want - humble, jazzy or rolling):
 ```bash
 sudo apt install ros-ROS_DISTRO-desktop
 sudo apt install ros-dev-tools
 ```
-After the installation is complete, add the following line to the end of `/home/USER/.bashrc` file (replace ROS_DISTRO with the the ROS distribution you want - humble, jazzy or rolling):
+After the installation is complete, add the following line to the end of `/home/USER/.bashrc` file (replace `ROS_DISTRO` with the the ROS distribution you want - humble, jazzy or rolling):
 ```bash
 source /opt/ros/ROS_DISTRO/setup.bash
 ```
@@ -143,7 +143,7 @@ sudo apt install software-properties-common
 sudo add-apt-repository universe 
 sudo apt update
 ```
-Install Synapticon package (replace ROS_DISTRO with the the ROS distribution you want - humble, jazzy or rolling):
+Install Synapticon package (replace `ROS_DISTRO` with the the ROS distribution you want - humble, jazzy or rolling):
 
 ```bash
 sudo apt install ros-ROS_DISTRO-synapticon-ros2-control
@@ -171,7 +171,7 @@ If you installed from source:
 ```bash
 sudo ./home/$USER/ros2_ws/install/synapticon_ros2_control/bin/torque_control_executable YOUR_ETHERNET_INTERFACE
 ```
-or if you installed using binary installation (replace ROS_DISTRO with the the ROS distribution you want - humble, jazzy or rolling):
+or if you installed using binary installation (replace `ROS_DISTRO` with the the ROS distribution you want - humble, jazzy or rolling):
 ```bash
 sudo ./opt/ros/ROS_DISTRO/share/synapticon_ros2_control/bin/torque_control_executable YOUR_ETHERNET_INTERFACE
 ```
@@ -355,7 +355,7 @@ sudo groupadd docker
 sudo usermod -aG docker $USER
 ```
 ##### 2.2.2.2. Synapticon Package Installation
-With the following command, you can pull the Docker image (replace ROS_DISTRO with the desired ROS_distribution - humble, jazzy or rolling):
+With the following command, you can pull the Docker image (replace `ROS_DISTRO` with the desired ROS_distribution - humble, jazzy or rolling):
 ```bash
 docker pull ghcr.io/synapticon/synapticon_ros2_control:ROS_DISTRO
 ```
@@ -363,7 +363,7 @@ To allow Docker containers to output the screen on your system (this is required
 ```bash
 xhost +
 ```
-For the first execution of the program, we build container named `ros2_container` from the downloaded docker image (replace ROS_DISTRO with the desired ROS_distribution - humble, jazzy or rolling):
+For the first execution of the program, we build container named `ros2_container` from the downloaded docker image (replace `ROS_DISTRO` with the desired ROS_distribution - humble, jazzy or rolling):
 ```bash
 docker run -it -v /var/run/dbus/system_bus_socket:/var/run/dbus/system_bus_socket -v /tmp/.X11-unix:/tmp/.X11-unix --ipc=host -e DISPLAY=$DISPLAY  --network=host --env QT_X11_NO_MITSHM=1 --privileged --name ros2_container ghcr.io/synapticon/synapticon_ros2_control:ROS_DISTRO
 ```
