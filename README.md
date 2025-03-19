@@ -17,6 +17,7 @@ ROS2 package was originally developed by Andy Zelenak. Synapticon GmbH adds exam
          - 2.2.1.1. [ROS2 Installation](#2211-ros2-installation)
          - 2.2.1.2. [Synapticon Package Installation](#2212-synapticon-package-installation)
          - 2.2.1.3. [Demo](#2213-demo)
+         - 2.2.1.4. [Running Without Sudo (Optional)](#2214-running-without-sudo-(optional))
       - 2.2.2. [Isolated Environment (Docker)](#222-isolated-environment-docker)
          - 2.2.2.1. [Docker Installation](#2221-docker-installation)
          - 2.2.2.2. [Synapticon Package Installation](#2222-synapticon-package-installation-docker)
@@ -173,7 +174,7 @@ sudo ./opt/ros/humble/share/synapticon_ros2_control/bin/torque_control_executabl
 ```
 Before running other scripts, stop this one by CTRL+C (or wait, it will shutdown automatically after a while).
 
-##### 2.2.1.3 Demo
+##### 2.2.1.3. Demo
 For turning the motor in different modes, you will need 5 terminals and in all of them execute:
 ```bash
 sudo -i
@@ -268,7 +269,7 @@ Stopping it: CTRL+C on Terminal 5 and in Terminal 4:
 ```bash
 ros2 service call /controller_manager/switch_controller controller_manager_msgs/srv/SwitchController "{activate_controllers: ['quick_stop_controller'], deactivate_controllers: ['forward_torque_controller']}"
 ```
-##### Running Without Sudo (Optional)
+##### 2.2.1.4. Running Without Sudo (Optional)
 
 If you want to run the example without using `sudo`, you need to create:
 ```bash
@@ -337,11 +338,11 @@ To stop the `ros2_control_node`:
 sudo systemctl stop ros2_control_node.service
 ```
 
-#### Isolated Environment (Docker)
+#### 2.2.2. Isolated Environment (Docker)
 
 For users with different Linux distributions or those preferring isolated environment, Docker can be used. Installation steps can be found in the [Docker Documentation](https://docs.docker.com/engine/install/ubuntu/). For the completeness of the documentation, we provide those steps here also:
 
-##### Docker Installation
+##### 2.2.2.1 Docker Installation
 
 Install Docker and add the user to the Docker group:
 ```bash
@@ -350,7 +351,7 @@ sudo apt install -y docker.io
 sudo groupadd docker
 sudo usermod -aG docker $USER
 ```
-##### Synapticon Package Installation
+##### 2.2.2.2 Synapticon Package Installation
 With the following command, you can pull the Docker image (replace ROS_DISTRO with the desired ROS_distribution - humble, jazzy or rolling):
 ```bash
 docker pull ghcr.io/synapticon/synapticon_ros2_control:ROS_DISTRO
@@ -381,7 +382,7 @@ To check if the master could be run and if the slaves are found, in the containe
 ```
 Before running other scripts, stop this one by CTRL+C (or wait, it will shutdown automatically after a while).
 
-##### Demo
+##### 2.2.2.3 Demo
 
 Connect Synapticon device configured with OBLAC Tools to your ethernet port as shown in Figure 1. For the demo, run 5 terminals in the container (`docker exec -it ros2_container bash` and `source /root/.bashrc`)
 
@@ -470,6 +471,6 @@ Stopping it: CTRL+C on Terminal 5 and in Terminal 4:
 ros2 service call /controller_manager/switch_controller controller_manager_msgs/srv/SwitchController "{activate_controllers: ['quick_stop_controller'], deactivate_controllers: ['forward_torque_controller']}"
 ```
 
-## Disclaimer
+## 3. Disclaimer
 
 This repository is an example of using SOMANET drives with ROS2 (humble, jazzy and rolling). It does not guarantee compatibility with the latest ROS versions or SOMANET firmware. The included code is for demonstration purposes only. Synapticon GmbH refuses any responsibility for any problem or damage by the use of the example configuration and code!
