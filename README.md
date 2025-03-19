@@ -47,11 +47,11 @@ In this demo, we consider two scenarios:
 - User wants to run the package in an isolated environment
 
 
-#### 2.2.1 Ubuntu with ROS2
+#### 2.2.1. Ubuntu with ROS2
 
 To install ROS2 on your Ubuntu machine, follow the steps from the [official website](https://docs.ros.org/en/humble/Installation/Ubuntu-Install-Debs.html) and install the full version. After the installation, some configuration steps as described [here](https://docs.ros.org/en/humble/Tutorials/Beginner-CLI-Tools/Configuring-ROS2-Environment.html) are needed. For the completeness of the demo, the commands in the following subsection are copied from the official website and should be executed for the ROS2 installation.
 
-##### 2.2.1.1 ROS2 Installation
+##### 2.2.1.1. ROS2 Installation
 
 To make sure that locale supports UTF-8, run the following commands:
 ```bash
@@ -103,7 +103,7 @@ ros2 run demo_nodes_py listener
 ```
 If the nodes are communicating, the installation was successful.
 
-##### 2.2.1.2 Synapticon Package Installation
+##### 2.2.1.2. Synapticon Package Installation
 
 **OPTION 1:** Installing from Source
 
