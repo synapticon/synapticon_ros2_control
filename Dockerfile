@@ -1,6 +1,6 @@
 ARG ROS_DISTRO=humble
 
-# Use official OSRF ROS2 images
+# Use official ROS2 images
 FROM ros:${ROS_DISTRO}
 
 # Set the shell to bash
