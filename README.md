@@ -476,6 +476,3 @@ ros2 service call /controller_manager/switch_controller controller_manager_msgs/
 ## 3. Disclaimer
 
 This repository is an example of using SOMANET drives with ROS2 (humble, jazzy and rolling). It does not guarantee compatibility with the latest ROS versions or SOMANET firmware. The included code is for demonstration purposes only. Synapticon GmbH refuses any responsibility for any problem or damage by the use of the example configuration and code!
-
-
-
