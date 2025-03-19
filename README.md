@@ -21,7 +21,7 @@ ROS2 package was originally developed by Andy Zelenak. Synapticon GmbH adds exam
       - 2.2.2. [Isolated Environment (Docker)](#222-isolated-environment-docker)
          - 2.2.2.1. [Docker Installation](#2221-docker-installation)
          - 2.2.2.2. [Synapticon Package Installation](#2222-synapticon-package-installation)
-         - 2.2.2.3. [Demo](#2223-demo-docker)
+         - 2.2.2.3. [Demo](#2223-demo)
 3. [Disclaimer](#3-disclaimer)
 
 
@@ -342,7 +342,7 @@ sudo systemctl stop ros2_control_node.service
 
 For users with different Linux distributions or those preferring isolated environment, Docker can be used. Installation steps can be found in the [Docker Documentation](https://docs.docker.com/engine/install/ubuntu/). For the completeness of the documentation, we provide those steps here also:
 
-##### 2.2.2.1 Docker Installation
+##### 2.2.2.1. Docker Installation
 
 Install Docker and add the user to the Docker group:
 ```bash
@@ -351,7 +351,7 @@ sudo apt install -y docker.io
 sudo groupadd docker
 sudo usermod -aG docker $USER
 ```
-##### 2.2.2.2 Synapticon Package Installation
+##### 2.2.2.2. Synapticon Package Installation
 With the following command, you can pull the Docker image (replace ROS_DISTRO with the desired ROS_distribution - humble, jazzy or rolling):
 ```bash
 docker pull ghcr.io/synapticon/synapticon_ros2_control:ROS_DISTRO
@@ -382,7 +382,7 @@ To check if the master could be run and if the slaves are found, in the containe
 ```
 Before running other scripts, stop this one by CTRL+C (or wait, it will shutdown automatically after a while).
 
-##### 2.2.2.3 Demo
+##### 2.2.2.3. Demo
 
 Connect Synapticon device configured with OBLAC Tools to your ethernet port as shown in Figure 1. For the demo, run 5 terminals in the container (`docker exec -it ros2_container bash` and `source /root/.bashrc`)
 
