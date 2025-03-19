@@ -38,7 +38,7 @@ The following subsections briefly demonstrate hardware and software required for
 
 ### 2.1. Hardware 
 
-In the figure below, a block diagram of the wiring used in this setup is given. The provided package assumes that the laptop on which the setup is used has only one Ethernet port. Hardware can be used once the parameters are configured with [OBLAC tools](https://www.synapticon.com/en/products/oblac-drives). Detailed instructions and wiring diagrams for all the devices are available at our [official web page](https://www.synapticon.com/en/support/dokumentation) documentation. Software allows daisy chaining of all the Synapticon drives in any order.
+In the figure below, a block diagram of the wiring used in this setup is given. Drives can be used once the parameters are configured with [OBLAC tools](https://www.synapticon.com/en/products/oblac-drives). Detailed instructions and wiring diagrams for all the devices are available at our [official web page](https://www.synapticon.com/en/support/dokumentation) documentation. The package allows daisy chaining of all the Synapticon drives in any order as shown on the image below.
 
 ![Hardware layout](doc/images/hardware.jpg)
 
@@ -46,13 +46,13 @@ In the figure below, a block diagram of the wiring used in this setup is given. 
 ### 2.2. Software
 
 In this demo, we consider two scenarios:
-- Ubuntu 22.04 or 24.04 is installed on the system and ROS2 (humble for Ubuntu 22.04 and rolling or jazzy for 24.04) together with Synapticon package will be installed on that system
-- User wants to run the package in an isolated environment
+- Ubuntu 22.04 or 24.04 is installed on the system and ROS2 (humble for Ubuntu 22.04 and rolling or jazzy for Ubuntu 24.04) together with Synapticon package will be installed on that system
+- User wants to run the package in an isolated environment (Docker)
 
 
 #### 2.2.1. Ubuntu with ROS2
 
-To install ROS2 on your Ubuntu machine, follow the steps from the [official website](https://docs.ros.org/en/humble/Installation/Ubuntu-Install-Debs.html) and install the full version. After the installation, some configuration steps as described [here](https://docs.ros.org/en/humble/Tutorials/Beginner-CLI-Tools/Configuring-ROS2-Environment.html) are needed. For the completeness of the demo, the commands in the following subsection are copied from the official website and should be executed for the ROS2 installation.
+To install ROS2 on your Ubuntu machine, follow the steps from the [official website](https://docs.ros.org/en/humble/Installation/Ubuntu-Install-Debs.html) and install the full version (you can also install minimal version, but then you need additionally to install RViZ if you want simulation). After the installation, some configuration steps as described [here](https://docs.ros.org/en/humble/Tutorials/Beginner-CLI-Tools/Configuring-ROS2-Environment.html) are needed. For the completeness of the demo, the commands in the following subsection are copied from the official website and should be executed for the ROS2 installation.
 
 ##### 2.2.1.1. ROS2 Installation
 
@@ -94,11 +94,11 @@ After the installation is complete, add the following line to the end of `/home/
 ```bash
 source /opt/ros/ROS_DISTRO/setup.bash
 ```
-In order for ROS2 not to interfere with communication on other ports, we need to set Domain ID (detailed information is available [here](https://docs.ros.org/en/humble/Concepts/Intermediate/About-Domain-ID.html)). In this demo, we just used 1. To do so, add the following at the end of `/home/$USER/.bashrc`
+In order for ROS2 not to interfere with communication on other ports, we need to set Domain ID (detailed information is available [here](https://docs.ros.org/en/humble/Concepts/Intermediate/About-Domain-ID.html)). In this demo, we just used `ROS_DOMAIN_ID=1`. To do so, add the following at the end of `/home/$USER/.bashrc`
 ```bash
 export ROS_DOMAIN_ID=1
 ```
-After this, restart all your terminals for the source command to be active.
+After this, close and reopen all your terminals.
 To verify the installation, open two terminals and run:
 ```bash
 ros2 run demo_nodes_cpp talker
@@ -143,7 +143,7 @@ sudo apt install software-properties-common
 sudo add-apt-repository universe 
 sudo apt update
 ```
-Install Synapticon package (replace ROS_DISTRO with the the ROS distribution you want - humble, jazzy or rolling)::
+Install Synapticon package (replace ROS_DISTRO with the the ROS distribution you want - humble, jazzy or rolling):
 
 ```bash
 sudo apt install ros-ROS_DISTRO-synapticon-ros2-control
@@ -161,18 +161,19 @@ Install its dependencies:
 ```bash
 rosdep install synapticon_ros2_control
 ```
-The package will get installed to `/opt/ros/humble/share/synapticon_ros2_control/`.
+The package will get installed to `/opt/ros/ROS_DISTRO/share/synapticon_ros2_control/`.
 
 **VERIFICATION**
 
-To check if the master could be run and if the slaves are found, in the container terminal execute the following.
+You need to know the name of your ethernet device to which the drive is connected. This could be checked with `ifconfig` command. Ethernet adapters usually start with `en`.
+To check if the master could be run and if the slaves are found, in the terminal execute the following (replace YOUR_ETHERNET_INTERFACE with the one you found with `ifconfig`).
 If you installed from source:
 ```bash
 sudo ./home/$USER/ros2_ws/install/synapticon_ros2_control/bin/torque_control_executable YOUR_ETHERNET_INTERFACE
 ```
-or if you installed using binary installation:
+or if you installed using binary installation (replace ROS_DISTRO with the the ROS distribution you want - humble, jazzy or rolling):
 ```bash
-sudo ./opt/ros/humble/share/synapticon_ros2_control/bin/torque_control_executable YOUR_ETHERNET_INTERFACE
+sudo ./opt/ros/ROS_DISTRO/share/synapticon_ros2_control/bin/torque_control_executable YOUR_ETHERNET_INTERFACE
 ```
 Before running other scripts, stop this one by CTRL+C (or wait, it will shutdown automatically after a while).
 
@@ -277,7 +278,7 @@ If you want to run the example without using `sudo`, you need to create:
 ```bash
 sudo touch /etc/systemd/system/ros2_control_node.service
 ```
-and use text editor to paste in that file the following:
+and use text editor to paste in that file the following (you need to replace `YOUR_USER`, `ROS_DISTRO`, `pythonX.XX and` `elevated_permissions_X_dof.launch.py` with the correct data):
 
 ```bash
 [Unit]
@@ -286,17 +287,17 @@ Description=Launch ros2_control_node with socket permissions
 [Service]
 Type=simple
 User=YOUR_USER
-ExecStartPre=/bin/bash -c 'source /opt/ros/humble/setup.bash; source /home/YOUR_USER/.bashrc; source /home/YOUR_USER/ros2_ws/install/setup.bash'
+ExecStartPre=/bin/bash -c 'source /opt/ros/ROS_DISTRO/setup.bash; source /home/YOUR_USER/.bashrc; source /home/YOUR_USER/ros2_ws/install/setup.bash'
 # Write the user environment to file, for debugging
 #ExecStartPre=/bin/bash -c 'env > /home/YOUR_USER/Documents/ros_env_before_start.txt'
 
 # This is essentially a copy of my normal user env
-Environment="AMENT_PREFIX_PATH=/home/YOUR_USER/ros2_ws/install/synapticon_ros2_control:/opt/ros/humble"
+Environment="AMENT_PREFIX_PATH=/home/YOUR_USER/ros2_ws/install/synapticon_ros2_control:/opt/ros/ROS_DISTRO"
 Environment="HOME=/home/YOUR_USER"
-Environment="LD_LIBRARY_PATH=/opt/ros/humble/opt/rviz_ogre_vendor/lib:/opt/ros/humble/lib/x86_64-linux-gnu:/opt/ros/humble/lib"
-Environment="PATH=/opt/ros/humble/bin:/usr/lib/ccache:/home/your_user/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin:/snap/bin"
-Environment="PYTHONPATH=/opt/ros/humble/lib/python3.10/site-packages:/opt/ros/humble/local/lib/python3.10/dist-packages"
-Environment="ROS_DISTRO=humble"
+Environment="LD_LIBRARY_PATH=/opt/ros/ROS_DISTRO/opt/rviz_ogre_vendor/lib:/opt/ros/ROS_DISTRO/lib/x86_64-linux-gnu:/opt/ros/ROS_DISTRO/lib"
+Environment="PATH=/opt/ros/ROS_DISTRO/bin:/usr/lib/ccache:/home/YOUR_USER/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin:/snap/bin"
+Environment="PYTHONPATH=/opt/ros/ROS_DISTRO/lib/pythonX.XX/site-packages:/opt/ros/ROS_DISTRO/local/lib/pythonX.XX/dist-packages"
+Environment="ROS_DISTRO=ROS_DISTRO"
 Environment="ROS_DOMAIN_ID=1"
 Environment="ROS_PYTHON_VERSION=3"
 Environment="ROS_VERSION=2"
@@ -304,13 +305,13 @@ Environment="ROSCONSOLE_FORMAT=[${severity}] - ${node}: [${time}] ${message}"
 Environment="USER=YOUR_USER"
 Environment="USERNAME=YOUR_USER"
 
-ExecStart=/opt/ros/humble/bin/ros2 launch synapticon_ros2_control elevated_permissions_X_dof.launch.py
+ExecStart=/opt/ros/ROS_DISTRO/bin/ros2 launch synapticon_ros2_control elevated_permissions_X_dof.launch.py
 AmbientCapabilities=CAP_NET_RAW
 
 [Install]
 WantedBy=multi-user.target
 ```
-After pasting, do not forget to replace `YOUR_USER` with your username and `X_dof` with 1 or 2 in the line saying which launch file needs to be executed. Save the file, restart the daemon:
+Save the file, restart the daemon:
 ```bash
 sudo systemctl daemon-reload
 ```
@@ -342,7 +343,7 @@ sudo systemctl stop ros2_control_node.service
 
 #### 2.2.2. Isolated Environment (Docker)
 
-For users with different Linux distributions or those preferring isolated environment, Docker can be used. Installation steps can be found in the [Docker Documentation](https://docs.docker.com/engine/install/ubuntu/). For the completeness of the documentation, we provide those steps here also:
+For users with different Linux distributions or those preferring isolated environment, Docker can be used. Installation steps can be found in the [Docker Documentation](https://docs.docker.com/engine/install/ubuntu/). For the completeness of the documentation, we provide those steps here as well:
 
 ##### 2.2.2.1. Docker Installation
 
