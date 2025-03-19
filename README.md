@@ -9,19 +9,19 @@ ROS2 package was originally developed by Andy Zelenak. Synapticon GmbH adds exam
 
 ## Table of Contents
 
-1. [Intention](#1intention)
-2. [Overview](#2overview)
-   - 2.1. [Hardware](#21hardware)
-   - 2.2. [Software](#22software)
-      - 2.2.1. [Ubuntu with ROS2](#221ubuntu-with-ros2)
-         - 2.2.1.1. [ROS2 Installation](#2211ros2-installation)
-         - 2.2.1.2. [Synapticon Package Installation](#2212synapticon-package-installation)
-         - 2.2.1.3. [Demo](#2213demo)
-      - 2.2.2. [Isolated Environment (Docker)](#222isolated-environment-docker)
-         - 2.2.2.1. [Docker Installation](#2221docker-installation)
-         - 2.2.2.2. [Synapticon Package Installation](#2222synapticon-package-installation-docker)
-         - 2.2.2.3. [Demo](#2223demo-docker)
-3. [Disclaimer](#3disclaimer)
+1. [Intention](#1-intention)
+2. [Overview](#2-overview)
+   - 2.1. [Hardware](#21-hardware)
+   - 2.2. [Software](#22-software)
+      - 2.2.1. [Ubuntu with ROS2](#221-ubuntu-with-ros2)
+         - 2.2.1.1. [ROS2 Installation](#2211-ros2-installation)
+         - 2.2.1.2. [Synapticon Package Installation](#2212-synapticon-package-installation)
+         - 2.2.1.3. [Demo](#2213-demo)
+      - 2.2.2. [Isolated Environment (Docker)](#222-isolated-environment-docker)
+         - 2.2.2.1. [Docker Installation](#2221-docker-installation)
+         - 2.2.2.2. [Synapticon Package Installation](#2222-synapticon-package-installation-docker)
+         - 2.2.2.3. [Demo](#2223-demo-docker)
+3. [Disclaimer](#3-disclaimer)
 
 
 
