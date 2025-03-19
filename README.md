@@ -20,7 +20,7 @@ ROS2 package was originally developed by Andy Zelenak. Synapticon GmbH adds exam
          - 2.2.1.4. [Running Without Sudo (Optional)](#2214-running-without-sudo-optional)
       - 2.2.2. [Isolated Environment (Docker)](#222-isolated-environment-docker)
          - 2.2.2.1. [Docker Installation](#2221-docker-installation)
-         - 2.2.2.2. [Synapticon Package Installation](#2222-synapticon-package-installation-docker)
+         - 2.2.2.2. [Synapticon Package Installation](#2222-synapticon-package-installation)
          - 2.2.2.3. [Demo](#2223-demo-docker)
 3. [Disclaimer](#3-disclaimer)
 
