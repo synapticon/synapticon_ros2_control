@@ -2,7 +2,7 @@
 
 ## Description
 
-This repository provides an example of using Synapticon drives (SOMANET Node, SOMANET Circulo and SOMANET Integro) in CSP, CSV, and CST modes using the ROS2 package. It utilizes `SOEM Ethercat Master`. 
+This repository provides an example of using Synapticon drives (SOMANET Node, SOMANET Circulo and SOMANET Integro) in CSP (Cyclic Sync Position), CSV (Cyclic Sync Velocity), and CST (Cyclic Sync Torque) modes using the ROS2 package. It utilizes `SOEM Ethercat Master`. 
 ROS2 package was originally developed by Andy Zelenak. Synapticon GmbH adds examples, simulation and adds the extended instructions for easier installation as well as support for containerization using Docker.
 
 ![RVIZ Screenshot of dual motor test setup](doc/images/rviz.png)
