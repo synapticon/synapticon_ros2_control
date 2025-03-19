@@ -9,49 +9,49 @@ ROS2 package was originally developed by Andy Zelenak. Synapticon GmbH adds exam
 
 ## Table of Contents
 
-1. [Intention](#intention)
-2. [Overview](#overview)
-   - 2.1. [Hardware](#hardware)
-   - 2.2. [Software](#software)
-      - 2.2.1. [Ubuntu with ROS2](#ubuntu-with-ros2)
-         - 2.2.1.1. [ROS2 Installation](#ros2-installation)
-         - 2.2.1.2. [Synapticon Package Installation](#synapticon-package-installation)
-         - 2.2.1.3. [Demo](#demo)
-      - 2.2.2. [Isolated Environment (Docker)](#isolated-environment-docker)
-         - 2.2.2.1. [Docker Installation](#docker-installation)
-         - 2.2.2.2. [Synapticon Package Installation](#synapticon-package-installation-docker)
-         - 2.2.2.3. [Demo](#demo-docker)
-3. [Disclaimer](#disclaimer)
+1. [Intention](#1intention)
+2. [Overview](#2overview)
+   - 2.1. [Hardware](#21hardware)
+   - 2.2. [Software](#22software)
+      - 2.2.1. [Ubuntu with ROS2](#221ubuntu-with-ros2)
+         - 2.2.1.1. [ROS2 Installation](#2211ros2-installation)
+         - 2.2.1.2. [Synapticon Package Installation](#2212synapticon-package-installation)
+         - 2.2.1.3. [Demo](#2213demo)
+      - 2.2.2. [Isolated Environment (Docker)](#222isolated-environment-docker)
+         - 2.2.2.1. [Docker Installation](#2221docker-installation)
+         - 2.2.2.2. [Synapticon Package Installation](#2222synapticon-package-installation-docker)
+         - 2.2.2.3. [Demo](#2223demo-docker)
+3. [Disclaimer](#3disclaimer)
 
 
 
-## Intention
+## 1. Intention
 
 The intention of this document is to provide instructions on how to quickly start using Synapticon Devices with ROS2 package using Synapticon library.
 
 Additionally, in order to make it compatible with other Linux distributions, we provide a Docker file. You can specify your ethernet device name via a launch argument.
 
-## Overview
+## 2. Overview
 
-### Hardware 
+### 2.1. Hardware 
 
 In the figure below, a block diagram of the wiring used in this setup is given. The provided package assumes that the laptop on which the setup is used has only one Ethernet port. Hardware can be used once the parameters are configured with [OBLAC tools](https://www.synapticon.com/en/products/oblac-drives). Detailed instructions and wiring diagrams for all the devices are available at our [official web page](https://www.synapticon.com/en/support/dokumentation) documentation. Software allows daisy chaining of all the Synapticon drives in any order.
 
 ![Hardware layout](doc/images/hardware.jpg)
 
 
-### Software
+### 2.2. Software
 
 In this demo, we consider two scenarios:
 - Ubuntu 22.04 or 24.04 is installed on the system and ROS2 (humble for Ubuntu 22.04 and rolling or jazzy for 24.04) together with Synapticon package will be installed on that system
 - User wants to run the package in an isolated environment
 
 
-#### Ubuntu with ROS2
+#### 2.2.1 Ubuntu with ROS2
 
 To install ROS2 on your Ubuntu machine, follow the steps from the [official website](https://docs.ros.org/en/humble/Installation/Ubuntu-Install-Debs.html) and install the full version. After the installation, some configuration steps as described [here](https://docs.ros.org/en/humble/Tutorials/Beginner-CLI-Tools/Configuring-ROS2-Environment.html) are needed. For the completeness of the demo, the commands in the following subsection are copied from the official website and should be executed for the ROS2 installation.
 
-##### ROS2 Installation
+##### 2.2.1.1 ROS2 Installation
 
 To make sure that locale supports UTF-8, run the following commands:
 ```bash
@@ -103,7 +103,7 @@ ros2 run demo_nodes_py listener
 ```
 If the nodes are communicating, the installation was successful.
 
-##### Synapticon Package Installation
+##### 2.2.1.2 Synapticon Package Installation
 
 **OPTION 1:** Installing from Source
 
@@ -173,7 +173,7 @@ sudo ./opt/ros/humble/share/synapticon_ros2_control/bin/torque_control_executabl
 ```
 Before running other scripts, stop this one by CTRL+C (or wait, it will shutdown automatically after a while).
 
-##### Demo
+##### 2.2.1.3 Demo
 For turning the motor in different modes, you will need 5 terminals and in all of them execute:
 ```bash
 sudo -i
