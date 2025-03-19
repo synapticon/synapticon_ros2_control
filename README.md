@@ -30,9 +30,11 @@ ROS2 package was originally developed by Andy Zelenak. Synapticon GmbH adds exam
 
 The intention of this document is to provide instructions on how to quickly start using Synapticon Devices with ROS2 package using Synapticon library.
 
-Additionally, in order to make it compatible with other Linux distributions, we provide a Docker file. You can specify your ethernet device name via a launch argument.
+Additionally, in order to make it compatible with other Linux distributions, we provide corresponding Docker images.
 
 ## 2. Overview
+
+The following subsections briefly demonstrate hardware and software required for using Synapticon devices with this package.
 
 ### 2.1. Hardware 
 
