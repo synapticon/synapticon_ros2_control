@@ -129,7 +129,7 @@ cd ~/ros2_ws
 rosdep install --from-paths src -y --ignore-src
 colcon build
 ```
-Additionally, you can source the workspace by adding the following line to the `/home/USER/.bashrc` file, but above the line where you sourced the ROS installation (above this line: `source /opt/ros/humble/setup.bash`):
+Additionally, you can source the workspace by adding the following line to the `/home/USER/.bashrc` file, but above the line where you sourced the ROS installation (above this line: `source /opt/ros/ROS_DISTRO/setup.bash`):
 ```bash
 source /home/USER/ros2_ws/install/setup.bash
 ```
@@ -166,7 +166,7 @@ The package will get installed to `/opt/ros/ROS_DISTRO/share/synapticon_ros2_con
 **VERIFICATION**
 
 You need to know the name of your ethernet device to which the drive is connected. This could be checked with `ifconfig` command. Ethernet adapters usually start with `en`.
-To check if the master could be run and if the slaves are found, in the terminal execute the following (replace YOUR_ETHERNET_INTERFACE with the one you found with `ifconfig`).
+To check if the master could be run and if the slaves are found, in the terminal execute the following (replace `YOUR_ETHERNET_INTERFACE`) with the one you found with `ifconfig`).
 If you installed from source:
 ```bash
 sudo ./home/$USER/ros2_ws/install/synapticon_ros2_control/bin/torque_control_executable YOUR_ETHERNET_INTERFACE
