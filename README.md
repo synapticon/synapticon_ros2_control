@@ -7,8 +7,8 @@ ROS2 package was originally developed by Andy Zelenak. Synapticon GmbH adds exam
 
 ## Table of Contents
 
-1. [Intention](#intention)  
-2. [Overview](#overview)  
+**1. [Intention](#intention)**  
+**2. [Overview](#overview)**  
    - **2.1 [Hardware](#hardware)**  
    - **2.2 [Software](#software)**  
      - **2.2.1 [Ubuntu 22.04 with ROS2](#ubuntu-2204-with-ros2)**  
@@ -19,7 +19,8 @@ ROS2 package was originally developed by Andy Zelenak. Synapticon GmbH adds exam
        - **2.2.2.1 [Docker Installation](#docker-installation)**  
        - **2.2.2.2 [Synapticon Package Installation](#synapticon-package-installation-docker)**  
        - **2.2.2.3 [Demo](#demo-docker)**  
-3. [Disclaimer](#disclaimer)  
+**3. [Disclaimer](#disclaimer)**  
+
 
 
 
