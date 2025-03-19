@@ -1,17 +1,14 @@
 ARG ROS_DISTRO=humble
 
-# Use official OSRF ROS2 images
-FROM osrf/ros:${ROS_DISTRO}-desktop
-
-# Set build argument for Ethernet interface
-ARG ETHERNET_INTERFACE
-ENV ETHERNET_INTERFACE=$ETHERNET_INTERFACE
+# Use official ROS2 images
+FROM ros:${ROS_DISTRO}
 
 # Set the shell to bash
 SHELL ["/bin/bash", "-c"]
 
 # # Update and install necessary packages
-# RUN apt-get update && apt-get install -y \
+RUN apt-get update && apt-get install -y \
+	ros-${ROS_DISTRO}-rviz2
 #     software-properties-common \
 #     gedit \
 #     vim \
