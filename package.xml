@@ -8,7 +8,7 @@
   <maintainer email="andyzelenak@elevaterobotics.ai">Elevate Robotics</maintainer>
   <maintainer email="zloncarevic@synapticon.com">Zvezdan Loncarevic</maintainer>
   <maintainer email="fweisshardt@synapticon.com">Florian Weisshardt</maintainer>
-  <url type="website">https://docs.ros.org/en/humble/p/synapticon_ros2_control.html</url>
+  <url type="website">https://www.synapticon.com/en/products/ros2-integration-von-synapticon</url>
   <license>MIT</license>
 
   <buildtool_depend>ament_cmake</buildtool_depend>
