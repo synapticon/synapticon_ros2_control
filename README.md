@@ -258,11 +258,11 @@ ros2 service call /controller_manager/switch_controller controller_manager_msgs/
 ```
 Terminal 5 to create a publisher (value is in per mille of torque):
 
-If you are running demo with one motor:
+If you are running the demo with one motor:
 ```bash
 ros2 topic pub /forward_torque_controller/commands std_msgs/msg/Float64MultiArray data:\ [100]	
 ```
-If you are running demo with two motors:
+If you are running the demo with two motors:
 ```bash
 ros2 topic pub /forward_torque_controller/commands std_msgs/msg/Float64MultiArray data:\ [100, 100]	
 ```
@@ -410,7 +410,7 @@ ros2 launch synapticon_ros2_control two_dof.launch.py eth_device:=YOUR_ETHERNET_
 ros2 control list_controllers
 ```
 (Information does not automatically refresh - it can be refreshed each M seconds 
-using `watch -n M ros2 control list_controllers`, but the output might be ugly)
+using `watch -n M ros2 control list_controllers`)
 
 - Running motors with different controllers:
 CSV (Cyclic Sync Velocity) mode:
