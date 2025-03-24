@@ -1,4 +1,4 @@
-# Controlling Synapticon Devices Using ROS2 Package
+# Controlling Synapticon Devices Using the ROS2 Package
 
 ## Description
 
