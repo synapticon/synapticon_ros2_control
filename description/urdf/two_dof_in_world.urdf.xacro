@@ -2,8 +2,8 @@
 <robot xmlns:xacro="http://www.ros.org/wiki/xacro" name="two_dof">
   <xacro:arg name="prefix" default="" />
   <xacro:arg name="eth_device" default="" />
-  <xacro:arg name="joint1_mechanical_reduction" default="1.0" />
-  <xacro:arg name="joint2_mechanical_reduction" default="1.0" />
+  <xacro:arg name="joint1_mechanical_reduction" default="169.85" />
+  <xacro:arg name="joint2_mechanical_reduction" default="169.85" />
 
   <xacro:include filename="$(find synapticon_ros2_control)/urdf/two_dof_macro.urdf.xacro" />
 
