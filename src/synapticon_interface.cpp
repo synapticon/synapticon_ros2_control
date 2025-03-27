@@ -52,6 +52,7 @@ hardware_interface::CallbackReturn SynapticonSystemInterface::on_init(
 
   num_joints_ = info_.joints.size();
 
+  mechanical_reductions_.resize(num_joints_, 1.0);
   hw_states_positions_.resize(num_joints_,
                               std::numeric_limits<double>::quiet_NaN());
   hw_states_velocities_.resize(num_joints_,
@@ -119,6 +120,17 @@ hardware_interface::CallbackReturn SynapticonSystemInterface::on_init(
           hardware_interface::HW_IF_EFFORT);
       return hardware_interface::CallbackReturn::ERROR;
     }
+  }
+
+  for (size_t i = 0; i < num_joints_; ++i)
+  {
+    std::string reduction_param_name = info_.joints.at(i).name + "_mechanical_reduction";
+    if (info_.hardware_parameters.find(reduction_param_name) == info_.hardware_parameters.end())
+    {
+      mechanical_reductions_.at(i) = 1.0;
+      continue;
+    }
+    mechanical_reductions_.at(i) = stod(info_.hardware_parameters[reduction_param_name]);
   }
 
   // A thread to handle ethercat errors
@@ -341,9 +353,9 @@ SynapticonSystemInterface::read(const rclcpp::Time & /*time*/,
   for (std::size_t i = 0; i < num_joints_; i++) {
     // InSomanet50t doesn't include acceleration
     hw_states_accelerations_[i] = 0;
-    hw_states_velocities_[i] = in_somanet_1_[i]->VelocityValue * RPM_TO_RAD_PER_S;
-    hw_states_positions_[i] = in_somanet_1_[i]->PositionValue * 2 * 3.14159 / encoder_resolutions_[i];
-    hw_states_efforts_[i] = in_somanet_1_[i]->TorqueValue;
+    hw_states_velocities_[i] = (1 / mechanical_reductions_.at(i)) * in_somanet_1_[i]->VelocityValue * RPM_TO_RAD_PER_S;
+    hw_states_positions_[i] = (1 / mechanical_reductions_.at(i)) * in_somanet_1_[i]->PositionValue * 2 * 3.14159 / encoder_resolutions_[i];
+    hw_states_efforts_[i] = mechanical_reductions_.at(i) * in_somanet_1_[i]->TorqueValue;
   }
 
   return hardware_interface::return_type::OK;
@@ -366,11 +378,11 @@ SynapticonSystemInterface::write(const rclcpp::Time & /*time*/,
     }
     if (!std::isnan(hw_commands_velocities_[i]))
     {
-      threadsafe_commands_velocities_[i] = hw_commands_velocities_[i] * RAD_PER_S_TO_RPM;
+      threadsafe_commands_velocities_[i] = mechanical_reductions_.at(i) * hw_commands_velocities_[i] * RAD_PER_S_TO_RPM;
     }
     if (!std::isnan(hw_commands_positions_[i]))
     {
-      threadsafe_commands_positions_[i] = hw_commands_positions_[i] * encoder_resolutions_[i] / (2 * 3.14159);
+      threadsafe_commands_positions_[i] = mechanical_reductions_.at(i) * hw_commands_positions_[i] * encoder_resolutions_[i] / (2 * 3.14159);
     }
   }
 
