@@ -38,6 +38,7 @@ unsigned int NORMAL_OPERATION_BRAKES_OFF = 0b00001111;
 // Bit 2 (0-indexed) goes to 0 to turn on Quick Stop
 unsigned int NORMAL_OPERATION_BRAKES_ON = 0b00001011;
 constexpr char EXPECTED_SLAVE_NAME[] = "SOMANET";
+constexpr double TORQUE_FRICTION_OFFSET = 20; // per mill
 } // namespace
 
 hardware_interface::CallbackReturn SynapticonSystemInterface::on_init(
@@ -520,7 +521,12 @@ void SynapticonSystemInterface::somanetCyclicLoop(
           if (first_iteration.at(joint_idx)) {
             // Default to PROFILE_TORQUE_MODE
             out_somanet_1_[joint_idx]->OpMode = PROFILE_TORQUE_MODE;
-            out_somanet_1_[joint_idx]->TorqueOffset = 0;
+            // small offset to account for friction
+            if (in_somanet_1_[joint_idx]->VelocityValue > 0) {
+              out_somanet_1_[joint_idx]->TorqueOffset = TORQUE_FRICTION_OFFSET;
+            } else {
+              out_somanet_1_[joint_idx]->TorqueOffset = -TORQUE_FRICTION_OFFSET;
+            }
             out_somanet_1_[joint_idx]->TargetTorque = 0;
             first_iteration.at(joint_idx) = false;
           }
@@ -561,7 +567,12 @@ void SynapticonSystemInterface::somanetCyclicLoop(
                 out_somanet_1_[joint_idx]->TargetTorque =
                     threadsafe_commands_efforts_[joint_idx];
                 out_somanet_1_[joint_idx]->OpMode = PROFILE_TORQUE_MODE;
-                out_somanet_1_[joint_idx]->TorqueOffset = 0;
+                // small offset to account for friction
+                if (in_somanet_1_[joint_idx]->VelocityValue > 0) {
+                  out_somanet_1_[joint_idx]->TorqueOffset = TORQUE_FRICTION_OFFSET;
+                } else {
+                  out_somanet_1_[joint_idx]->TorqueOffset = -TORQUE_FRICTION_OFFSET;
+                }
                 out_somanet_1_[joint_idx]->Controlword = NORMAL_OPERATION_BRAKES_OFF;
               }
             } else if (control_level_[joint_idx] == control_level_t::VELOCITY) {
@@ -583,11 +594,21 @@ void SynapticonSystemInterface::somanetCyclicLoop(
             {
               // Turn the brake on
               out_somanet_1_[joint_idx]->OpMode = PROFILE_TORQUE_MODE;
-              out_somanet_1_[joint_idx]->TorqueOffset = 0;
+              // small offset to account for friction
+              if (in_somanet_1_[joint_idx]->VelocityValue > 0) {
+                out_somanet_1_[joint_idx]->TorqueOffset = TORQUE_FRICTION_OFFSET;
+              } else {
+                out_somanet_1_[joint_idx]->TorqueOffset = -TORQUE_FRICTION_OFFSET;
+              }
               out_somanet_1_[joint_idx]->Controlword = NORMAL_OPERATION_BRAKES_ON;
             } else if (control_level_[joint_idx] == control_level_t::UNDEFINED) {
               out_somanet_1_[joint_idx]->OpMode = PROFILE_TORQUE_MODE;
-              out_somanet_1_[joint_idx]->TorqueOffset = 0;
+              // small offset to account for friction
+              if (in_somanet_1_[joint_idx]->VelocityValue > 0) {
+                out_somanet_1_[joint_idx]->TorqueOffset = TORQUE_FRICTION_OFFSET;
+              } else {
+                out_somanet_1_[joint_idx]->TorqueOffset = -TORQUE_FRICTION_OFFSET;
+              }
               out_somanet_1_[joint_idx]->Controlword = NORMAL_OPERATION_BRAKES_OFF;
             }
           }
