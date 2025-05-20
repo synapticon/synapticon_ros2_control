@@ -22,12 +22,11 @@
 #include <inttypes.h>
 #include <rclcpp/rclcpp.hpp>
 
-#define EC_TIMEOUTMON 500
-
 using namespace std::chrono_literals;
 
 namespace synapticon_ros2_control {
 namespace {
+constexpr int EC_TIMEOUTMON = 500;
 constexpr char LOG_NAME[] = "synapticon_ros2_control";
 constexpr double DEG_TO_RAD = 0.0174533;
 constexpr size_t PROFILE_TORQUE_MODE = 4;
