@@ -167,11 +167,11 @@ The package will get installed to `/opt/ros/ROS_DISTRO/share/synapticon_ros2_con
 The ethernet device name, to which the drive is connected, is required. This could be checked with the `ifconfig` command. Ethernet adapters usually start with `en`. To check if the master could be run and if the slaves are found, execute the following  in the terminal (replace `YOUR_ETHERNET_INTERFACE` with the one found with `ifconfig`). 
 If you installed from source:
 ```bash
-sudo ./home/$USER/ros2_ws/install/synapticon_ros2_control/bin/torque_control_executable YOUR_ETHERNET_INTERFACE
+sudo /home/$USER/ros2_ws/install/synapticon_ros2_control/bin/torque_control_executable YOUR_ETHERNET_INTERFACE
 ```
 or if you installed using the binary installation (replace `ROS_DISTRO` with the desired ROS distribution - humble, jazzy or rolling):
 ```bash
-sudo ./opt/ros/ROS_DISTRO/share/synapticon_ros2_control/bin/torque_control_executable YOUR_ETHERNET_INTERFACE
+sudo /opt/ros/ROS_DISTRO/share/synapticon_ros2_control/bin/torque_control_executable YOUR_ETHERNET_INTERFACE
 ```
 Before running other scripts, stop this one by CTRL+C (or wait - it will shutdown automatically after a while).
 
@@ -217,13 +217,13 @@ ros2 service call /controller_manager/switch_controller controller_manager_msgs/
 ```
 Terminal 5 to create a publisher:
 
-If you are running the demo with one motor:
+If you are running the demo with one motor, send a command in rad/s. Gearing is not accounted for.
 ```bash
-ros2 topic pub /forward_velocity_controller/commands std_msgs/msg/Float64MultiArray data:\ [100]
+ros2 topic pub /forward_velocity_controller/commands std_msgs/msg/Float64MultiArray data:\ [1]
 ```
 If you are running the demo with two motors:
 ```bash
-ros2 topic pub /forward_velocity_controller/commands std_msgs/msg/Float64MultiArray data:\ [100,100]
+ros2 topic pub /forward_velocity_controller/commands std_msgs/msg/Float64MultiArray data:\ [1,1]
 ```
 Stopping it: CTRL+C on Terminal 5 and in Terminal 4:
 ```bash
@@ -258,13 +258,13 @@ ros2 service call /controller_manager/switch_controller controller_manager_msgs/
 ```
 Terminal 5 to create a publisher (value is in per mille of torque):
 
-If you are running the demo with one motor:
+If you are running the demo with one motor, send a command in per-mille of rated torque. Gearing is not accounted for.
 ```bash
-ros2 topic pub /forward_torque_controller/commands std_msgs/msg/Float64MultiArray data:\ [100]	
+ros2 topic pub /forward_torque_controller/commands std_msgs/msg/Float64MultiArray data:\ [10]	
 ```
 If you are running the demo with two motors:
 ```bash
-ros2 topic pub /forward_torque_controller/commands std_msgs/msg/Float64MultiArray data:\ [100, 100]	
+ros2 topic pub /forward_torque_controller/commands std_msgs/msg/Float64MultiArray data:\ [10, 10]	
 ```
 Stopping it: CTRL+C on Terminal 5 and in Terminal 4:
 ```bash
@@ -420,13 +420,13 @@ Terminal 4 to turn on the controller :
 ros2 service call /controller_manager/switch_controller controller_manager_msgs/srv/SwitchController "{activate_controllers: ['forward_velocity_controller'], deactivate_controllers: []}"
 ```
 Terminal 5 to create a publisher:
-If you are running the demo with one motor:
+If you are running the demo with one motor, send a velocity command in rad/s. Gearing is not accounted for.
 ```bash
-ros2 topic pub /forward_velocity_controller/commands std_msgs/msg/Float64MultiArray data:\ [100]
+ros2 topic pub /forward_velocity_controller/commands std_msgs/msg/Float64MultiArray data:\ [1]
 ```
 If you are running the demo with two motors:
 ```bash
-ros2 topic pub /forward_velocity_controller/commands std_msgs/msg/Float64MultiArray data:\ [100,100]
+ros2 topic pub /forward_velocity_controller/commands std_msgs/msg/Float64MultiArray data:\ [1,1]
 ```
 Stopping it: CTRL+C on Terminal 5 and in Terminal 4:
 ```bash
@@ -454,18 +454,18 @@ ros2 service call /controller_manager/switch_controller controller_manager_msgs/
 	
 - CST (Cyclic Sync Torque) mode:
 
-Terminal 4 to turn on the controller :
+Terminal 4 to turn on the controller:
 ```bash
 ros2 service call /controller_manager/switch_controller controller_manager_msgs/srv/SwitchController "{activate_controllers: ['forward_torque_controller'], deactivate_controllers: [quick_stop_controller]}"	
 ```
-Terminal 5 to create a publisher (value is in per mille of torque):
-If you are running the demo with one motor:
+Terminal 5 to create a publisher:
+If you are running the demo with one motor, send a command in per-mille of rated torque. Gearing is not accounted for.
 ```bash
-ros2 topic pub /forward_torque_controller/commands std_msgs/msg/Float64MultiArray data:\ [100]	
+ros2 topic pub /forward_torque_controller/commands std_msgs/msg/Float64MultiArray data:\ [10]	
 ```
 If you are running the demo with two motors:
 ```bash
-ros2 topic pub /forward_torque_controller/commands std_msgs/msg/Float64MultiArray data:\ [100, 100]	
+ros2 topic pub /forward_torque_controller/commands std_msgs/msg/Float64MultiArray data:\ [10, 10]	
 ```
 Stopping it: CTRL+C on Terminal 5 and in Terminal 4:
 ```bash
