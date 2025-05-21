@@ -39,6 +39,10 @@ unsigned int NORMAL_OPERATION_BRAKES_OFF = 0b00001111;
 unsigned int NORMAL_OPERATION_BRAKES_ON = 0b00001011;
 constexpr char EXPECTED_SLAVE_NAME[] = "SOMANET";
 constexpr double TORQUE_FRICTION_OFFSET = 20; // per mill
+// TODO: this needs to be adjusted when more Synapticons are included in the chain
+constexpr size_t SPRING_ADJUST_JOINT_IDX = 0;
+constexpr double MAX_SPRING_POTENTIOMETER_TICKS = 63900;
+constexpr double MIN_SPRING_POTENTIOMETER_TICKS = 1332;
 } // namespace
 
 hardware_interface::CallbackReturn SynapticonSystemInterface::on_init(
@@ -68,6 +72,8 @@ hardware_interface::CallbackReturn SynapticonSystemInterface::on_init(
                               std::numeric_limits<double>::quiet_NaN());
   hw_commands_quick_stop_.resize(num_joints_,
                               std::numeric_limits<double>::quiet_NaN());
+  hw_commands_spring_adjust_.resize(num_joints_,
+                              std::numeric_limits<double>::quiet_NaN());
   control_level_.resize(num_joints_, control_level_t::UNDEFINED);
   // Atomic deques are difficult to initialize
   threadsafe_commands_efforts_.resize(num_joints_);
@@ -82,6 +88,10 @@ hardware_interface::CallbackReturn SynapticonSystemInterface::on_init(
   for (auto &position : threadsafe_commands_positions_) {
     position.store(std::numeric_limits<double>::quiet_NaN());
   }
+  threadsafe_commands_spring_adjust_.resize(num_joints_);
+  for (auto &spring_adjust : threadsafe_commands_spring_adjust_) {
+    spring_adjust.store(std::numeric_limits<double>::quiet_NaN());
+  }
 
   for (const hardware_interface::ComponentInfo &joint : info_.joints) {
     if (!(joint.command_interfaces[0].name ==
@@ -91,14 +101,16 @@ hardware_interface::CallbackReturn SynapticonSystemInterface::on_init(
           joint.command_interfaces[0].name ==
               "quick_stop" ||
           joint.command_interfaces[0].name ==
+              "spring_adjust" ||
               hardware_interface::HW_IF_EFFORT)) {
       RCLCPP_FATAL(
           get_logger(),
-          "Joint '%s' has %s command interface. Expected %s, %s, %s, or %s.",
+          "Joint '%s' has %s command interface. Expected %s, %s, %s, %s, or %s.",
           joint.name.c_str(), joint.command_interfaces[0].name.c_str(),
           hardware_interface::HW_IF_POSITION,
           hardware_interface::HW_IF_VELOCITY,
           "quick_stop",
+          "spring_adjust",
           hardware_interface::HW_IF_EFFORT);
       return hardware_interface::CallbackReturn::ERROR;
     }
@@ -233,6 +245,12 @@ hardware_interface::return_type
 SynapticonSystemInterface::prepare_command_mode_switch(
     const std::vector<std::string> &start_interfaces,
     const std::vector<std::string> &stop_interfaces) {
+  if (!allow_mode_change_)
+  {
+    RCLCPP_ERROR(get_logger(), "A control mode change is disallowed at this moment.");
+    return hardware_interface::return_type::ERROR;
+  }
+
   // Prepare for new command modes
   std::vector<control_level_t> new_modes = {};
   for (const std::string& key : start_interfaces) {
@@ -248,6 +266,8 @@ SynapticonSystemInterface::prepare_command_mode_switch(
         new_modes.push_back(control_level_t::POSITION);
       } else if (key == info_.joints[i].name + "/quick_stop") {
         new_modes.push_back(control_level_t::QUICK_STOP);
+      } else if (key == info_.joints[i].name + "/spring_adjust") {
+        new_modes.push_back(control_level_t::SPRING_ADJUST);
       }
     }
   }
@@ -272,10 +292,13 @@ SynapticonSystemInterface::prepare_command_mode_switch(
         hw_commands_positions_[i] = std::numeric_limits<double>::quiet_NaN();
         hw_commands_velocities_[i] = 0;
         hw_commands_efforts_[i] = 0;
+        hw_commands_spring_adjust_[i] = std::numeric_limits<double>::quiet_NaN();
         threadsafe_commands_efforts_[i] =
             std::numeric_limits<double>::quiet_NaN();
         threadsafe_commands_velocities_[i] = 0;
         threadsafe_commands_positions_[i] =
+            std::numeric_limits<double>::quiet_NaN();
+        threadsafe_commands_spring_adjust_[i] =
             std::numeric_limits<double>::quiet_NaN();
         control_level_[i] = control_level_t::UNDEFINED;
       }
@@ -317,9 +340,12 @@ hardware_interface::CallbackReturn SynapticonSystemInterface::on_activate(
     hw_commands_positions_[i] = std::numeric_limits<double>::quiet_NaN();
     hw_commands_velocities_[i] = 0;
     hw_commands_efforts_[i] = 0;
+    hw_commands_spring_adjust_[i] = std::numeric_limits<double>::quiet_NaN();
     threadsafe_commands_efforts_[i] = std::numeric_limits<double>::quiet_NaN();
     threadsafe_commands_velocities_[i] = 0;
     threadsafe_commands_positions_[i] =
+        std::numeric_limits<double>::quiet_NaN();
+    threadsafe_commands_spring_adjust_[i] =
         std::numeric_limits<double>::quiet_NaN();
   }
 
@@ -335,11 +361,15 @@ hardware_interface::CallbackReturn SynapticonSystemInterface::on_deactivate(
   for (std::size_t i = 0; i < num_joints_; i++) {
     control_level_[i] = control_level_t::UNDEFINED;
 
+    hw_commands_positions_[i] = std::numeric_limits<double>::quiet_NaN();
     hw_commands_velocities_[i] = 0;
     hw_commands_efforts_[i] = 0;
+    hw_commands_spring_adjust_[i] = std::numeric_limits<double>::quiet_NaN();
     threadsafe_commands_efforts_[i] = std::numeric_limits<double>::quiet_NaN();
     threadsafe_commands_velocities_[i] = 0;
     threadsafe_commands_positions_[i] =
+        std::numeric_limits<double>::quiet_NaN();
+    threadsafe_commands_spring_adjust_[i] =
         std::numeric_limits<double>::quiet_NaN();
   }
 
@@ -384,6 +414,11 @@ SynapticonSystemInterface::write(const rclcpp::Time & /*time*/,
     {
       threadsafe_commands_positions_[i] = mechanical_reductions_.at(i) * hw_commands_positions_[i] * encoder_resolutions_[i] / (2 * 3.14159);
     }
+    if (!std::isnan(hw_commands_spring_adjust_[i]))
+    {
+      hw_commands_spring_adjust_[i] = std::clamp(hw_commands_spring_adjust_[i], MIN_SPRING_POTENTIOMETER_TICKS, MAX_SPRING_POTENTIOMETER_TICKS);
+      threadsafe_commands_spring_adjust_[i] = hw_commands_spring_adjust_[i];
+    }
   }
 
   return hardware_interface::return_type::OK;
@@ -425,6 +460,9 @@ SynapticonSystemInterface::export_command_interfaces() {
     command_interfaces.emplace_back(hardware_interface::CommandInterface(
         info_.joints[i].name, "quick_stop",
         &hw_commands_quick_stop_[i]));
+    command_interfaces.emplace_back(hardware_interface::CommandInterface(
+        info_.joints[i].name, "spring_adjust",
+        &hw_commands_spring_adjust_[i]));
   }
   return command_interfaces;
 }
@@ -594,14 +632,61 @@ void SynapticonSystemInterface::somanetCyclicLoop(
             {
               // Turn the brake on
               out_somanet_1_[joint_idx]->OpMode = PROFILE_TORQUE_MODE;
-              // small offset to account for friction
-              if (in_somanet_1_[joint_idx]->VelocityValue > 0) {
-                out_somanet_1_[joint_idx]->TorqueOffset = TORQUE_FRICTION_OFFSET;
-              } else {
-                out_somanet_1_[joint_idx]->TorqueOffset = -TORQUE_FRICTION_OFFSET;
-              }
+              out_somanet_1_[joint_idx]->TorqueOffset = 0;
               out_somanet_1_[joint_idx]->Controlword = NORMAL_OPERATION_BRAKES_ON;
-            } else if (control_level_[joint_idx] == control_level_t::UNDEFINED) {
+            }  else if (control_level_[joint_idx] == control_level_t::SPRING_ADJUST)
+            {
+              std::cerr << in_somanet_1_[joint_idx]->AnalogInput2 << std::endl;
+              // Spring adjust joint: proportional control based on analog input 2 potentiometer
+              if (joint_idx == SPRING_ADJUST_JOINT_IDX) {
+                // Ensure a valid command
+                if (std::isnan(threadsafe_commands_spring_adjust_[joint_idx])) {
+                  out_somanet_1_[joint_idx]->TargetTorque = 0;
+                  out_somanet_1_[joint_idx]->OpMode = PROFILE_TORQUE_MODE;
+                  out_somanet_1_[joint_idx]->TorqueOffset = 0;
+                  out_somanet_1_[joint_idx]->Controlword = NORMAL_OPERATION_BRAKES_OFF;
+                  continue;
+                }
+
+                // A potentiometer error of 64,000 corresponds to a torque of 1000
+                // i.e. full torque when the error is a maximum
+                // Hence K_P = 1/64 is reasonable
+                double K_P = 1/64;
+                double error = in_somanet_1_[joint_idx]->AnalogInput2 - threadsafe_commands_spring_adjust_[joint_idx];
+                double target_torque = -K_P * error;
+                // A ceiling at X% of rated torque
+                // With a floor of Y% torque (below that, the motor doesn't move)
+                if (target_torque > 0)
+                {
+                  // Per mill of rated torque
+                  target_torque = std::clamp(target_torque, 1200.0, 1600.0);
+                }
+                else
+                {
+                  target_torque = std::clamp(target_torque, -1600.0, -1200.0);
+                }
+                // Don't allow control mode to change until the target position is reached
+                if (std::abs(error) < 10) {
+                  allow_mode_change_ = true;
+                  target_torque = 0;
+                }
+                else {
+                  allow_mode_change_ = false;
+                }
+                std::cerr << "target_torque: " << target_torque << std::endl;
+                out_somanet_1_[joint_idx]->TargetTorque = target_torque;
+                out_somanet_1_[joint_idx]->OpMode = PROFILE_TORQUE_MODE;
+                out_somanet_1_[joint_idx]->TorqueOffset = 0;
+                out_somanet_1_[joint_idx]->Controlword = NORMAL_OPERATION_BRAKES_OFF;
+              }
+              // All other joints: hold position
+              else {
+                out_somanet_1_[joint_idx]->OpMode = PROFILE_TORQUE_MODE;
+                out_somanet_1_[joint_idx]->TorqueOffset = 0;
+                out_somanet_1_[joint_idx]->Controlword = NORMAL_OPERATION_BRAKES_ON;
+              }
+            }
+            else if (control_level_[joint_idx] == control_level_t::UNDEFINED) {
               out_somanet_1_[joint_idx]->OpMode = PROFILE_TORQUE_MODE;
               // small offset to account for friction
               if (in_somanet_1_[joint_idx]->VelocityValue > 0) {
@@ -622,7 +707,7 @@ void SynapticonSystemInterface::somanetCyclicLoop(
         // in_somanet_1_[0]->PositionDemandInternalValue); printf(" ActualVel:
         // %" PRId32 " ,", in_somanet_1_[0]->VelocityValue);
         // printf(" DemandVel: %" PRId32 " ,", in_somanet_1_[0]->VelocityDemandValue);
-        //printf("ActualTorque: %" PRId32 " ,", in_somanet_1_[0]->TorqueValue);
+        // printf("ActualTorque: %" PRId32 " ,", in_somanet_1_[0]->TorqueValue);
         // printf(" DemandTorque: %" PRId32 " ,", in_somanet_1_[0]->TorqueDemand);
         // printf("\n");
 

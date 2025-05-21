@@ -119,10 +119,10 @@ private:
   /**
    * @brief Somanet control loop runs in a dedicated thread
    * This steps through several states to get to Operational, if needed
-   * @param in_normal_op_mode_ A flag to the main thread that the Somanet state
+   * @param in_normal_op_mode A flag to the main thread that the Somanet state
    * machine is ready
    */
-  void somanetCyclicLoop(std::atomic<bool> &in_normal_op_mode_);
+  void somanetCyclicLoop(std::atomic<bool> &in_normal_op_mode);
 
   std::optional<std::thread> somanet_control_thread_;
 
@@ -139,6 +139,10 @@ private:
   std::vector<double> hw_commands_efforts_;
   // hw_commands_quick_stop_ is never actually used, just a placeholder for compilation
   std::vector<double> hw_commands_quick_stop_;
+  // hw_commands_spring_adjust_ is currently potentiometer ticks.
+  // ~64000 ticks corresponds to max spring force.
+  // ~1232 ticks corresponds to the opposite end of travel.
+  std::vector<double> hw_commands_spring_adjust_;
   std::vector<double> hw_states_positions_;
   std::vector<double> hw_states_velocities_;
   std::vector<double> hw_states_accelerations_;
@@ -147,6 +151,7 @@ private:
   std::deque<std::atomic<double>> threadsafe_commands_efforts_;
   std::deque<std::atomic<double>> threadsafe_commands_velocities_;
   std::deque<std::atomic<double>> threadsafe_commands_positions_;
+  std::deque<std::atomic<double>> threadsafe_commands_spring_adjust_;
 
   // Enum defining current control level
   enum control_level_t : std::uint8_t {
@@ -155,6 +160,7 @@ private:
     VELOCITY = 2,
     POSITION = 3,
     QUICK_STOP = 4,
+    SPRING_ADJUST = 5,
   };
 
   // Active control mode for each actuator
@@ -175,6 +181,8 @@ private:
   std::atomic<int> expected_wkc_;
   std::atomic<bool> needlf_ = false;
   std::atomic<bool> in_normal_op_mode_ = false;
+  // During spring adjust, don't allow control mode to change until the target position is reached
+  std::atomic<bool> allow_mode_change_ = true;
 };
 
 } // namespace synapticon_ros2_control

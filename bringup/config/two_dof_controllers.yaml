@@ -36,3 +36,11 @@ quick_stop_controller:
       - joint1
       - joint2
     interface_name: quick_stop
+
+spring_adjust_controller:
+  ros__parameters:
+    type: forward_command_controller/ForwardCommandController
+    joints:
+      - joint1
+      - joint2
+    interface_name: spring_adjust
