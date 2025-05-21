@@ -651,19 +651,21 @@ void SynapticonSystemInterface::somanetCyclicLoop(
                 // A potentiometer error of 64,000 corresponds to a torque of 1000
                 // i.e. full torque when the error is a maximum
                 // Hence K_P = 1/64 is reasonable
-                double K_P = 1/64;
+                double K_P = 10.0;
                 double error = in_somanet_1_[joint_idx]->AnalogInput2 - threadsafe_commands_spring_adjust_[joint_idx];
-                double target_torque = -K_P * error;
+                double target_torque = - K_P * error;
+                std::cerr << "target_torque: " << target_torque << std::endl;
+                std::cerr << "error: " << error << std::endl;
                 // A ceiling at X% of rated torque
                 // With a floor of Y% torque (below that, the motor doesn't move)
                 if (target_torque > 0)
                 {
                   // Per mill of rated torque
-                  target_torque = std::clamp(target_torque, 1200.0, 1600.0);
+                  target_torque = std::clamp(target_torque, 1500.0, 2000.0);
                 }
                 else
                 {
-                  target_torque = std::clamp(target_torque, -1600.0, -1200.0);
+                  target_torque = std::clamp(target_torque, -2000.0, -1500.0);
                 }
                 // Don't allow control mode to change until the target position is reached
                 if (std::abs(error) < 10) {
@@ -673,7 +675,7 @@ void SynapticonSystemInterface::somanetCyclicLoop(
                 else {
                   allow_mode_change_ = false;
                 }
-                std::cerr << "target_torque: " << target_torque << std::endl;
+                std::cerr << "target_torque after clamp: " << target_torque << std::endl;
                 out_somanet_1_[joint_idx]->TargetTorque = target_torque;
                 out_somanet_1_[joint_idx]->OpMode = PROFILE_TORQUE_MODE;
                 out_somanet_1_[joint_idx]->TorqueOffset = 0;
