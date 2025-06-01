@@ -6,8 +6,14 @@ FROM ros:${ROS_DISTRO}
 # Set the shell to bash
 SHELL ["/bin/bash", "-c"]
 
+# Remove old broken keys/sources before update
+RUN find /etc/apt/sources.list.d -type f -exec sed -i '/packages.ros.org/d' {} + \
+ && sed -i '/packages.ros.org/d' /etc/apt/sources.list \
+ && rm -f /usr/share/keyrings/ros-archive-keyring.gpg \
+ && apt-get update \
+ && apt-get install -y curl lsb-release gnupg2
+
 # Set up ROS 2 repository and GPG keys
-RUN apt-get update && apt-get install -y curl lsb-release gnupg2
 RUN export ROS_APT_SOURCE_VERSION=$(curl -s https://api.github.com/repos/ros-infrastructure/ros-apt-source/releases/latest | grep -F "tag_name" | awk -F\" '{print $4}') \
  && curl -L -o /tmp/ros2-apt-source.deb "https://github.com/ros-infrastructure/ros-apt-source/releases/download/${ROS_APT_SOURCE_VERSION}/ros2-apt-source_${ROS_APT_SOURCE_VERSION}_$$(lsb_release -cs)_all.deb" \
  && apt-get install -y /tmp/ros2-apt-source.deb
