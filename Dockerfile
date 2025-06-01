@@ -6,7 +6,12 @@ FROM ros:${ROS_DISTRO}
 # Set the shell to bash
 SHELL ["/bin/bash", "-c"]
 
-# # Update and install necessary packages
+# Set up ROS 2 repository and GPG keys
+RUN apt-get update && apt-get install -y curl gnupg2 lsb-release \
+    && curl -sSL https://raw.githubusercontent.com/ros/rosdistro/master/ros.asc | gpg --dearmor -o /usr/share/keyrings/ros-archive-keyring.gpg \
+    && echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/ros-archive-keyring.gpg] http://packages.ros.org/ros2/ubuntu $(lsb_release -cs) main" | tee /etc/apt/sources.list.d/ros2.list > /dev/null
+
+# Update and install necessary packages
 RUN apt-get update && apt-get install -y \
 	ros-${ROS_DISTRO}-rviz2
 #     software-properties-common \
