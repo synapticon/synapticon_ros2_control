@@ -1,4 +1,4 @@
-ARG ROS_DISTRO=humble
+ARG ROS_DISTRO=rolling
 
 # Use official ROS2 images
 FROM ros:${ROS_DISTRO}
