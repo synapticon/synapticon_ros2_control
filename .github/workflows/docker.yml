@@ -11,7 +11,7 @@ jobs:
   docker:
     strategy:
       matrix:
-          ROS_DISTRO: [humble, jazzy, rolling]
+          ROS_DISTRO: [humble]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
