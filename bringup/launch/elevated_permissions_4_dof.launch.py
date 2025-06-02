@@ -12,7 +12,7 @@ def generate_launch_description():
         [
             FindPackageShare("synapticon_ros2_control"),
             "config",
-            "two_dof_controllers.yaml",
+            "four_dof_controllers.yaml",
         ]
     )
 

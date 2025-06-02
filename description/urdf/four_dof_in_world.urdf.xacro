@@ -1,0 +1,22 @@
+<?xml version="1.0"?>
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro" name="four_dof">
+  <xacro:arg name="prefix" default="" />
+  <xacro:arg name="eth_device" default="" />
+  <xacro:arg name="joint1_mechanical_reduction" default="169.85" />
+  <xacro:arg name="joint2_mechanical_reduction" default="169.85" />
+  <xacro:arg name="joint3_mechanical_reduction" default="1.0" />
+  <xacro:arg name="joint4_mechanical_reduction" default="169.85" />
+
+  <xacro:include filename="$(find synapticon_ros2_control)/urdf/four_dof_macro.urdf.xacro" />
+
+  <xacro:include filename="$(find synapticon_ros2_control)/ros2_control/four_dof.ros2_control.xacro" />
+
+  <link name="world"/>
+
+  <xacro:four_dof parent="world" prefix="$(arg prefix)">
+    <origin xyz="0 0 0" rpy="0 0 0" />
+  </xacro:four_dof>
+
+  <xacro:four_dof_ros2_control name="FourDofRos2Control" prefix="$(arg prefix)" eth_device="$(arg eth_device)" joint1_mechanical_reduction="$(arg joint1_mechanical_reduction)" joint2_mechanical_reduction="$(arg joint2_mechanical_reduction)" joint3_mechanical_reduction="$(arg joint3_mechanical_reduction)" joint4_mechanical_reduction="$(arg joint4_mechanical_reduction)"/>
+
+</robot>

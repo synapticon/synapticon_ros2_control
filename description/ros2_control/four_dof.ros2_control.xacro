@@ -1,0 +1,68 @@
+<?xml version="1.0"?>
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro">
+
+  <xacro:macro name="four_dof_ros2_control" params="name prefix eth_device joint1_mechanical_reduction joint2_mechanical_reduction joint3_mechanical_reduction joint4_mechanical_reduction">
+
+    <ros2_control name="${name}" type="system">
+      <hardware>
+        <plugin>synapticon_ros2_control/SynapticonSystemInterface</plugin>
+
+        <param name="eth_device">${eth_device}</param>
+        <param name="joint1_mechanical_reduction">${joint1_mechanical_reduction}</param>
+        <param name="joint2_mechanical_reduction">${joint2_mechanical_reduction}</param>
+        <param name="joint3_mechanical_reduction">${joint3_mechanical_reduction}</param>
+        <param name="joint4_mechanical_reduction">${joint4_mechanical_reduction}</param>
+      </hardware>
+
+      <joint name="${prefix}joint1">
+        <command_interface name="position"/>
+        <command_interface name="velocity"/>
+        <command_interface name="effort"/>
+        <command_interface name="quick_stop"/>
+        <command_interface name="spring_adjust"/>
+        <state_interface name="position"/>
+        <state_interface name="velocity"/>
+        <state_interface name="acceleration"/>
+        <state_interface name="effort"/>
+      </joint>
+
+      <joint name="${prefix}joint2">
+        <command_interface name="position"/>
+        <command_interface name="velocity"/>
+        <command_interface name="effort"/>
+        <command_interface name="quick_stop"/>
+        <command_interface name="spring_adjust"/>
+        <state_interface name="position"/>
+        <state_interface name="velocity"/>
+        <state_interface name="acceleration"/>
+        <state_interface name="effort"/>
+      </joint>
+
+      <joint name="${prefix}joint3">
+        <command_interface name="position"/>
+        <command_interface name="velocity"/>
+        <command_interface name="effort"/>
+        <command_interface name="quick_stop"/>
+        <command_interface name="spring_adjust"/>
+        <state_interface name="position"/>
+        <state_interface name="velocity"/>
+        <state_interface name="acceleration"/>
+        <state_interface name="effort"/>
+      </joint>
+
+      <joint name="${prefix}joint4">
+        <command_interface name="position"/>
+        <command_interface name="velocity"/>
+        <command_interface name="effort"/>
+        <command_interface name="quick_stop"/>
+        <command_interface name="spring_adjust"/>
+        <state_interface name="position"/>
+        <state_interface name="velocity"/>
+        <state_interface name="acceleration"/>
+        <state_interface name="effort"/>
+      </joint>
+    </ros2_control>
+
+  </xacro:macro>
+
+</robot>

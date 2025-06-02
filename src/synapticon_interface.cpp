@@ -40,7 +40,7 @@ unsigned int NORMAL_OPERATION_BRAKES_ON = 0b00001011;
 constexpr char EXPECTED_SLAVE_NAME[] = "SOMANET";
 constexpr double TORQUE_FRICTION_OFFSET = 20; // per mill
 // TODO: this needs to be adjusted when more Synapticons are included in the chain
-constexpr size_t SPRING_ADJUST_JOINT_IDX = 0;
+constexpr size_t SPRING_ADJUST_JOINT_IDX = 2;
 constexpr double MAX_SPRING_POTENTIOMETER_TICKS = 63900;
 constexpr double MIN_SPRING_POTENTIOMETER_TICKS = 1332;
 } // namespace
@@ -267,7 +267,12 @@ SynapticonSystemInterface::prepare_command_mode_switch(
       } else if (key == info_.joints[i].name + "/quick_stop") {
         new_modes.push_back(control_level_t::QUICK_STOP);
       } else if (key == info_.joints[i].name + "/spring_adjust") {
-        new_modes.push_back(control_level_t::SPRING_ADJUST);
+        // Spring adjust puts all joints in QUICK_STOP mode except the spring adjust joint
+        if (i == SPRING_ADJUST_JOINT_IDX) {
+          new_modes.push_back(control_level_t::SPRING_ADJUST);
+        } else {
+          new_modes.push_back(control_level_t::QUICK_STOP);
+        }
       }
     }
   }
@@ -275,13 +280,6 @@ SynapticonSystemInterface::prepare_command_mode_switch(
   if (!start_interfaces.empty() && (new_modes.size() != num_joints_)) {
     RCLCPP_FATAL(get_logger(),
                  "All joints must be given a new mode at the same time.");
-    return hardware_interface::return_type::ERROR;
-  }
-  // All joints must have the same command mode
-  if (!std::all_of(
-          new_modes.begin() + 1, new_modes.end(),
-          [&](control_level_t mode) { return mode == new_modes[0]; })) {
-    RCLCPP_FATAL(get_logger(), "All joints must have the same command mode.");
     return hardware_interface::return_type::ERROR;
   }
 
@@ -600,6 +598,10 @@ void SynapticonSystemInterface::somanetCyclicLoop(
           else if ((in_somanet_1_[joint_idx]->Statusword &
                     0b0000000001101111) == 0b0000000000100111) {
             in_normal_op_mode = true;
+            // Usually do nothing for the spring adjust joint
+            if (joint_idx == SPRING_ADJUST_JOINT_IDX && control_level_[joint_idx] != control_level_t::SPRING_ADJUST) {
+              continue;
+            }
             if (control_level_[joint_idx] == control_level_t::EFFORT) {
               if (!std::isnan(threadsafe_commands_efforts_[joint_idx])) {
                 out_somanet_1_[joint_idx]->TargetTorque =
@@ -638,39 +640,35 @@ void SynapticonSystemInterface::somanetCyclicLoop(
             {
               // Spring adjust joint: proportional control based on analog input 2 potentiometer
               if (joint_idx == SPRING_ADJUST_JOINT_IDX) {
-                // A potentiometer error of 64,000 corresponds to a torque of 1000
-                // i.e. full torque when the error is a maximum
-                // Hence K_P = 1/64 is reasonable
-                // But Mark is ignoring all this for now, sorry
-                // Also for some reason we are reading the potentiometer on AnalogInput4
-                double K_P = 1.0;
+                // For some reason we are reading the potentiometer on AnalogInput4, should be 2
+                double K_P = 0.6;
                 double error = in_somanet_1_[joint_idx]->AnalogInput4 - threadsafe_commands_spring_adjust_[joint_idx];
                 double target_torque = - K_P * error;
-                std::cerr << "-----------------------------" << std::endl;
-                std::cerr << "potentiometer pos  : " << in_somanet_1_[joint_idx]->AnalogInput4 << std::endl;
-                std::cerr << "goal pos           : " << threadsafe_commands_spring_adjust_[joint_idx] << std::endl;
-                std::cerr << "error              : " << error << std::endl;
-                std::cerr << "target_torque pre  : " << target_torque << std::endl;
+                // std::cerr << "-----------------------------" << std::endl;
+                // std::cerr << "potentiometer pos  : " << in_somanet_1_[joint_idx]->AnalogInput4 << std::endl;
+                // std::cerr << "goal pos           : " << threadsafe_commands_spring_adjust_[joint_idx] << std::endl;
+                // std::cerr << "error              : " << error << std::endl;
+                // std::cerr << "target_torque pre  : " << target_torque << std::endl;
                 // A ceiling at X% of rated torque
                 // With a floor of Y% torque (below that, the motor doesn't move)
                 if (target_torque > 0)
                 {
                   // Per mill of rated torque
-                  target_torque = std::clamp(target_torque, 0.0, 2000.0);
+                  target_torque = std::clamp(target_torque, 0.0, 1500.0);
                 }
                 else
                 {
-                  target_torque = std::clamp(target_torque, -2000.0, 0.0);
+                  target_torque = std::clamp(target_torque, -1500.0, 0.0);
                 }
                 // Don't allow control mode to change until the target position is reached
-                if (std::abs(error) < 100) {
+                if (std::abs(error) < 200) {
                   allow_mode_change_ = true;
                   target_torque = 0;
                 }
                 else {
                   allow_mode_change_ = false;
                 }
-                std::cerr << "target_torque post : " << target_torque << std::endl;
+                // std::cerr << "target_torque post : " << target_torque << std::endl;
 
                 // Ensure a valid command
                 if (std::isnan(threadsafe_commands_spring_adjust_[joint_idx])) {
@@ -686,11 +684,8 @@ void SynapticonSystemInterface::somanetCyclicLoop(
                 out_somanet_1_[joint_idx]->TorqueOffset = 0;
                 out_somanet_1_[joint_idx]->Controlword = NORMAL_OPERATION_BRAKES_OFF;
               }
-              // All other joints: hold position
               else {
-                out_somanet_1_[joint_idx]->OpMode = PROFILE_TORQUE_MODE;
-                out_somanet_1_[joint_idx]->TorqueOffset = 0;
-                out_somanet_1_[joint_idx]->Controlword = NORMAL_OPERATION_BRAKES_ON;
+                std::cerr << "Should never get here since the other joints are in QUICK_STOP mode" << std::endl;
               }
             }
             else if (control_level_[joint_idx] == control_level_t::UNDEFINED) {
