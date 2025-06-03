@@ -1,13 +1,14 @@
 <?xml version="1.0"?>
 <robot xmlns:xacro="http://www.ros.org/wiki/xacro">
 
-  <xacro:macro name="single_dof_ros2_control" params="name prefix eth_device">
+  <xacro:macro name="single_dof_ros2_control" params="name prefix eth_device joint1_mechanical_reduction">
 
     <ros2_control name="${name}" type="system">
       <hardware>
         <plugin>synapticon_ros2_control/SynapticonSystemInterface</plugin>
 
         <param name="eth_device">${eth_device}</param>
+        <param name="joint1_mechanical_reduction">${joint1_mechanical_reduction}</param>
       </hardware>
 
       <joint name="${prefix}joint1">

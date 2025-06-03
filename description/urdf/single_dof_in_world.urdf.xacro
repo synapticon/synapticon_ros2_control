@@ -2,6 +2,7 @@
 <robot xmlns:xacro="http://www.ros.org/wiki/xacro" name="single_dof">
   <xacro:arg name="prefix" default="" />
   <xacro:arg name="eth_device" default="" />
+  <xacro:arg name="joint1_mechanical_reduction" default="1.0" />
 
   <xacro:include filename="$(find synapticon_ros2_control)/urdf/single_dof_macro.urdf.xacro" />
 
@@ -13,6 +14,6 @@
     <origin xyz="0 0 0" rpy="0 0 0" />
   </xacro:single_dof>
 
-  <xacro:single_dof_ros2_control name="SingleDofRos2Control" prefix="$(arg prefix)" eth_device="$(arg eth_device)" />
+  <xacro:single_dof_ros2_control name="SingleDofRos2Control" prefix="$(arg prefix)" eth_device="$(arg eth_device)" joint1_mechanical_reduction="$(arg joint1_mechanical_reduction)" />
 
 </robot>
