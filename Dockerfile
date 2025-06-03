@@ -6,10 +6,18 @@ FROM ros:${ROS_DISTRO}
 # Set the shell to bash
 SHELL ["/bin/bash", "-c"]
 
+# Remove old broken keys/sources before update
+RUN find /etc/apt/sources.list.d -type f -exec sed -i '/packages.ros.org/d' {} + \
+ && sed -i '/packages.ros.org/d' /etc/apt/sources.list \
+ && rm -f /usr/share/keyrings/ros-archive-keyring.gpg \
+ && apt-get update \
+ && apt-get install -y curl lsb-release gnupg2
+
 # Set up ROS 2 repository and GPG keys
-RUN apt-get update && apt-get install -y curl gnupg2 lsb-release \
-    && curl -sSL https://raw.githubusercontent.com/ros/rosdistro/master/ros.asc | gpg --dearmor -o /usr/share/keyrings/ros-archive-keyring.gpg \
-    && echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/ros-archive-keyring.gpg] http://packages.ros.org/ros2/ubuntu $(lsb_release -cs) main" | tee /etc/apt/sources.list.d/ros2.list > /dev/null
+ARG ROS_APT_SOURCE_VERSION=1.1.0
+RUN curl -L -o /tmp/ros2-apt-source.deb "https://github.com/ros-infrastructure/ros-apt-source/releases/download/${ROS_APT_SOURCE_VERSION}/ros2-apt-source_${ROS_APT_SOURCE_VERSION}.$(. /etc/os-release && echo $UBUNTU_CODENAME)_all.deb" \
+    && apt install -y /tmp/ros2-apt-source.deb \
+    && rm /tmp/ros2-apt-source.deb
 
 # Update and install necessary packages
 RUN apt-get update && apt-get install -y \
