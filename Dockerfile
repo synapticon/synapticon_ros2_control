@@ -1,4 +1,4 @@
-ARG ROS_DISTRO=humble
+ARG ROS_DISTRO=jazzy
 
 # Use official ROS2 images
 FROM ros:${ROS_DISTRO}
@@ -6,26 +6,18 @@ FROM ros:${ROS_DISTRO}
 # Set the shell to bash
 SHELL ["/bin/bash", "-c"]
 
-# # Update and install necessary packages
-RUN apt-get update && apt-get install -y \
-	ros-${ROS_DISTRO}-rviz2
-#     software-properties-common \
-#     gedit \
-#     vim \
-#     sed \
-#     iproute2 \
-#     && apt-add-repository universe \
-#     && apt-add-repository restricted \
-#     && apt-add-repository multiverse \
-#     && apt-get update \
-#     && apt-get install -y \
-#     git \
-#     python3-colcon-common-extensions \
-#     ros-humble-ros2-control \
-#     ros-humble-controller-manager \
-#     ros-humble-xacro \
-#     ros-humble-ros2-controllers \
-#     && rm -rf /var/lib/apt/lists/*
+# Remove old broken keys/sources before update
+# TODO: Remove this once the base ros:jazzy-ros-core image is updated
+RUN find /etc/apt/sources.list.d -type f -exec sed -i '/packages.ros.org/d' {} + \
+ && sed -i '/packages.ros.org/d' /etc/apt/sources.list \
+ && rm -f /usr/share/keyrings/ros-archive-keyring.gpg \
+ && apt-get update \
+ && apt-get install -y curl lsb-release gnupg2
+# Set up ROS 2 repository and GPG keys
+ARG ROS_APT_SOURCE_VERSION=1.1.0
+RUN curl -L -o /tmp/ros2-apt-source.deb "https://github.com/ros-infrastructure/ros-apt-source/releases/download/${ROS_APT_SOURCE_VERSION}/ros2-apt-source_${ROS_APT_SOURCE_VERSION}.$(. /etc/os-release && echo $UBUNTU_CODENAME)_all.deb" \
+    && apt install -y /tmp/ros2-apt-source.deb \
+    && rm /tmp/ros2-apt-source.deb
 
 # Set up ROS2 workspace
 WORKDIR /synapticon_ros2_control_ws
