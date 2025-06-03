@@ -19,27 +19,6 @@ RUN curl -L -o /tmp/ros2-apt-source.deb "https://github.com/ros-infrastructure/r
     && apt install -y /tmp/ros2-apt-source.deb \
     && rm /tmp/ros2-apt-source.deb
 
-# Update and install necessary packages
-RUN apt-get update && apt-get install -y \
-	ros-${ROS_DISTRO}-rviz2
-#     software-properties-common \
-#     gedit \
-#     vim \
-#     sed \
-#     iproute2 \
-#     && apt-add-repository universe \
-#     && apt-add-repository restricted \
-#     && apt-add-repository multiverse \
-#     && apt-get update \
-#     && apt-get install -y \
-#     git \
-#     python3-colcon-common-extensions \
-#     ros-humble-ros2-control \
-#     ros-humble-controller-manager \
-#     ros-humble-xacro \
-#     ros-humble-ros2-controllers \
-#     && rm -rf /var/lib/apt/lists/*
-
 # Set up ROS2 workspace
 WORKDIR /synapticon_ros2_control_ws
 RUN git clone https://github.com/synapticon/synapticon_ros2_control src/synapticon_ros2_control
