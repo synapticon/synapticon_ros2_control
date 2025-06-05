@@ -181,8 +181,14 @@ private:
   std::atomic<int> expected_wkc_;
   std::atomic<bool> needlf_ = false;
   std::atomic<bool> in_normal_op_mode_ = false;
-  // During spring adjust, don't allow control mode to change until the target position is reached
-  std::atomic<bool> allow_mode_change_ = true;
+  struct SpringAdjust
+    {
+      // During spring adjust, don't allow control mode to change until the target position is reached
+      std::atomic<bool> allow_mode_change_ = true;
+      // Spring adjust derivative term variables
+      std::optional<double> error_prev_;
+      std::chrono::steady_clock::time_point time_prev_ = std::chrono::steady_clock::now();
+    } spring_adjust_state_;
 };
 
 } // namespace synapticon_ros2_control
