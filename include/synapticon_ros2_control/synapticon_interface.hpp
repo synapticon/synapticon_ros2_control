@@ -193,7 +193,6 @@ private:
     std::optional<double> error_prev_;
     std::chrono::steady_clock::time_point time_prev_ = std::chrono::steady_clock::now();
   } spring_adjust_state_;
-  std::atomic<bool> e_stop_engaged_ = false;
 };
 
 } // namespace synapticon_ros2_control
