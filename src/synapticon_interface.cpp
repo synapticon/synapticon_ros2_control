@@ -49,7 +49,6 @@ int32_t read_sdo_value(uint16_t slave_idx, uint16_t index, uint8_t subindex) {
     int object_size = sizeof(value_holder);
     int timeout = EC_TIMEOUTRXM;
     ec_SDOread(slave_idx, index, subindex, FALSE, &object_size, &value_holder, timeout);
-    printf("The value of the object is %" PRId32 "\n", value_holder);
     return value_holder;
 }
 } // namespace
@@ -287,12 +286,6 @@ SynapticonSystemInterface::prepare_command_mode_switch(
         }
       }
     }
-  }
-  // All joints must be given new command mode at the same time
-  if (!start_interfaces.empty() && (new_modes.size() != num_joints_)) {
-    RCLCPP_FATAL(getLogger(),
-                 "All joints must be given a new mode at the same time.");
-    return hardware_interface::return_type::ERROR;
   }
 
   // Stop motion on all relevant joints
@@ -555,7 +548,8 @@ void SynapticonSystemInterface::somanetCyclicLoop(
     std::atomic<bool> &in_normal_op_mode) {
   std::vector<bool> first_iteration(num_joints_ , true);
 
-  while (rclcpp::ok()) {
+  while (rclcpp::ok() && !eStopEngaged()) {
+
     {
       std::lock_guard<std::mutex> lock(in_somanet_mtx_);
       ec_send_processdata();
@@ -677,7 +671,6 @@ void SynapticonSystemInterface::somanetCyclicLoop(
                 }
                 // Don't allow control mode to change until the target position is reached and is stable
                 if (std::abs(error) < 200 && error_dt == 0) {
-                  RCLCPP_INFO(getLogger(), "Position reached, potentiometer at: %" PRId32, spring_pot_position);
                   spring_adjust_state_.allow_mode_change_ = true;
                   target_torque = 0;
                 }
@@ -734,6 +727,47 @@ void SynapticonSystemInterface::somanetCyclicLoop(
     } // scope of in_somanet_ mutex lock
     osal_usleep(5000);
   }
+
+  // Before exiting, set all motors to safe state with brakes on
+  std::lock_guard<std::mutex> lock(in_somanet_mtx_);
+  for (size_t joint_idx = 0; joint_idx < num_joints_; ++joint_idx) {
+    out_somanet_1_[joint_idx]->OpMode = PROFILE_TORQUE_MODE;
+    out_somanet_1_[joint_idx]->TorqueOffset = 0;
+    out_somanet_1_[joint_idx]->TargetTorque = 0;
+    out_somanet_1_[joint_idx]->Controlword = NORMAL_OPERATION_BRAKES_ON;
+  }
+  ec_send_processdata();
+  ec_receive_processdata(EC_TIMEOUTRET);
+
+  // Signal shutdown to somanet control thread
+  in_normal_op_mode = false;
+  ec_close();
+  // Exit the thread
+  return;
+}
+
+bool SynapticonSystemInterface::eStopEngaged() {
+  //The slave you want to read from/write to. 1 means the first slave
+  uint16_t slave_number = 1;
+  //The index of the object you want to operate
+  uint16_t index = 0x6621;
+  // STO
+  uint8_t subindex = 0x01;
+  //Specify if you want to write to/read from all subindexes within the specified index
+  bool operate_all_subindices = FALSE;
+  //The place to store the value read from the object
+  bool value_holder;
+  //Bit size of the object that you are going to operate
+  int object_size = sizeof(value_holder);
+
+  int result = ec_SDOread(slave_number, index, subindex, operate_all_subindices, &object_size, &value_holder, EC_TIMEOUTRXM);
+
+  if (result <= 0) {
+    RCLCPP_FATAL(getLogger(), "Failed to read emergency stop status from slave %d", slave_number);
+    // Force an e-stop
+    return true;
+  }
+  return value_holder;
 }
 
 } // namespace synapticon_ros2_control
