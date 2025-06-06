@@ -108,7 +108,7 @@ public:
   /**
    * \return logger of the SystemInterface.
    */
-  rclcpp::Logger get_logger() const { return *logger_; }
+  rclcpp::Logger getLogger() const { return *logger_; }
 
 private:
   /**
@@ -128,7 +128,6 @@ private:
 
   size_t num_joints_;
 
-  // Objects for logging
   std::shared_ptr<rclcpp::Logger> logger_;
 
   std::vector<double> mechanical_reductions_;

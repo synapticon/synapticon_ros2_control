@@ -43,6 +43,15 @@ constexpr double TORQUE_FRICTION_OFFSET = 20; // per mill
 constexpr size_t SPRING_ADJUST_JOINT_IDX = 2;
 constexpr double MAX_SPRING_POTENTIOMETER_TICKS = 63900;
 constexpr double MIN_SPRING_POTENTIOMETER_TICKS = 1332;
+
+int32_t read_sdo_value(uint16_t slave_idx, uint16_t index, uint8_t subindex) {
+    int32_t value_holder;
+    int object_size = sizeof(value_holder);
+    int timeout = EC_TIMEOUTRXM;
+    ec_SDOread(slave_idx, index, subindex, FALSE, &object_size, &value_holder, timeout);
+    printf("The value of the object is %" PRId32 "\n", value_holder);
+    return value_holder;
+}
 } // namespace
 
 hardware_interface::CallbackReturn SynapticonSystemInterface::on_init(
@@ -51,8 +60,7 @@ hardware_interface::CallbackReturn SynapticonSystemInterface::on_init(
       hardware_interface::CallbackReturn::SUCCESS) {
     return hardware_interface::CallbackReturn::ERROR;
   }
-  logger_ = std::make_shared<rclcpp::Logger>(
-      rclcpp::get_logger("synapticon_interface"));
+  logger_ = std::make_shared<rclcpp::Logger>(rclcpp::get_logger("synapticon_interface"));
 
   num_joints_ = info_.joints.size();
 
@@ -104,7 +112,7 @@ hardware_interface::CallbackReturn SynapticonSystemInterface::on_init(
               "spring_adjust" ||
               hardware_interface::HW_IF_EFFORT)) {
       RCLCPP_FATAL(
-          get_logger(),
+          getLogger(),
           "Joint '%s' has %s command interface. Expected %s, %s, %s, %s, or %s.",
           joint.name.c_str(), joint.command_interfaces[0].name.c_str(),
           hardware_interface::HW_IF_POSITION,
@@ -123,7 +131,7 @@ hardware_interface::CallbackReturn SynapticonSystemInterface::on_init(
               hardware_interface::HW_IF_ACCELERATION ||
           joint.state_interfaces[0].name == hardware_interface::HW_IF_EFFORT)) {
       RCLCPP_FATAL(
-          get_logger(),
+          getLogger(),
           "Joint '%s' has %s state interface. Expected %s, %s, %s, or %s.",
           joint.name.c_str(), joint.state_interfaces[0].name.c_str(),
           hardware_interface::HW_IF_POSITION,
@@ -155,7 +163,7 @@ hardware_interface::CallbackReturn SynapticonSystemInterface::on_init(
   std::string eth_device = info_.hardware_parameters["eth_device"];
   int ec_init_status = ec_init(eth_device.c_str());
   if (ec_init_status <= 0) {
-    RCLCPP_FATAL_STREAM(get_logger(),
+    RCLCPP_FATAL_STREAM(getLogger(),
                         "Error during initialization of ethercat interface: "
                             << eth_device.c_str() << " with status: "
                             << ec_init_status);
@@ -163,7 +171,7 @@ hardware_interface::CallbackReturn SynapticonSystemInterface::on_init(
   }
 
   if (ec_config_init(false) <= 0) {
-    RCLCPP_FATAL(get_logger(), "No ethercat slaves found!");
+    RCLCPP_FATAL(getLogger(), "No ethercat slaves found!");
     ec_close();
     return hardware_interface::CallbackReturn::ERROR;
   }
@@ -191,7 +199,7 @@ hardware_interface::CallbackReturn SynapticonSystemInterface::on_init(
   } while (chk-- && (ec_slave[0].state != EC_STATE_OPERATIONAL));
 
   if (ec_slave[0].state != EC_STATE_OPERATIONAL) {
-    RCLCPP_FATAL(get_logger(),
+    RCLCPP_FATAL(getLogger(),
                  "An ethercat slave failed to reach OPERATIONAL state");
     return hardware_interface::CallbackReturn::ERROR;
   }
@@ -208,7 +216,7 @@ hardware_interface::CallbackReturn SynapticonSystemInterface::on_init(
     // Verify slave name
     if (strcmp(ec_slave[joint_idx].name, EXPECTED_SLAVE_NAME) != 0) {
       RCLCPP_FATAL(
-          get_logger(),
+          getLogger(),
           "Expected slave %s at position %zu, but got %s instead",
           EXPECTED_SLAVE_NAME, joint_idx, ec_slave[joint_idx].name);
       return hardware_interface::CallbackReturn::ERROR;
@@ -226,7 +234,7 @@ hardware_interface::CallbackReturn SynapticonSystemInterface::on_init(
                 EC_TIMEOUTRXM);
     } else {
       RCLCPP_FATAL(
-          get_logger(),
+          getLogger(),
           "No encoder configured for position control on joint %zu. Terminating the program",
           joint_idx);
       return hardware_interface::CallbackReturn::ERROR;
@@ -247,7 +255,7 @@ SynapticonSystemInterface::prepare_command_mode_switch(
     const std::vector<std::string> &stop_interfaces) {
   if (!spring_adjust_state_.allow_mode_change_)
   {
-    RCLCPP_ERROR(get_logger(), "A control mode change is disallowed at this moment.");
+    RCLCPP_ERROR(getLogger(), "A control mode change is disallowed at this moment.");
     return hardware_interface::return_type::ERROR;
   }
 
@@ -272,7 +280,8 @@ SynapticonSystemInterface::prepare_command_mode_switch(
           new_modes.push_back(control_level_t::SPRING_ADJUST);
           spring_adjust_state_.time_prev_ = std::chrono::steady_clock::now();
           spring_adjust_state_.error_prev_ = std::nullopt;
-          std::cerr << "Potentiometer at: " << in_somanet_1_[SPRING_ADJUST_JOINT_IDX]->AnalogInput4 << std::endl;
+          int32_t spring_pot_position = read_sdo_value(SPRING_ADJUST_JOINT_IDX + 1, 0x2402, 0x00);
+          std::cerr << "Potentiometer at: " << spring_pot_position << std::endl;
         } else {
           new_modes.push_back(control_level_t::QUICK_STOP);
         }
@@ -281,7 +290,7 @@ SynapticonSystemInterface::prepare_command_mode_switch(
   }
   // All joints must be given new command mode at the same time
   if (!start_interfaces.empty() && (new_modes.size() != num_joints_)) {
-    RCLCPP_FATAL(get_logger(),
+    RCLCPP_FATAL(getLogger(),
                  "All joints must be given a new mode at the same time.");
     return hardware_interface::return_type::ERROR;
   }
@@ -311,7 +320,7 @@ SynapticonSystemInterface::prepare_command_mode_switch(
       if (key.find(info_.joints[i].name) != std::string::npos) {
         if (control_level_[i] != control_level_t::UNDEFINED) {
           // Something else is using the joint! Abort!
-          RCLCPP_FATAL(get_logger(),
+          RCLCPP_FATAL(getLogger(),
                        "Something else is using the joint. Abort!");
           return hardware_interface::return_type::ERROR;
         }
@@ -349,9 +358,6 @@ hardware_interface::CallbackReturn SynapticonSystemInterface::on_activate(
     threadsafe_commands_spring_adjust_[i] =
         std::numeric_limits<double>::quiet_NaN();
   }
-
-  RCLCPP_INFO(get_logger(), "System successfully activated! Control level: %u",
-              control_level_[0]);
 
   return hardware_interface::CallbackReturn::SUCCESS;
 }
@@ -643,10 +649,12 @@ void SynapticonSystemInterface::somanetCyclicLoop(
             {
               // Spring adjust joint: proportional control based on analog input 2 potentiometer
               if (joint_idx == SPRING_ADJUST_JOINT_IDX) {
-                // For some reason we are reading the potentiometer on AnalogInput4, should be 2
+                // There is a Synapticon bug where AnalogInput2 is not reliable, so read from SDO
+                int32_t spring_pot_position = read_sdo_value(SPRING_ADJUST_JOINT_IDX + 1, 0x2402, 0x00);
+
                 double K_P = 1.0;
                 double K_D = 0.4;
-                double error = in_somanet_1_[joint_idx]->AnalogInput4 - threadsafe_commands_spring_adjust_[joint_idx];
+                double error = spring_pot_position - threadsafe_commands_spring_adjust_[joint_idx];
                 std::chrono::steady_clock::time_point time_now = std::chrono::steady_clock::now();
                 std::chrono::duration<double> time_elapsed = time_now - spring_adjust_state_.time_prev_;
                 double error_dt = 0;
@@ -669,7 +677,7 @@ void SynapticonSystemInterface::somanetCyclicLoop(
                 }
                 // Don't allow control mode to change until the target position is reached and is stable
                 if (std::abs(error) < 200 && error_dt == 0) {
-                  std::cout << "Position reached, potentiometer at: " << in_somanet_1_[joint_idx]->AnalogInput4 << std::endl;
+                  RCLCPP_INFO(getLogger(), "Position reached, potentiometer at: %" PRId32, spring_pot_position);
                   spring_adjust_state_.allow_mode_change_ = true;
                   target_torque = 0;
                 }
@@ -692,7 +700,7 @@ void SynapticonSystemInterface::somanetCyclicLoop(
                 out_somanet_1_[joint_idx]->Controlword = NORMAL_OPERATION_BRAKES_OFF;
               }
               else {
-                std::cerr << "Should never get here since the other joints are in QUICK_STOP mode" << std::endl;
+                RCLCPP_ERROR(getLogger(), "Should never get here since the other joints are in QUICK_STOP mode");
               }
             }
             else if (control_level_[joint_idx] == control_level_t::UNDEFINED) {
