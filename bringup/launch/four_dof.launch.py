@@ -96,6 +96,7 @@ def generate_launch_description():
             "quick_stop_controller",
             "spring_adjust_controller",
             "compensate_for_removed_load",
+            "compensate_for_added_load",
             "--param-file",
             robot_controllers,
         ],

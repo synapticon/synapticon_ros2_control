@@ -40,11 +40,14 @@ unsigned int NORMAL_OPERATION_BRAKES_ON = 0b00001011;
 constexpr char EXPECTED_SLAVE_NAME[] = "SOMANET";
 constexpr double TORQUE_FRICTION_OFFSET = 20; // per mill
 constexpr size_t SPRING_ADJUST_JOINT_IDX = 2;
+constexpr size_t INERTIAL_ACTUATOR_JOINT_IDX = 3;
 // Minimum spring position: no wrist attached
 constexpr double MIN_SPRING_POTENTIOMETER_TICKS = 5000;
 // Maximum spring position: max payload
 constexpr double MAX_SPRING_POTENTIOMETER_TICKS = 34000;
 constexpr double SPRING_POSITION_WITHOUT_PAYLOAD = 5000;
+// TODO: figure out what this value actually is
+constexpr double INERTIAL_HARD_STOP_POSITION = 3.14;
 
 int32_t read_sdo_value(uint16_t slave_idx, uint16_t index, uint8_t subindex) {
     int32_t value_holder;
@@ -127,6 +130,8 @@ hardware_interface::CallbackReturn SynapticonSystemInterface::on_init(
                               std::numeric_limits<double>::quiet_NaN());
   hw_commands_compensate_for_removed_load_.resize(num_joints_,
                               std::numeric_limits<double>::quiet_NaN());
+  hw_commands_compensate_for_added_load_.resize(num_joints_,
+                              std::numeric_limits<double>::quiet_NaN());
   control_level_.resize(num_joints_, control_level_t::UNDEFINED);
   // Atomic deques are difficult to initialize
   threadsafe_commands_efforts_.resize(num_joints_);
@@ -155,16 +160,19 @@ hardware_interface::CallbackReturn SynapticonSystemInterface::on_init(
               hardware_interface::HW_IF_EFFORT ||
           joint.command_interfaces[0].name == "quick_stop" ||
           joint.command_interfaces[0].name == "spring_adjust" ||
-          joint.command_interfaces[0].name == "compensate_for_removed_load" )) {
+          joint.command_interfaces[0].name == "compensate_for_removed_load" ||
+          joint.command_interfaces[0].name == "compensate_for_added_load")) {
       RCLCPP_FATAL(
           getLogger(),
-          "Joint '%s' has %s command interface. Expected %s, %s, %s, %s, or %s.",
+          "Joint '%s' has %s command interface. Expected %s, %s, %s, %s, %s, %s, or %s.",
           joint.name.c_str(), joint.command_interfaces[0].name.c_str(),
           hardware_interface::HW_IF_POSITION,
           hardware_interface::HW_IF_VELOCITY,
+          hardware_interface::HW_IF_EFFORT,
           "quick_stop",
           "spring_adjust",
-          hardware_interface::HW_IF_EFFORT);
+          "compensate_for_removed_load",
+          "compensate_for_added_load");
       return hardware_interface::CallbackReturn::ERROR;
     }
 
@@ -335,6 +343,20 @@ SynapticonSystemInterface::prepare_command_mode_switch(
         } else {
           new_modes.push_back(control_level_t::QUICK_STOP);
         }
+      } else if (key == info_.joints[i].name + "/compensate_for_added_load") {
+        // compensate_for_added_load puts all joints in QUICK_STOP mode except the spring adjust joint
+        // Fail if elevation inertial actuator is near the hard stop
+        if (abs(hw_states_positions_[INERTIAL_ACTUATOR_JOINT_IDX] - INERTIAL_HARD_STOP_POSITION) < 0.02 /* rad */)
+        {
+          RCLCPP_ERROR(getLogger(), "Payload compensation cannot occur unless the elevation inertial actuator is near the hard stop");
+          return hardware_interface::return_type::ERROR;
+        }
+
+        if (i == SPRING_ADJUST_JOINT_IDX) {
+          new_modes.push_back(control_level_t::COMPENSATE_FOR_ADDED_LOAD);
+        } else {
+          new_modes.push_back(control_level_t::QUICK_STOP);
+        }
       }
     }
   }
@@ -396,6 +418,7 @@ hardware_interface::CallbackReturn SynapticonSystemInterface::on_activate(
     hw_commands_efforts_[i] = 0;
     hw_commands_spring_adjust_[i] = std::numeric_limits<double>::quiet_NaN();
     hw_commands_compensate_for_removed_load_[i] = std::numeric_limits<double>::quiet_NaN();
+    hw_commands_compensate_for_added_load_[i] = std::numeric_limits<double>::quiet_NaN();
     threadsafe_commands_efforts_[i] = std::numeric_limits<double>::quiet_NaN();
     threadsafe_commands_velocities_[i] = 0;
     threadsafe_commands_positions_[i] =
@@ -418,6 +441,7 @@ hardware_interface::CallbackReturn SynapticonSystemInterface::on_deactivate(
     hw_commands_efforts_[i] = 0;
     hw_commands_spring_adjust_[i] = std::numeric_limits<double>::quiet_NaN();
     hw_commands_compensate_for_removed_load_[i] = std::numeric_limits<double>::quiet_NaN();
+    hw_commands_compensate_for_added_load_[i] = std::numeric_limits<double>::quiet_NaN();
     threadsafe_commands_efforts_[i] = std::numeric_limits<double>::quiet_NaN();
     threadsafe_commands_velocities_[i] = 0;
     threadsafe_commands_positions_[i] =
@@ -472,7 +496,7 @@ SynapticonSystemInterface::write(const rclcpp::Time & /*time*/,
       hw_commands_spring_adjust_[i] = std::clamp(hw_commands_spring_adjust_[i], MIN_SPRING_POTENTIOMETER_TICKS, MAX_SPRING_POTENTIOMETER_TICKS);
       threadsafe_commands_spring_adjust_[i] = hw_commands_spring_adjust_[i];
     }
-    // No need to do anything for compensate_for_removed_load, the spring adjust joint moves to a hard-coded position
+    // No need to do anything for compensate_for_added/removed_load, the spring adjust joint moves to a hard-coded position
   }
 
   return hardware_interface::return_type::OK;
@@ -520,6 +544,9 @@ SynapticonSystemInterface::export_command_interfaces() {
     command_interfaces.emplace_back(hardware_interface::CommandInterface(
         info_.joints[i].name, "compensate_for_removed_load",
         &hw_commands_compensate_for_removed_load_[i]));
+    command_interfaces.emplace_back(hardware_interface::CommandInterface(
+        info_.joints[i].name, "compensate_for_added_load",
+        &hw_commands_compensate_for_added_load_[i]));
   }
   return command_interfaces;
 }
@@ -748,10 +775,17 @@ void SynapticonSystemInterface::somanetCyclicLoop(
                 out_somanet_1_[joint_idx]->OpMode = PROFILE_TORQUE_MODE;
                 out_somanet_1_[joint_idx]->TorqueOffset = 0;
                 out_somanet_1_[joint_idx]->Controlword = NORMAL_OPERATION_BRAKES_OFF;
-              }
-              else {
+              } else {
                 RCLCPP_ERROR(getLogger(), "Should never get here since the other joints are in QUICK_STOP mode");
               }
+            } else if (control_level_[joint_idx] == control_level_t::COMPENSATE_FOR_ADDED_LOAD)
+            {
+              // Turn off the inertial actuator brake
+              // Set the inertial actuator to "forward torque" mode, i.e. target torque of 0, i.e. freely moving
+              // Leave the other brakes on
+              // Disable the trident brake
+              // Gravity should pull the link down to the hard stop
+              // Increase the spring adjust setpoint until inertial actuator motion occurs
             } else if (control_level_[joint_idx] == control_level_t::UNDEFINED) {
               out_somanet_1_[joint_idx]->OpMode = PROFILE_TORQUE_MODE;
               // small offset to account for friction
