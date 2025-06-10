@@ -56,15 +56,13 @@ int32_t read_sdo_value(uint16_t slave_idx, uint16_t index, uint8_t subindex) {
 
 double spring_adjust_torque_pd(
   double target_position,
+  int32_t current_spring_pot_position,
   SpringAdjustState& state,
   bool& allow_mode_change) {
 
-  // There is a Synapticon bug where AnalogInput2 is not reliable, so read from SDO
-  int32_t spring_pot_position = read_sdo_value(SPRING_ADJUST_JOINT_IDX + 1, 0x2402, 0x00);
-
   double K_P = 1.0;
   double K_D = 0.4;
-  double error = spring_pot_position - target_position;
+  double error = static_cast<double>(current_spring_pot_position) - target_position;
   std::chrono::steady_clock::time_point time_now = std::chrono::steady_clock::now();
   std::chrono::duration<double> time_elapsed = time_now - state.time_prev_;
   double error_dt = 0;
@@ -88,7 +86,7 @@ double spring_adjust_torque_pd(
   // Don't allow control mode to change until the target position is reached and is stable
   if (std::abs(error) < 200 && error_dt <= 1) {
       allow_mode_change = true;
-      // We can safelyset the target torque to zero b/c this actuator is not backdrivable
+      // We can safely set the target torque to zero b/c this actuator is not backdrivable
       actuator_torque = 0;
   } else {
       allow_mode_change = false;
@@ -326,8 +324,6 @@ SynapticonSystemInterface::prepare_command_mode_switch(
           new_modes.push_back(control_level_t::SPRING_ADJUST);
           spring_adjust_state_.time_prev_ = std::chrono::steady_clock::now();
           spring_adjust_state_.error_prev_ = std::nullopt;
-          int32_t spring_pot_position = read_sdo_value(SPRING_ADJUST_JOINT_IDX + 1, 0x2402, 0x00);
-          std::cerr << "Potentiometer at: " << spring_pot_position << std::endl;
         } else {
           new_modes.push_back(control_level_t::QUICK_STOP);
         }
@@ -335,8 +331,6 @@ SynapticonSystemInterface::prepare_command_mode_switch(
         // compensate_for_removed_load puts all joints in QUICK_STOP mode except the spring adjust joint
         if (i == SPRING_ADJUST_JOINT_IDX) {
           new_modes.push_back(control_level_t::COMPENSATE_FOR_REMOVED_LOAD);
-          int32_t spring_pot_position = read_sdo_value(SPRING_ADJUST_JOINT_IDX + 1, 0x2402, 0x00);
-          std::cerr << "Potentiometer at: " << spring_pot_position << std::endl;
         } else {
           new_modes.push_back(control_level_t::QUICK_STOP);
         }
@@ -663,6 +657,10 @@ void SynapticonSystemInterface::somanetCyclicLoop(
           else if ((in_somanet_1_[joint_idx]->Statusword &
                     0b0000000001101111) == 0b0000000000100111) {
             in_normal_op_mode = true;
+
+            int32_t spring_pot_position = read_sdo_value(SPRING_ADJUST_JOINT_IDX + 1, 0x2402, 0x00);
+            std::cerr << "Spring pot position: " << spring_pot_position << std::endl;
+
             // In most control modes, do nothing for the spring adjust joint
             if (joint_idx == SPRING_ADJUST_JOINT_IDX
                 && control_level_[joint_idx] != control_level_t::SPRING_ADJUST
@@ -721,16 +719,17 @@ void SynapticonSystemInterface::somanetCyclicLoop(
                 bool allow_mode_change = allow_mode_change_.load();
                 double actuator_torque = spring_adjust_torque_pd(
                   threadsafe_commands_spring_adjust_[joint_idx],
+                  spring_pot_position,
                   spring_adjust_state_,
                   allow_mode_change  // Pass the local variable instead of the atomic member
                 );
                 // Update the atomic member with the new value
                 allow_mode_change_.store(allow_mode_change);
 
-                out_somanet_1_[joint_idx]->TargetTorque = actuator_torque;
-                out_somanet_1_[joint_idx]->OpMode = PROFILE_TORQUE_MODE;
-                out_somanet_1_[joint_idx]->TorqueOffset = 0;
-                out_somanet_1_[joint_idx]->Controlword = NORMAL_OPERATION_BRAKES_OFF;
+                // out_somanet_1_[joint_idx]->TargetTorque = actuator_torque;
+                // out_somanet_1_[joint_idx]->OpMode = PROFILE_TORQUE_MODE;
+                // out_somanet_1_[joint_idx]->TorqueOffset = 0;
+                // out_somanet_1_[joint_idx]->Controlword = NORMAL_OPERATION_BRAKES_OFF;
               }
               else {
                 RCLCPP_ERROR(getLogger(), "Should never get here since the other joints are in QUICK_STOP mode");
@@ -744,12 +743,12 @@ void SynapticonSystemInterface::somanetCyclicLoop(
                 bool allow_mode_change = allow_mode_change_.load();
                 double actuator_torque = spring_adjust_torque_pd(
                   SPRING_POSITION_WITHOUT_PAYLOAD,
+                  spring_pot_position,
                   spring_adjust_state_,
                   allow_mode_change  // Pass the local variable instead of the atomic member
                 );
                 // Update the atomic member with the new value
                 allow_mode_change_.store(allow_mode_change);
-                std::cerr << "Compensate for removed load torque: " << actuator_torque << std::endl;
 
                 // out_somanet_1_[joint_idx]->TargetTorque = actuator_torque;
                 // out_somanet_1_[joint_idx]->OpMode = PROFILE_TORQUE_MODE;
@@ -810,27 +809,29 @@ void SynapticonSystemInterface::somanetCyclicLoop(
 }
 
 bool SynapticonSystemInterface::eStopEngaged() {
-  //The slave you want to read from/write to. 1 means the first slave
-  uint16_t slave_number = 1;
-  //The index of the object you want to operate
-  uint16_t index = 0x6621;
-  // STO
-  uint8_t subindex = 0x01;
-  //Specify if you want to write to/read from all subindexes within the specified index
-  bool operate_all_subindices = FALSE;
-  //The place to store the value read from the object
-  bool value_holder;
-  //Bit size of the object that you are going to operate
-  int object_size = sizeof(value_holder);
+    // First ensure process data communication is working
+    ec_send_processdata();
+    int wkc = ec_receive_processdata(EC_TIMEOUTRET);
 
-  int result = ec_SDOread(slave_number, index, subindex, operate_all_subindices, &object_size, &value_holder, EC_TIMEOUTRXM);
+    if (wkc < expected_wkc_) {
+        RCLCPP_ERROR(getLogger(), "Process data communication failed");
+        return true; // Force e-stop on communication failure
+    }
 
-  if (result <= 0) {
-    RCLCPP_FATAL(getLogger(), "Failed to read emergency stop status from slave %d", slave_number);
-    // Force an e-stop
-    return true;
-  }
-  return value_holder;
+    uint16_t slave_number = 1;
+    uint16_t index = 0x6621;
+    uint8_t subindex = 0x01;
+    bool operate_all_subindices = FALSE;
+    bool value_holder;
+    int object_size = sizeof(value_holder);
+
+    int result = ec_SDOread(slave_number, index, subindex, operate_all_subindices, &object_size, &value_holder, EC_TIMEOUTRXM);
+
+    if (result <= 0) {
+        RCLCPP_ERROR(getLogger(), "Failed to read emergency stop status from slave %d", slave_number);
+        return true; // Force e-stop on read failure
+    }
+    return value_holder;
 }
 
 } // namespace synapticon_ros2_control
