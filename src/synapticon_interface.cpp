@@ -44,7 +44,7 @@ constexpr size_t SPRING_ADJUST_JOINT_IDX = 2;
 constexpr double MIN_SPRING_POTENTIOMETER_TICKS = 5000;
 // Maximum spring position: max payload
 constexpr double MAX_SPRING_POTENTIOMETER_TICKS = 34000;
-constexpr double NO_PAYLOAD_SPRING_POSITION = 5000;
+constexpr double SPRING_POSITION_WITHOUT_PAYLOAD = 5000;
 
 int32_t read_sdo_value(uint16_t slave_idx, uint16_t index, uint8_t subindex) {
     int32_t value_holder;
@@ -326,6 +326,15 @@ SynapticonSystemInterface::prepare_command_mode_switch(
           new_modes.push_back(control_level_t::SPRING_ADJUST);
           spring_adjust_state_.time_prev_ = std::chrono::steady_clock::now();
           spring_adjust_state_.error_prev_ = std::nullopt;
+          int32_t spring_pot_position = read_sdo_value(SPRING_ADJUST_JOINT_IDX + 1, 0x2402, 0x00);
+          std::cerr << "Potentiometer at: " << spring_pot_position << std::endl;
+        } else {
+          new_modes.push_back(control_level_t::QUICK_STOP);
+        }
+      } else if (key == info_.joints[i].name + "/compensate_for_removed_load") {
+        // compensate_for_removed_load puts all joints in QUICK_STOP mode except the spring adjust joint
+        if (i == SPRING_ADJUST_JOINT_IDX) {
+          new_modes.push_back(control_level_t::COMPENSATE_FOR_REMOVED_LOAD);
           int32_t spring_pot_position = read_sdo_value(SPRING_ADJUST_JOINT_IDX + 1, 0x2402, 0x00);
           std::cerr << "Potentiometer at: " << spring_pot_position << std::endl;
         } else {
@@ -654,8 +663,10 @@ void SynapticonSystemInterface::somanetCyclicLoop(
           else if ((in_somanet_1_[joint_idx]->Statusword &
                     0b0000000001101111) == 0b0000000000100111) {
             in_normal_op_mode = true;
-            // Usually do nothing for the spring adjust joint
-            if (joint_idx == SPRING_ADJUST_JOINT_IDX && control_level_[joint_idx] != control_level_t::SPRING_ADJUST) {
+            // In most control modes, do nothing for the spring adjust joint
+            if (joint_idx == SPRING_ADJUST_JOINT_IDX
+                && control_level_[joint_idx] != control_level_t::SPRING_ADJUST
+                && control_level_[joint_idx] != control_level_t::COMPENSATE_FOR_REMOVED_LOAD) {
               continue;
             }
             if (control_level_[joint_idx] == control_level_t::EFFORT) {
@@ -701,6 +712,7 @@ void SynapticonSystemInterface::somanetCyclicLoop(
                   out_somanet_1_[joint_idx]->TargetTorque = 0;
                   out_somanet_1_[joint_idx]->OpMode = PROFILE_TORQUE_MODE;
                   out_somanet_1_[joint_idx]->TorqueOffset = 0;
+                  // This is safe since the joint is non-backdrivable
                   out_somanet_1_[joint_idx]->Controlword = NORMAL_OPERATION_BRAKES_OFF;
                   continue;
                 }
@@ -723,8 +735,31 @@ void SynapticonSystemInterface::somanetCyclicLoop(
               else {
                 RCLCPP_ERROR(getLogger(), "Should never get here since the other joints are in QUICK_STOP mode");
               }
-            }
-            else if (control_level_[joint_idx] == control_level_t::UNDEFINED) {
+            } else if (control_level_[joint_idx] == control_level_t::COMPENSATE_FOR_REMOVED_LOAD)
+            {
+              // Spring adjust joint: proportional control based on analog input 2 potentiometer
+              if (joint_idx == SPRING_ADJUST_JOINT_IDX) {
+
+                // Create a local boolean variable since atomics can't be passed by reference
+                bool allow_mode_change = allow_mode_change_.load();
+                double actuator_torque = spring_adjust_torque_pd(
+                  SPRING_POSITION_WITHOUT_PAYLOAD,
+                  spring_adjust_state_,
+                  allow_mode_change  // Pass the local variable instead of the atomic member
+                );
+                // Update the atomic member with the new value
+                allow_mode_change_.store(allow_mode_change);
+                std::cerr << "Compensate for removed load torque: " << actuator_torque << std::endl;
+
+                // out_somanet_1_[joint_idx]->TargetTorque = actuator_torque;
+                // out_somanet_1_[joint_idx]->OpMode = PROFILE_TORQUE_MODE;
+                // out_somanet_1_[joint_idx]->TorqueOffset = 0;
+                // out_somanet_1_[joint_idx]->Controlword = NORMAL_OPERATION_BRAKES_OFF;
+              }
+              else {
+                RCLCPP_ERROR(getLogger(), "Should never get here since the other joints are in QUICK_STOP mode");
+              }
+            } else if (control_level_[joint_idx] == control_level_t::UNDEFINED) {
               out_somanet_1_[joint_idx]->OpMode = PROFILE_TORQUE_MODE;
               // small offset to account for friction
               if (in_somanet_1_[joint_idx]->VelocityValue > 0) {
@@ -734,7 +769,7 @@ void SynapticonSystemInterface::somanetCyclicLoop(
               }
               out_somanet_1_[joint_idx]->Controlword = NORMAL_OPERATION_BRAKES_OFF;
             }
-          }
+          } // normal operation
         }
 
         // printf("Processdata cycle %4d , WKC %d ,", i, wkc);

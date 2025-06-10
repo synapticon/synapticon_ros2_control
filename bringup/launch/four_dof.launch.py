@@ -95,6 +95,7 @@ def generate_launch_description():
             "forward_position_controller",
             "quick_stop_controller",
             "spring_adjust_controller",
+            "compensate_for_removed_load",
             "--param-file",
             robot_controllers,
         ],
