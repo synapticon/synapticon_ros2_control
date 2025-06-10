@@ -44,27 +44,27 @@ struct SpringAdjustState {
     std::optional<double> error_prev_;
 };
 
-// /**
-//  * @brief Computes control output for spring adjust joint using a custom PID implementation
-//  *
-//  * @param target_position [in] The desired position in potentiometer ticks.
-//  * @param state [in/out] A SpringAdjustState struct containing:
-//  *                      - time_prev_: Previous timestamp for computing time derivatives
-//  *                      - error_prev_: Previous error value for computing error derivatives
-//  * @param allow_mode_change [in/out] Boolean flag that gets set to true when the target position is reached
-//  *                                  and stable (error < 200 ticks and error_dt <= 1).
-//  *                                  Allows us to leave this control mode.
-//  * @return double The computed actuator torque in per-mill of rated torque. The output is clamped.
-//  *
-//  * @note This function implements a custom PD control loop for the spring adjust joint, which uses
-//  *       a linear potentiometer for position feedback. Unlike other joints in the system that utilize
-//  *       the built-in Synapticon PID control, this joint requires custom control logic to handle
-//  *       the potentiometer-based position sensing.
-//  */
-// double spring_adjust_torque_pd(
-//   double target_position,
-//   SpringAdjustState& state,
-//   bool& allow_mode_change);
+/**
+ * @brief Computes control output for spring adjust joint using a custom PID implementation
+ *
+ * @param target_position [in] The desired position in potentiometer ticks.
+ * @param state [in/out] A SpringAdjustState struct containing:
+ *                      - time_prev_: Previous timestamp for computing time derivatives
+ *                      - error_prev_: Previous error value for computing error derivatives
+ * @param allow_mode_change [in/out] Boolean flag that gets set to true when the target position is reached
+ *                                  and stable (error < 200 ticks and error_dt <= 1).
+ *                                  Allows us to leave this control mode.
+ * @return double The computed actuator torque in per-mill of rated torque. The output is clamped.
+ *
+ * @note This function implements a custom PD control loop for the spring adjust joint, which uses
+ *       a linear potentiometer for position feedback. Unlike other joints in the system that utilize
+ *       the built-in Synapticon PID control, this joint requires custom control logic to handle
+ *       the potentiometer-based position sensing.
+ */
+double spring_adjust_torque_pd(
+  double target_position,
+  SpringAdjustState& state,
+  bool& allow_mode_change);
 } // namespace
 
 #pragma pack(1)

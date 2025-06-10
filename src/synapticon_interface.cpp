@@ -53,6 +53,49 @@ int32_t read_sdo_value(uint16_t slave_idx, uint16_t index, uint8_t subindex) {
     ec_SDOread(slave_idx, index, subindex, FALSE, &object_size, &value_holder, timeout);
     return value_holder;
 }
+
+double spring_adjust_torque_pd(
+  double target_position,
+  SpringAdjustState& state,
+  bool& allow_mode_change) {
+
+  // There is a Synapticon bug where AnalogInput2 is not reliable, so read from SDO
+  int32_t spring_pot_position = read_sdo_value(SPRING_ADJUST_JOINT_IDX + 1, 0x2402, 0x00);
+
+  double K_P = 1.0;
+  double K_D = 0.4;
+  double error = spring_pot_position - target_position;
+  std::chrono::steady_clock::time_point time_now = std::chrono::steady_clock::now();
+  std::chrono::duration<double> time_elapsed = time_now - state.time_prev_;
+  double error_dt = 0;
+  if (state.error_prev_) {
+      error_dt = (error - *state.error_prev_) / time_elapsed.count();
+  }
+  state.error_prev_ = error;
+  state.time_prev_ = time_now;
+  double actuator_torque = - K_P * error - K_D * error_dt;
+
+  // A ceiling at X% of rated torque
+  // With a floor of Y% torque (below that, the motor doesn't move)
+  // We overdrive the motor, higher than rated torque, since it's a quick motion
+  if (actuator_torque > 0) {
+      // Per mill of rated torque
+      actuator_torque = std::clamp(actuator_torque, 0.0, 2500.0);
+  } else {
+      actuator_torque = std::clamp(actuator_torque, -2500.0, 0.0);
+  }
+
+  // Don't allow control mode to change until the target position is reached and is stable
+  if (std::abs(error) < 200 && error_dt <= 1) {
+      allow_mode_change = true;
+      // We can safelyset the target torque to zero b/c this actuator is not backdrivable
+      actuator_torque = 0;
+  } else {
+      allow_mode_change = false;
+  }
+
+  return actuator_torque;
+}
 } // namespace
 
 hardware_interface::CallbackReturn SynapticonSystemInterface::on_init(
@@ -653,41 +696,6 @@ void SynapticonSystemInterface::somanetCyclicLoop(
             {
               // Spring adjust joint: proportional control based on analog input 2 potentiometer
               if (joint_idx == SPRING_ADJUST_JOINT_IDX) {
-                // There is a Synapticon bug where AnalogInput2 is not reliable, so read from SDO
-                int32_t spring_pot_position = read_sdo_value(SPRING_ADJUST_JOINT_IDX + 1, 0x2402, 0x00);
-
-                double K_P = 1.0;
-                double K_D = 0.4;
-                double error = spring_pot_position - threadsafe_commands_spring_adjust_[joint_idx];
-                std::chrono::steady_clock::time_point time_now = std::chrono::steady_clock::now();
-                std::chrono::duration<double> time_elapsed = time_now - spring_adjust_state_.time_prev_;
-                double error_dt = 0;
-                if (spring_adjust_state_.error_prev_) {
-                  error_dt = (error - *spring_adjust_state_.error_prev_) / time_elapsed.count();
-                }
-                spring_adjust_state_.error_prev_ = error;
-                spring_adjust_state_.time_prev_ = time_now;
-                double target_torque = - K_P * error - K_D * error_dt;
-                // A ceiling at X% of rated torque
-                // With a floor of Y% torque (below that, the motor doesn't move)
-                if (target_torque > 0)
-                {
-                  // Per mill of rated torque
-                  target_torque = std::clamp(target_torque, 0.0, 2500.0);
-                }
-                else
-                {
-                  target_torque = std::clamp(target_torque, -2500.0, 0.0);
-                }
-                // Don't allow control mode to change until the target position is reached and is stable
-                if (std::abs(error) < 200 && error_dt == 0) {
-                  allow_mode_change_ = true;
-                  target_torque = 0;
-                }
-                else {
-                  allow_mode_change_ = false;
-                }
-
                 // Ensure a valid command
                 if (std::isnan(threadsafe_commands_spring_adjust_[joint_idx])) {
                   out_somanet_1_[joint_idx]->TargetTorque = 0;
@@ -697,7 +705,17 @@ void SynapticonSystemInterface::somanetCyclicLoop(
                   continue;
                 }
 
-                out_somanet_1_[joint_idx]->TargetTorque = target_torque;
+                // Create a local boolean variable since atomics can't be passed by reference
+                bool allow_mode_change = allow_mode_change_.load();
+                double actuator_torque = spring_adjust_torque_pd(
+                  threadsafe_commands_spring_adjust_[joint_idx],
+                  spring_adjust_state_,
+                  allow_mode_change  // Pass the local variable instead of the atomic member
+                );
+                // Update the atomic member with the new value
+                allow_mode_change_.store(allow_mode_change);
+
+                out_somanet_1_[joint_idx]->TargetTorque = actuator_torque;
                 out_somanet_1_[joint_idx]->OpMode = PROFILE_TORQUE_MODE;
                 out_somanet_1_[joint_idx]->TorqueOffset = 0;
                 out_somanet_1_[joint_idx]->Controlword = NORMAL_OPERATION_BRAKES_OFF;
