@@ -61,7 +61,7 @@ double spring_adjust_torque_pd(
   bool& allow_mode_change) {
 
   double K_P = 1.0;
-  double K_D = 0.4;
+  double K_D = 0.5;
   double error = static_cast<double>(current_spring_pot_position) - target_position;
   std::chrono::steady_clock::time_point time_now = std::chrono::steady_clock::now();
   std::chrono::duration<double> time_elapsed = time_now - state.time_prev_;
@@ -78,13 +78,14 @@ double spring_adjust_torque_pd(
   // We overdrive the motor, higher than rated torque, since it's a quick motion
   if (actuator_torque > 0) {
       // Per mill of rated torque
-      actuator_torque = std::clamp(actuator_torque, 0.0, 2500.0);
+      actuator_torque = std::clamp(actuator_torque, 900.0, 2500.0);
   } else {
-      actuator_torque = std::clamp(actuator_torque, -2500.0, 0.0);
+      actuator_torque = std::clamp(actuator_torque, -2500.0, -900.0);
   }
 
   // Don't allow control mode to change until the target position is reached and is stable
-  if (std::abs(error) < 200 && error_dt <= 1) {
+  // This is also a deadband
+  if (std::abs(error) < 500 && error_dt <= 1) {
       allow_mode_change = true;
       // We can safely set the target torque to zero b/c this actuator is not backdrivable
       actuator_torque = 0;
@@ -659,7 +660,6 @@ void SynapticonSystemInterface::somanetCyclicLoop(
             in_normal_op_mode = true;
 
             int32_t spring_pot_position = read_sdo_value(SPRING_ADJUST_JOINT_IDX + 1, 0x2402, 0x00);
-            std::cerr << "Spring pot position: " << spring_pot_position << std::endl;
 
             if (control_level_[joint_idx] == control_level_t::EFFORT) {
               if (!std::isnan(threadsafe_commands_efforts_[joint_idx])) {
@@ -719,7 +719,6 @@ void SynapticonSystemInterface::somanetCyclicLoop(
                 );
                 // Update the atomic member with the new value
                 allow_mode_change_.store(allow_mode_change);
-                std::cerr << "Actuator torque: " << actuator_torque << std::endl;
 
                 out_somanet_1_[joint_idx]->TargetTorque = actuator_torque;
                 out_somanet_1_[joint_idx]->OpMode = PROFILE_TORQUE_MODE;
@@ -744,7 +743,6 @@ void SynapticonSystemInterface::somanetCyclicLoop(
                 );
                 // Update the atomic member with the new value
                 allow_mode_change_.store(allow_mode_change);
-                std::cerr << "Actuator torque: " << actuator_torque << std::endl;
 
                 out_somanet_1_[joint_idx]->TargetTorque = actuator_torque;
                 out_somanet_1_[joint_idx]->OpMode = PROFILE_TORQUE_MODE;
