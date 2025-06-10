@@ -38,6 +38,35 @@
 
 namespace synapticon_ros2_control {
 
+namespace {
+struct SpringAdjustState {
+    std::chrono::steady_clock::time_point time_prev_;
+    std::optional<double> error_prev_;
+};
+
+// /**
+//  * @brief Computes control output for spring adjust joint using a custom PID implementation
+//  *
+//  * @param target_position [in] The desired position in potentiometer ticks.
+//  * @param state [in/out] A SpringAdjustState struct containing:
+//  *                      - time_prev_: Previous timestamp for computing time derivatives
+//  *                      - error_prev_: Previous error value for computing error derivatives
+//  * @param allow_mode_change [in/out] Boolean flag that gets set to true when the target position is reached
+//  *                                  and stable (error < 200 ticks and error_dt <= 1).
+//  *                                  Allows us to leave this control mode.
+//  * @return double The computed actuator torque in per-mill of rated torque. The output is clamped.
+//  *
+//  * @note This function implements a custom PD control loop for the spring adjust joint, which uses
+//  *       a linear potentiometer for position feedback. Unlike other joints in the system that utilize
+//  *       the built-in Synapticon PID control, this joint requires custom control logic to handle
+//  *       the potentiometer-based position sensing.
+//  */
+// double spring_adjust_torque_pd(
+//   double target_position,
+//   SpringAdjustState& state,
+//   bool& allow_mode_change);
+} // namespace
+
 #pragma pack(1)
 // Somanet structs
 typedef struct {
@@ -143,10 +172,10 @@ private:
   std::vector<double> hw_commands_efforts_;
   // hw_commands_quick_stop_ is never actually used, just a placeholder for compilation
   std::vector<double> hw_commands_quick_stop_;
-  // hw_commands_spring_adjust_ is currently potentiometer ticks.
-  // ~64000 ticks corresponds to max spring force.
-  // ~1232 ticks corresponds to the opposite end of travel.
+  // hw_commands_spring_adjust_ is potentiometer ticks.
   std::vector<double> hw_commands_spring_adjust_;
+  // hw_commands_compensate_for_load_ is never actually used, just a placeholder for compilation
+  std::vector<double> hw_commands_compensate_for_removed_load_;
   std::vector<double> hw_states_positions_;
   std::vector<double> hw_states_velocities_;
   std::vector<double> hw_states_accelerations_;
@@ -164,7 +193,10 @@ private:
     VELOCITY = 2,
     POSITION = 3,
     QUICK_STOP = 4,
+    // To manually specify spring adjust position, use this control mode
     SPRING_ADJUST = 5,
+    // If a load was just removed, use this control mode
+    COMPENSATE_FOR_REMOVED_LOAD = 6,
   };
 
   // Active control mode for each actuator
@@ -185,14 +217,9 @@ private:
   std::atomic<int> expected_wkc_;
   std::atomic<bool> needlf_ = false;
   std::atomic<bool> in_normal_op_mode_ = false;
-  struct SpringAdjust
-  {
-    // During spring adjust, don't allow control mode to change until the target position is reached
-    std::atomic<bool> allow_mode_change_ = true;
-    // Spring adjust derivative term variables
-    std::optional<double> error_prev_;
-    std::chrono::steady_clock::time_point time_prev_ = std::chrono::steady_clock::now();
-  } spring_adjust_state_;
+  // During spring adjust, don't allow control mode to change until the target position is reached
+  std::atomic<bool> allow_mode_change_ = true;
+  SpringAdjustState spring_adjust_state_;
 };
 
 } // namespace synapticon_ros2_control

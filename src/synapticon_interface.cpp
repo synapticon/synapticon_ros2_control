@@ -39,10 +39,12 @@ unsigned int NORMAL_OPERATION_BRAKES_OFF = 0b00001111;
 unsigned int NORMAL_OPERATION_BRAKES_ON = 0b00001011;
 constexpr char EXPECTED_SLAVE_NAME[] = "SOMANET";
 constexpr double TORQUE_FRICTION_OFFSET = 20; // per mill
-// TODO: this needs to be adjusted when more Synapticons are included in the chain
 constexpr size_t SPRING_ADJUST_JOINT_IDX = 2;
-constexpr double MAX_SPRING_POTENTIOMETER_TICKS = 63900;
-constexpr double MIN_SPRING_POTENTIOMETER_TICKS = 1332;
+// Minimum spring position: no wrist attached
+constexpr double MIN_SPRING_POTENTIOMETER_TICKS = 5000;
+// Maximum spring position: max payload
+constexpr double MAX_SPRING_POTENTIOMETER_TICKS = 34000;
+constexpr double NO_PAYLOAD_SPRING_POSITION = 5000;
 
 int32_t read_sdo_value(uint16_t slave_idx, uint16_t index, uint8_t subindex) {
     int32_t value_holder;
@@ -81,6 +83,8 @@ hardware_interface::CallbackReturn SynapticonSystemInterface::on_init(
                               std::numeric_limits<double>::quiet_NaN());
   hw_commands_spring_adjust_.resize(num_joints_,
                               std::numeric_limits<double>::quiet_NaN());
+  hw_commands_compensate_for_removed_load_.resize(num_joints_,
+                              std::numeric_limits<double>::quiet_NaN());
   control_level_.resize(num_joints_, control_level_t::UNDEFINED);
   // Atomic deques are difficult to initialize
   threadsafe_commands_efforts_.resize(num_joints_);
@@ -106,10 +110,10 @@ hardware_interface::CallbackReturn SynapticonSystemInterface::on_init(
           joint.command_interfaces[0].name ==
               hardware_interface::HW_IF_VELOCITY ||
           joint.command_interfaces[0].name ==
-              "quick_stop" ||
-          joint.command_interfaces[0].name ==
-              "spring_adjust" ||
-              hardware_interface::HW_IF_EFFORT)) {
+              hardware_interface::HW_IF_EFFORT ||
+          joint.command_interfaces[0].name == "quick_stop" ||
+          joint.command_interfaces[0].name == "spring_adjust" ||
+          joint.command_interfaces[0].name == "compensate_for_removed_load" )) {
       RCLCPP_FATAL(
           getLogger(),
           "Joint '%s' has %s command interface. Expected %s, %s, %s, %s, or %s.",
@@ -252,7 +256,7 @@ hardware_interface::return_type
 SynapticonSystemInterface::prepare_command_mode_switch(
     const std::vector<std::string> &start_interfaces,
     const std::vector<std::string> &stop_interfaces) {
-  if (!spring_adjust_state_.allow_mode_change_)
+  if (!allow_mode_change_)
   {
     RCLCPP_ERROR(getLogger(), "A control mode change is disallowed at this moment.");
     return hardware_interface::return_type::ERROR;
@@ -344,6 +348,7 @@ hardware_interface::CallbackReturn SynapticonSystemInterface::on_activate(
     hw_commands_velocities_[i] = 0;
     hw_commands_efforts_[i] = 0;
     hw_commands_spring_adjust_[i] = std::numeric_limits<double>::quiet_NaN();
+    hw_commands_compensate_for_removed_load_[i] = std::numeric_limits<double>::quiet_NaN();
     threadsafe_commands_efforts_[i] = std::numeric_limits<double>::quiet_NaN();
     threadsafe_commands_velocities_[i] = 0;
     threadsafe_commands_positions_[i] =
@@ -365,6 +370,7 @@ hardware_interface::CallbackReturn SynapticonSystemInterface::on_deactivate(
     hw_commands_velocities_[i] = 0;
     hw_commands_efforts_[i] = 0;
     hw_commands_spring_adjust_[i] = std::numeric_limits<double>::quiet_NaN();
+    hw_commands_compensate_for_removed_load_[i] = std::numeric_limits<double>::quiet_NaN();
     threadsafe_commands_efforts_[i] = std::numeric_limits<double>::quiet_NaN();
     threadsafe_commands_velocities_[i] = 0;
     threadsafe_commands_positions_[i] =
@@ -419,6 +425,7 @@ SynapticonSystemInterface::write(const rclcpp::Time & /*time*/,
       hw_commands_spring_adjust_[i] = std::clamp(hw_commands_spring_adjust_[i], MIN_SPRING_POTENTIOMETER_TICKS, MAX_SPRING_POTENTIOMETER_TICKS);
       threadsafe_commands_spring_adjust_[i] = hw_commands_spring_adjust_[i];
     }
+    // No need to do anything for compensate_for_removed_load, the spring adjust joint moves to a hard-coded position
   }
 
   return hardware_interface::return_type::OK;
@@ -463,6 +470,9 @@ SynapticonSystemInterface::export_command_interfaces() {
     command_interfaces.emplace_back(hardware_interface::CommandInterface(
         info_.joints[i].name, "spring_adjust",
         &hw_commands_spring_adjust_[i]));
+    command_interfaces.emplace_back(hardware_interface::CommandInterface(
+        info_.joints[i].name, "compensate_for_removed_load",
+        &hw_commands_compensate_for_removed_load_[i]));
   }
   return command_interfaces;
 }
@@ -671,11 +681,11 @@ void SynapticonSystemInterface::somanetCyclicLoop(
                 }
                 // Don't allow control mode to change until the target position is reached and is stable
                 if (std::abs(error) < 200 && error_dt == 0) {
-                  spring_adjust_state_.allow_mode_change_ = true;
+                  allow_mode_change_ = true;
                   target_torque = 0;
                 }
                 else {
-                  spring_adjust_state_.allow_mode_change_ = false;
+                  allow_mode_change_ = false;
                 }
 
                 // Ensure a valid command

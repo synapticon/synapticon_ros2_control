@@ -20,6 +20,7 @@
         <command_interface name="effort"/>
         <command_interface name="quick_stop"/>
         <command_interface name="spring_adjust"/>
+        <command_interface name="compensate_for_removed_load"/>
         <state_interface name="position"/>
         <state_interface name="velocity"/>
         <state_interface name="acceleration"/>
@@ -32,6 +33,7 @@
         <command_interface name="effort"/>
         <command_interface name="quick_stop"/>
         <command_interface name="spring_adjust"/>
+        <command_interface name="compensate_for_removed_load"/>
         <state_interface name="position"/>
         <state_interface name="velocity"/>
         <state_interface name="acceleration"/>
@@ -44,6 +46,7 @@
         <command_interface name="effort"/>
         <command_interface name="quick_stop"/>
         <command_interface name="spring_adjust"/>
+        <command_interface name="compensate_for_removed_load"/>
         <state_interface name="position"/>
         <state_interface name="velocity"/>
         <state_interface name="acceleration"/>
@@ -56,6 +59,7 @@
         <command_interface name="effort"/>
         <command_interface name="quick_stop"/>
         <command_interface name="spring_adjust"/>
+        <command_interface name="compensate_for_removed_load"/>
         <state_interface name="position"/>
         <state_interface name="velocity"/>
         <state_interface name="acceleration"/>
