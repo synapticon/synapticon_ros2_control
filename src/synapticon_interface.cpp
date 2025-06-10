@@ -661,12 +661,6 @@ void SynapticonSystemInterface::somanetCyclicLoop(
             int32_t spring_pot_position = read_sdo_value(SPRING_ADJUST_JOINT_IDX + 1, 0x2402, 0x00);
             std::cerr << "Spring pot position: " << spring_pot_position << std::endl;
 
-            // In most control modes, do nothing for the spring adjust joint
-            if (joint_idx == SPRING_ADJUST_JOINT_IDX
-                && control_level_[joint_idx] != control_level_t::SPRING_ADJUST
-                && control_level_[joint_idx] != control_level_t::COMPENSATE_FOR_REMOVED_LOAD) {
-              continue;
-            }
             if (control_level_[joint_idx] == control_level_t::EFFORT) {
               if (!std::isnan(threadsafe_commands_efforts_[joint_idx])) {
                 out_somanet_1_[joint_idx]->TargetTorque =
@@ -725,11 +719,12 @@ void SynapticonSystemInterface::somanetCyclicLoop(
                 );
                 // Update the atomic member with the new value
                 allow_mode_change_.store(allow_mode_change);
+                std::cerr << "Actuator torque: " << actuator_torque << std::endl;
 
-                // out_somanet_1_[joint_idx]->TargetTorque = actuator_torque;
-                // out_somanet_1_[joint_idx]->OpMode = PROFILE_TORQUE_MODE;
-                // out_somanet_1_[joint_idx]->TorqueOffset = 0;
-                // out_somanet_1_[joint_idx]->Controlword = NORMAL_OPERATION_BRAKES_OFF;
+                out_somanet_1_[joint_idx]->TargetTorque = actuator_torque;
+                out_somanet_1_[joint_idx]->OpMode = PROFILE_TORQUE_MODE;
+                out_somanet_1_[joint_idx]->TorqueOffset = 0;
+                out_somanet_1_[joint_idx]->Controlword = NORMAL_OPERATION_BRAKES_OFF;
               }
               else {
                 RCLCPP_ERROR(getLogger(), "Should never get here since the other joints are in QUICK_STOP mode");
@@ -749,11 +744,12 @@ void SynapticonSystemInterface::somanetCyclicLoop(
                 );
                 // Update the atomic member with the new value
                 allow_mode_change_.store(allow_mode_change);
+                std::cerr << "Actuator torque: " << actuator_torque << std::endl;
 
-                // out_somanet_1_[joint_idx]->TargetTorque = actuator_torque;
-                // out_somanet_1_[joint_idx]->OpMode = PROFILE_TORQUE_MODE;
-                // out_somanet_1_[joint_idx]->TorqueOffset = 0;
-                // out_somanet_1_[joint_idx]->Controlword = NORMAL_OPERATION_BRAKES_OFF;
+                out_somanet_1_[joint_idx]->TargetTorque = actuator_torque;
+                out_somanet_1_[joint_idx]->OpMode = PROFILE_TORQUE_MODE;
+                out_somanet_1_[joint_idx]->TorqueOffset = 0;
+                out_somanet_1_[joint_idx]->Controlword = NORMAL_OPERATION_BRAKES_OFF;
               }
               else {
                 RCLCPP_ERROR(getLogger(), "Should never get here since the other joints are in QUICK_STOP mode");
