@@ -141,12 +141,12 @@ public:
    */
   rclcpp::Logger getLogger() const { return *logger_; }
 
-private:
   /**
    * @brief Error checking. Typically runs in a separate thread.
    */
   OSAL_THREAD_FUNC ecatCheck(void *ptr);
 
+private:
   /**
    * @brief Somanet control loop runs in a dedicated thread
    * This steps through several states to get to Operational, if needed
