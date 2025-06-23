@@ -45,9 +45,9 @@ constexpr double MIN_SPRING_POTENTIOMETER_TICKS = 5000;
 // Maximum spring position: max payload
 constexpr double MAX_SPRING_POTENTIOMETER_TICKS = 34000;
 // TODO: update this if the wrist or EE is added
-constexpr double SPRING_POSITION_WITHOUT_PAYLOAD = 5000;
+constexpr double SPRING_POSITION_WITHOUT_PAYLOAD = 18000;
 // TODO: update this if the payload changes. Eventually replace with a fully dynamic algorithm
-constexpr double SPRING_POSITION_MAX_PAYLOAD = 5000;
+constexpr double SPRING_POSITION_MAX_PAYLOAD = 18000;
 
 int32_t read_sdo_value(uint16_t slave_idx, uint16_t index, uint8_t subindex) {
     int32_t value_holder;
@@ -99,7 +99,7 @@ double spring_adjust_torque_pd(
   return actuator_torque;
 }
 
-// This is related to making a member function static
+// This is related to making a member function static for osal_thread_create
 OSAL_THREAD_FUNC ecatCheckWrapper(void *ptr) {
     SynapticonSystemInterface* interface = static_cast<SynapticonSystemInterface*>(ptr);
     return interface->ecatCheck(ptr);

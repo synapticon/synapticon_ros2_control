@@ -24,7 +24,6 @@ def generate_launch_description():
             ("~/robot_description", "/robot_description"),
         ],
         output="both",
-        prefix=['gdb -ex run --args'],
     )
 
     nodes = [
