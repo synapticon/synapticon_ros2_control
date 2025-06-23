@@ -47,7 +47,7 @@ constexpr double MAX_SPRING_POTENTIOMETER_TICKS = 34000;
 // TODO: update this if the wrist or EE is added
 constexpr double SPRING_POSITION_WITHOUT_PAYLOAD = 5000;
 // TODO: update this if the payload changes. Eventually replace with a fully dynamic algorithm
-constexpr double SPRING_POSITION_MAX_PAYLOAD = 34000;
+constexpr double SPRING_POSITION_MAX_PAYLOAD = 5000;
 
 int32_t read_sdo_value(uint16_t slave_idx, uint16_t index, uint8_t subindex) {
     int32_t value_holder;
