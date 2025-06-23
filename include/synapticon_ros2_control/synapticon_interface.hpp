@@ -48,6 +48,7 @@ struct SpringAdjustState {
  * @brief Computes control output for spring adjust joint using a custom PID implementation
  *
  * @param target_position [in] The desired position in potentiometer ticks.
+ * @param current_spring_pot_position [in] The current position in potentiometer ticks.
  * @param state [in/out] A SpringAdjustState struct containing:
  *                      - time_prev_: Previous timestamp for computing time derivatives
  *                      - error_prev_: Previous error value for computing error derivatives
@@ -63,6 +64,7 @@ struct SpringAdjustState {
  */
 double spring_adjust_torque_pd(
   double target_position,
+  int32_t current_spring_pot_position,
   SpringAdjustState& state,
   bool& allow_mode_change);
 } // namespace
