@@ -41,6 +41,8 @@ unsigned int NORMAL_OPERATION_BRAKES_ON = 0b00001011;
 constexpr char EXPECTED_SLAVE_NAME[] = "SOMANET";
 constexpr std::array<double, 7> TORQUE_FRICTION_OFFSET = {20, 20, 0, 20, 10, 10, 10}; // per mill
 constexpr size_t SPRING_ADJUST_JOINT_IDX = 2;
+constexpr size_t WRIST_PITCH_IDX = 5;
+constexpr size_t WRIST_ROLL_IDX = 6;
 // Minimum spring position: no wrist attached
 constexpr double MIN_SPRING_POTENTIOMETER_TICKS = 5000;
 // Maximum spring position: max payload
@@ -163,8 +165,7 @@ hardware_interface::CallbackReturn SynapticonSystemInterface::on_init(
               hardware_interface::HW_IF_POSITION ||
           joint.command_interfaces[0].name ==
               hardware_interface::HW_IF_VELOCITY ||
-          joint.command_interfaces[0].name ==
-              hardware_interface::HW_IF_EFFORT ||
+          joint.command_interfaces[0].name == "hand_guided" ||
           joint.command_interfaces[0].name == "quick_stop" ||
           joint.command_interfaces[0].name == "spring_adjust" ||
           joint.command_interfaces[0].name == "compensate_for_removed_load" ||
@@ -176,7 +177,7 @@ hardware_interface::CallbackReturn SynapticonSystemInterface::on_init(
           joint.command_interfaces[0].name.c_str(),
           hardware_interface::HW_IF_POSITION,
           hardware_interface::HW_IF_VELOCITY,
-          hardware_interface::HW_IF_EFFORT,
+          "hand_guided",
           "quick_stop",
           "spring_adjust",
           "compensate_for_removed_load",
@@ -190,7 +191,7 @@ hardware_interface::CallbackReturn SynapticonSystemInterface::on_init(
               hardware_interface::HW_IF_VELOCITY ||
           joint.state_interfaces[0].name ==
               hardware_interface::HW_IF_ACCELERATION ||
-          joint.state_interfaces[0].name == hardware_interface::HW_IF_EFFORT)) {
+          joint.state_interfaces[0].name == "hand_guided")) {
       RCLCPP_FATAL(
           getLogger(),
           "Joint '%s' has %s state interface. Expected %s, %s, %s, or %s.",
@@ -198,7 +199,7 @@ hardware_interface::CallbackReturn SynapticonSystemInterface::on_init(
           hardware_interface::HW_IF_POSITION,
           hardware_interface::HW_IF_VELOCITY,
           hardware_interface::HW_IF_ACCELERATION,
-          hardware_interface::HW_IF_EFFORT);
+          "hand_guided");
       return hardware_interface::CallbackReturn::ERROR;
     }
   }
@@ -325,8 +326,8 @@ SynapticonSystemInterface::prepare_command_mode_switch(
   for (const std::string& key : start_interfaces) {
     for (std::size_t i = 0; i < info_.joints.size(); i++) {
       if (key ==
-          info_.joints[i].name + "/" + hardware_interface::HW_IF_EFFORT) {
-        new_modes.push_back(control_level_t::EFFORT);
+          info_.joints[i].name + "/" + "hand_guided") {
+        new_modes.push_back(control_level_t::HAND_GUIDED);
       } else if (key == info_.joints[i].name + "/" +
                             hardware_interface::HW_IF_VELOCITY) {
         new_modes.push_back(control_level_t::VELOCITY);
@@ -517,7 +518,7 @@ SynapticonSystemInterface::export_state_interfaces() {
         info_.joints[i].name, hardware_interface::HW_IF_ACCELERATION,
         &hw_states_accelerations_[i]));
     state_interfaces.emplace_back(hardware_interface::StateInterface(
-        info_.joints[i].name, hardware_interface::HW_IF_EFFORT,
+        info_.joints[i].name, "hand_guided",
         &hw_states_efforts_[i]));
   }
   return state_interfaces;
@@ -534,7 +535,7 @@ SynapticonSystemInterface::export_command_interfaces() {
         info_.joints[i].name, hardware_interface::HW_IF_VELOCITY,
         &hw_commands_velocities_[i]));
     command_interfaces.emplace_back(hardware_interface::CommandInterface(
-        info_.joints[i].name, hardware_interface::HW_IF_EFFORT,
+        info_.joints[i].name, "hand_guided",
         &hw_commands_efforts_[i]));
     command_interfaces.emplace_back(hardware_interface::CommandInterface(
         info_.joints[i].name, "quick_stop",
@@ -689,18 +690,29 @@ void SynapticonSystemInterface::somanetCyclicLoop(
 
             int32_t spring_pot_position = read_sdo_value(SPRING_ADJUST_JOINT_IDX + 1, 0x2402, 0x00);
 
-            if (control_level_[joint_idx] == control_level_t::EFFORT) {
-              if (!std::isnan(threadsafe_commands_efforts_[joint_idx])) {
-                out_somanet_[joint_idx]->TargetTorque =
-                    threadsafe_commands_efforts_[joint_idx];
-                out_somanet_[joint_idx]->OpMode = PROFILE_TORQUE_MODE;
-                // small offset to account for friction
-                if (in_somanet_[joint_idx]->VelocityValue > 0) {
-                  out_somanet_[joint_idx]->TorqueOffset = TORQUE_FRICTION_OFFSET.at(joint_idx);
-                } else {
-                  out_somanet_[joint_idx]->TorqueOffset = -TORQUE_FRICTION_OFFSET.at(joint_idx);
-                }
+            if (control_level_[joint_idx] == control_level_t::HAND_GUIDED) {
+              // Wrist pitch and wrist roll velocity are controlled by knobs
+              // The other joints are in a zero-torque mode (plus friction offset)
+              if (joint_idx == WRIST_PITCH_IDX || joint_idx == WRIST_ROLL_IDX) {
+                // TODO: read the knob value
+                out_somanet_[joint_idx]->TargetVelocity = 0;
+                out_somanet_[joint_idx]->OpMode = CYCLIC_VELOCITY_MODE;
+                out_somanet_[joint_idx]->VelocityOffset = 0;
                 out_somanet_[joint_idx]->Controlword = NORMAL_OPERATION_BRAKES_OFF;
+              }
+              else {
+                if (!std::isnan(threadsafe_commands_efforts_[joint_idx])) {
+                  out_somanet_[joint_idx]->TargetTorque =
+                      threadsafe_commands_efforts_[joint_idx];
+                  out_somanet_[joint_idx]->OpMode = PROFILE_TORQUE_MODE;
+                  // small offset to account for friction
+                  if (in_somanet_[joint_idx]->VelocityValue > 0) {
+                    out_somanet_[joint_idx]->TorqueOffset = TORQUE_FRICTION_OFFSET.at(joint_idx);
+                  } else {
+                    out_somanet_[joint_idx]->TorqueOffset = -TORQUE_FRICTION_OFFSET.at(joint_idx);
+                  }
+                  out_somanet_[joint_idx]->Controlword = NORMAL_OPERATION_BRAKES_OFF;
+                }
               }
             } else if (control_level_[joint_idx] == control_level_t::VELOCITY) {
               if (!std::isnan(threadsafe_commands_velocities_[joint_idx])) {

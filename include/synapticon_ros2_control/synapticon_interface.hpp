@@ -192,7 +192,7 @@ private:
   // Enum defining current control level
   enum control_level_t : std::uint8_t {
     UNDEFINED = 0,
-    EFFORT = 1, // aka torque
+    HAND_GUIDED = 1, // aka torque
     VELOCITY = 2,
     POSITION = 3,
     QUICK_STOP = 4,
