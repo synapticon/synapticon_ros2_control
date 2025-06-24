@@ -90,7 +90,7 @@ def generate_launch_description():
         executable="spawner",
         arguments=[
             "--inactive",
-            "forward_torque_controller",
+            "hand_guided_controller",
             "forward_velocity_controller",
             "forward_position_controller",
             "quick_stop_controller",

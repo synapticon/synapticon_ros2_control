@@ -5,12 +5,12 @@ controller_manager:
     joint_state_broadcaster:
       type: joint_state_broadcaster/JointStateBroadcaster
 
-forward_torque_controller:
+hand_guided_controller:
   ros__parameters:
     type: forward_command_controller/ForwardCommandController
     joints:
       - joint1
-    interface_name: effort
+    interface_name: hand_guided
 
 forward_velocity_controller:
   ros__parameters:

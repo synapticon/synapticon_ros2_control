@@ -254,21 +254,21 @@ ros2 service call /controller_manager/switch_controller controller_manager_msgs/
 
 Terminal 4 to turn on the controller :
 ```bash
-ros2 service call /controller_manager/switch_controller controller_manager_msgs/srv/SwitchController "{activate_controllers: ['forward_torque_controller'], deactivate_controllers: [quick_stop_controller]}"	
+ros2 service call /controller_manager/switch_controller controller_manager_msgs/srv/SwitchController "{activate_controllers: ['hand_guided_controller'], deactivate_controllers: [quick_stop_controller]}"	
 ```
 Terminal 5 to create a publisher (value is in per mille of torque):
 
 If you are running the demo with one motor, send a command in per-mille of rated torque. Gearing is not accounted for.
 ```bash
-ros2 topic pub /forward_torque_controller/commands std_msgs/msg/Float64MultiArray data:\ [10]	
+ros2 topic pub /hand_guided_controller/commands std_msgs/msg/Float64MultiArray data:\ [10]	
 ```
 If you are running the demo with two motors:
 ```bash
-ros2 topic pub /forward_torque_controller/commands std_msgs/msg/Float64MultiArray data:\ [10, 10]	
+ros2 topic pub /hand_guided_controller/commands std_msgs/msg/Float64MultiArray data:\ [10, 10]	
 ```
 Stopping it: CTRL+C on Terminal 5 and in Terminal 4:
 ```bash
-ros2 service call /controller_manager/switch_controller controller_manager_msgs/srv/SwitchController "{activate_controllers: ['quick_stop_controller'], deactivate_controllers: ['forward_torque_controller']}"
+ros2 service call /controller_manager/switch_controller controller_manager_msgs/srv/SwitchController "{activate_controllers: ['quick_stop_controller'], deactivate_controllers: ['hand_guided_controller']}"
 ```
 ##### 2.2.1.4. Running Without Sudo (Optional)
 
@@ -456,20 +456,20 @@ ros2 service call /controller_manager/switch_controller controller_manager_msgs/
 
 Terminal 4 to turn on the controller:
 ```bash
-ros2 service call /controller_manager/switch_controller controller_manager_msgs/srv/SwitchController "{activate_controllers: ['forward_torque_controller'], deactivate_controllers: [quick_stop_controller]}"	
+ros2 service call /controller_manager/switch_controller controller_manager_msgs/srv/SwitchController "{activate_controllers: ['hand_guided_controller'], deactivate_controllers: [quick_stop_controller]}"	
 ```
 Terminal 5 to create a publisher:
 If you are running the demo with one motor, send a command in per-mille of rated torque. Gearing is not accounted for.
 ```bash
-ros2 topic pub /forward_torque_controller/commands std_msgs/msg/Float64MultiArray data:\ [10]	
+ros2 topic pub /hand_guided_controller/commands std_msgs/msg/Float64MultiArray data:\ [10]	
 ```
 If you are running the demo with two motors:
 ```bash
-ros2 topic pub /forward_torque_controller/commands std_msgs/msg/Float64MultiArray data:\ [10, 10]	
+ros2 topic pub /hand_guided_controller/commands std_msgs/msg/Float64MultiArray data:\ [10, 10]	
 ```
 Stopping it: CTRL+C on Terminal 5 and in Terminal 4:
 ```bash
-ros2 service call /controller_manager/switch_controller controller_manager_msgs/srv/SwitchController "{activate_controllers: ['quick_stop_controller'], deactivate_controllers: ['forward_torque_controller']}"
+ros2 service call /controller_manager/switch_controller controller_manager_msgs/srv/SwitchController "{activate_controllers: ['quick_stop_controller'], deactivate_controllers: ['hand_guided_controller']}"
 ```
 
 ## 3. Disclaimer
