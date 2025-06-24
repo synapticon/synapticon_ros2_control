@@ -1,11 +1,5 @@
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument, RegisterEventHandler
-from launch.conditions import IfCondition
-from launch.event_handlers import OnProcessExit
 from launch.substitutions import (
-    Command,
-    FindExecutable,
-    LaunchConfiguration,
     PathJoinSubstitution,
 )
 
@@ -18,7 +12,7 @@ def generate_launch_description():
         [
             FindPackageShare("synapticon_ros2_control"),
             "config",
-            "two_dof_controllers.yaml",
+            "seven_dof_controllers.yaml",
         ]
     )
 

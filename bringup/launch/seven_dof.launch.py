@@ -42,7 +42,7 @@ def generate_launch_description():
                 [
                     FindPackageShare("synapticon_ros2_control"),
                     "urdf",
-                    "four_dof_in_world.urdf.xacro",
+                    "seven_dof_in_world.urdf.xacro",
                 ]
             ),
             " eth_device:=",
@@ -56,7 +56,7 @@ def generate_launch_description():
         [
             FindPackageShare("synapticon_ros2_control"),
             "config",
-            "four_dof_controllers.yaml",
+            "seven_dof_controllers.yaml",
         ]
     )
     rviz_config_file = PathJoinSubstitution(
