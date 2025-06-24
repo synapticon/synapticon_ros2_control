@@ -17,6 +17,7 @@
 #include "synapticon_ros2_control/synapticon_interface.hpp"
 
 #include <algorithm>
+#include <array>
 #include <chrono>
 #include <hardware_interface/types/hardware_interface_type_values.hpp>
 #include <inttypes.h>
@@ -38,7 +39,7 @@ unsigned int NORMAL_OPERATION_BRAKES_OFF = 0b00001111;
 // Bit 2 (0-indexed) goes to 0 to turn on Quick Stop
 unsigned int NORMAL_OPERATION_BRAKES_ON = 0b00001011;
 constexpr char EXPECTED_SLAVE_NAME[] = "SOMANET";
-constexpr double TORQUE_FRICTION_OFFSET = 20; // per mill
+constexpr std::array<double, 7> TORQUE_FRICTION_OFFSET = {20, 20, 0, 20, 10, 10, 10}; // per mill
 constexpr size_t SPRING_ADJUST_JOINT_IDX = 2;
 // Minimum spring position: no wrist attached
 constexpr double MIN_SPRING_POTENTIOMETER_TICKS = 5000;
@@ -646,9 +647,9 @@ void SynapticonSystemInterface::somanetCyclicLoop(
             out_somanet_[joint_idx]->OpMode = PROFILE_TORQUE_MODE;
             // small offset to account for friction
             if (in_somanet_[joint_idx]->VelocityValue > 0) {
-              out_somanet_[joint_idx]->TorqueOffset = TORQUE_FRICTION_OFFSET;
+              out_somanet_[joint_idx]->TorqueOffset = TORQUE_FRICTION_OFFSET.at(joint_idx);
             } else {
-              out_somanet_[joint_idx]->TorqueOffset = -TORQUE_FRICTION_OFFSET;
+              out_somanet_[joint_idx]->TorqueOffset = -TORQUE_FRICTION_OFFSET.at(joint_idx);
             }
             out_somanet_[joint_idx]->TargetTorque = 0;
             first_iteration.at(joint_idx) = false;
@@ -695,9 +696,9 @@ void SynapticonSystemInterface::somanetCyclicLoop(
                 out_somanet_[joint_idx]->OpMode = PROFILE_TORQUE_MODE;
                 // small offset to account for friction
                 if (in_somanet_[joint_idx]->VelocityValue > 0) {
-                  out_somanet_[joint_idx]->TorqueOffset = TORQUE_FRICTION_OFFSET;
+                  out_somanet_[joint_idx]->TorqueOffset = TORQUE_FRICTION_OFFSET.at(joint_idx);
                 } else {
-                  out_somanet_[joint_idx]->TorqueOffset = -TORQUE_FRICTION_OFFSET;
+                  out_somanet_[joint_idx]->TorqueOffset = -TORQUE_FRICTION_OFFSET.at(joint_idx);
                 }
                 out_somanet_[joint_idx]->Controlword = NORMAL_OPERATION_BRAKES_OFF;
               }
@@ -807,9 +808,9 @@ void SynapticonSystemInterface::somanetCyclicLoop(
               out_somanet_[joint_idx]->OpMode = PROFILE_TORQUE_MODE;
               // small offset to account for friction
               if (in_somanet_[joint_idx]->VelocityValue > 0) {
-                out_somanet_[joint_idx]->TorqueOffset = TORQUE_FRICTION_OFFSET;
+                out_somanet_[joint_idx]->TorqueOffset = TORQUE_FRICTION_OFFSET.at(joint_idx);
               } else {
-                out_somanet_[joint_idx]->TorqueOffset = -TORQUE_FRICTION_OFFSET;
+                out_somanet_[joint_idx]->TorqueOffset = -TORQUE_FRICTION_OFFSET.at(joint_idx);
               }
               out_somanet_[joint_idx]->Controlword = NORMAL_OPERATION_BRAKES_OFF;
             }
