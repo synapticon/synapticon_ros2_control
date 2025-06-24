@@ -211,9 +211,9 @@ private:
   OSAL_THREAD_HANDLE ecat_error_thread_;
   char io_map_[4096];
 
-  std::vector<InSomanet50t *> in_somanet_1_;
+  std::vector<InSomanet50t *> in_somanet_;
   std::mutex in_somanet_mtx_;
-  std::vector<OutSomanet50t *> out_somanet_1_;
+  std::vector<OutSomanet50t *> out_somanet_;
 
   std::vector<uint32_t> encoder_resolutions_;
 
