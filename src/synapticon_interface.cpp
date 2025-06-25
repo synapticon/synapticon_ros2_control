@@ -57,6 +57,8 @@ constexpr int32_t WRIST_DIAL_MIN = 19000;
 constexpr int32_t WRIST_DIAL_MAX = 46000;
 constexpr double MAX_WRIST_PITCH_VELOCITY = 0.05;
 constexpr double MAX_WRIST_ROLL_VELOCITY = 0.05;
+// TODO: what's with the bullshit multiplier?
+constexpr double MYSTERY_VELOCITY_MULTIPLIER = 10000;
 
 int32_t read_sdo_value(uint16_t slave_idx, uint16_t index, uint8_t subindex) {
     int32_t value_holder;
@@ -704,10 +706,10 @@ void SynapticonSystemInterface::somanetCyclicLoop(
               // The other joints are in a zero-torque mode (plus friction offset)
               if (joint_idx == WRIST_PITCH_IDX) {
                 int32_t wrist_pitch_dial_value = read_sdo_value(WRIST_ROLL_IDX + 1, 0x2403, 0x00);
+                wrist_pitch_dial_value = std::clamp(wrist_pitch_dial_value, WRIST_DIAL_MIN, WRIST_DIAL_MAX);
                 // Scale the value from [-1,1]
                 double normalized_dial = (wrist_pitch_dial_value - ANALOG_INPUT_MIDPOINT) / (0.5 * (WRIST_DIAL_MAX - WRIST_DIAL_MIN));
-                // TODO: what's with the bullshit multiplier?
-                double velocity = normalized_dial * 10000 * mechanical_reductions_.at(joint_idx) * MAX_WRIST_PITCH_VELOCITY;
+                double velocity = normalized_dial * MYSTERY_VELOCITY_MULTIPLIER * mechanical_reductions_.at(joint_idx) * MAX_WRIST_PITCH_VELOCITY;
 
                 out_somanet_[joint_idx]->TargetVelocity = velocity;
                 out_somanet_[joint_idx]->OpMode = CYCLIC_VELOCITY_MODE;
@@ -715,10 +717,10 @@ void SynapticonSystemInterface::somanetCyclicLoop(
                 out_somanet_[joint_idx]->Controlword = NORMAL_OPERATION_BRAKES_OFF;
               } else if (joint_idx == WRIST_ROLL_IDX) {
                 int32_t wrist_roll_dial_value = read_sdo_value(WRIST_ROLL_IDX + 1, 0x2404, 0x00);
+                wrist_roll_dial_value = std::clamp(wrist_roll_dial_value, WRIST_DIAL_MIN, WRIST_DIAL_MAX);
                 // Scale the value from [-1,1]
                 double normalized_dial = (wrist_roll_dial_value - ANALOG_INPUT_MIDPOINT) / (0.5 * (WRIST_DIAL_MAX - WRIST_DIAL_MIN));
-                // TODO: what's with the bullshit multiplier?
-                double velocity = normalized_dial * 40000 * mechanical_reductions_.at(joint_idx) * MAX_WRIST_ROLL_VELOCITY;
+                double velocity = normalized_dial * MYSTERY_VELOCITY_MULTIPLIER * mechanical_reductions_.at(joint_idx) * MAX_WRIST_ROLL_VELOCITY;
 
                 out_somanet_[joint_idx]->TargetVelocity = velocity;
                 out_somanet_[joint_idx]->OpMode = CYCLIC_VELOCITY_MODE;
