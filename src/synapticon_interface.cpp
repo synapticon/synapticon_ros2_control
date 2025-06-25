@@ -125,7 +125,6 @@ hardware_interface::CallbackReturn SynapticonSystemInterface::on_init(
 
   num_joints_ = info_.joints.size();
 
-  mechanical_reductions_.resize(num_joints_, 1.0);
   hw_states_positions_.resize(num_joints_,
                               std::numeric_limits<double>::quiet_NaN());
   hw_states_velocities_.resize(num_joints_,
@@ -149,6 +148,10 @@ hardware_interface::CallbackReturn SynapticonSystemInterface::on_init(
                               std::numeric_limits<double>::quiet_NaN());
   control_level_.resize(num_joints_, control_level_t::UNDEFINED);
   // Atomic deques are difficult to initialize
+  mechanical_reductions_.resize(num_joints_);
+  for (auto &reduction : mechanical_reductions_) {
+    reduction.store(1.0);
+  }
   threadsafe_commands_efforts_.resize(num_joints_);
   for (auto &effort : threadsafe_commands_efforts_) {
     effort.store(std::numeric_limits<double>::quiet_NaN());
@@ -704,7 +707,6 @@ void SynapticonSystemInterface::somanetCyclicLoop(
                 // Scale the value from [-1,1]
                 double normalized_dial = (wrist_pitch_dial_value - ANALOG_INPUT_MIDPOINT) / (0.5 * (WRIST_DIAL_MAX - WRIST_DIAL_MIN));
                 // TODO: what's with the bullshit multiplier?
-                // TODO: is mechanical reductions_.at(i) threadsafe?
                 double velocity = normalized_dial * 10000 * mechanical_reductions_.at(joint_idx) * MAX_WRIST_PITCH_VELOCITY;
 
                 out_somanet_[joint_idx]->TargetVelocity = velocity;
@@ -716,8 +718,7 @@ void SynapticonSystemInterface::somanetCyclicLoop(
                 // Scale the value from [-1,1]
                 double normalized_dial = (wrist_roll_dial_value - ANALOG_INPUT_MIDPOINT) / (0.5 * (WRIST_DIAL_MAX - WRIST_DIAL_MIN));
                 // TODO: what's with the bullshit multiplier?
-                // TODO: is mechanical reductions_.at(i) threadsafe?
-                double velocity = normalized_dial * 10000 * mechanical_reductions_.at(joint_idx) * MAX_WRIST_ROLL_VELOCITY;
+                double velocity = normalized_dial * 40000 * mechanical_reductions_.at(joint_idx) * MAX_WRIST_ROLL_VELOCITY;
 
                 out_somanet_[joint_idx]->TargetVelocity = velocity;
                 out_somanet_[joint_idx]->OpMode = CYCLIC_VELOCITY_MODE;

@@ -166,7 +166,7 @@ private:
 
   std::shared_ptr<rclcpp::Logger> logger_;
 
-  std::vector<double> mechanical_reductions_;
+  std::deque<std::atomic<double>> mechanical_reductions_;
 
   // Store the commands for the simulated robot
   std::vector<double> hw_commands_positions_;
