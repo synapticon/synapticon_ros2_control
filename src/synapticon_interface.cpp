@@ -40,7 +40,7 @@ unsigned int NORMAL_OPERATION_BRAKES_OFF = 0b00001111;
 unsigned int NORMAL_OPERATION_BRAKES_ON = 0b00001011;
 constexpr char EXPECTED_SLAVE_NAME[] = "SOMANET";
 constexpr std::array<double, 7> TORQUE_FRICTION_OFFSET = {20, 20, 0, 20, 10, 10, 10}; // per mill
-constexpr size_t SPRING_ADJUST_JOINT_IDX = 2;
+constexpr size_t SPRING_ADJUST_IDX = 2;
 constexpr size_t WRIST_PITCH_IDX = 5;
 constexpr size_t WRIST_ROLL_IDX = 6;
 // Minimum spring position: no wrist attached
@@ -51,6 +51,9 @@ constexpr double MAX_SPRING_POTENTIOMETER_TICKS = 34000;
 constexpr double SPRING_POSITION_WITHOUT_PAYLOAD = 18000;
 // TODO: update this if the payload changes. Eventually replace with a fully dynamic algorithm
 constexpr double SPRING_POSITION_MAX_PAYLOAD = 18000;
+// Expected midpoint of the 16-bit analog inputs
+constexpr int32_t ANALOG_INPUT_MIDPOINT = 32768;
+constexpr double MAX_WRIST_PITCH_VELOCITY = 0.05;
 
 int32_t read_sdo_value(uint16_t slave_idx, uint16_t index, uint8_t subindex) {
     int32_t value_holder;
@@ -338,7 +341,7 @@ SynapticonSystemInterface::prepare_command_mode_switch(
         new_modes.push_back(control_level_t::QUICK_STOP);
       } else if (key == info_.joints[i].name + "/spring_adjust") {
         // Spring adjust puts all joints in QUICK_STOP mode except the spring adjust joint
-        if (i == SPRING_ADJUST_JOINT_IDX) {
+        if (i == SPRING_ADJUST_IDX) {
           new_modes.push_back(control_level_t::SPRING_ADJUST);
           spring_adjust_state_.time_prev_ = std::chrono::steady_clock::now();
           spring_adjust_state_.error_prev_ = std::nullopt;
@@ -347,14 +350,14 @@ SynapticonSystemInterface::prepare_command_mode_switch(
         }
       } else if (key == info_.joints[i].name + "/compensate_for_removed_load") {
         // compensate_for_removed_load puts all joints in QUICK_STOP mode except the spring adjust joint
-        if (i == SPRING_ADJUST_JOINT_IDX) {
+        if (i == SPRING_ADJUST_IDX) {
           new_modes.push_back(control_level_t::COMPENSATE_FOR_REMOVED_LOAD);
         } else {
           new_modes.push_back(control_level_t::QUICK_STOP);
         }
       } else if (key == info_.joints[i].name + "/compensate_for_added_load") {
         // compensate_for_added_load puts all joints in QUICK_STOP mode except the spring adjust joint
-        if (i == SPRING_ADJUST_JOINT_IDX) {
+        if (i == SPRING_ADJUST_IDX) {
           new_modes.push_back(control_level_t::COMPENSATE_FOR_ADDED_LOAD);
         } else {
           new_modes.push_back(control_level_t::QUICK_STOP);
@@ -688,19 +691,39 @@ void SynapticonSystemInterface::somanetCyclicLoop(
                     0b0000000001101111) == 0b0000000000100111) {
             in_normal_op_mode = true;
 
-            int32_t spring_pot_position = read_sdo_value(SPRING_ADJUST_JOINT_IDX + 1, 0x2402, 0x00);
+            int32_t spring_pot_position = read_sdo_value(SPRING_ADJUST_IDX + 1, 0x2402, 0x00);
 
             if (control_level_[joint_idx] == control_level_t::HAND_GUIDED) {
-              // Wrist pitch and wrist roll velocity are controlled by knobs
+              // Wrist pitch and wrist roll velocity are controlled by dials
               // The other joints are in a zero-torque mode (plus friction offset)
-              if (joint_idx == WRIST_PITCH_IDX || joint_idx == WRIST_ROLL_IDX) {
-                // TODO: read the knob value
+              if (joint_idx == WRIST_PITCH_IDX) {
+                // TODO: address may be wrong
+                // 2401-4: analog input 1-4
+                int32_t wrist_pitch_dial_value = read_sdo_value(WRIST_ROLL_IDX + 1, 0x2402, 0x00);
+                // Scale the value from [-1,1]
+                int32_t normalized_dial = (wrist_pitch_dial_value - ANALOG_INPUT_MIDPOINT) / ANALOG_INPUT_MIDPOINT;
+                double velocity = normalized_dial * MAX_WRIST_PITCH_VELOCITY;
+                std::cout << "Wrist pitch velocity: " << velocity << std::endl;
+
+                // TODO: scale the dial value to a velocity
                 out_somanet_[joint_idx]->TargetVelocity = 0;
                 out_somanet_[joint_idx]->OpMode = CYCLIC_VELOCITY_MODE;
                 out_somanet_[joint_idx]->VelocityOffset = 0;
                 out_somanet_[joint_idx]->Controlword = NORMAL_OPERATION_BRAKES_OFF;
-              }
-              else {
+              } else if (joint_idx == WRIST_ROLL_IDX) {
+                // TODO: address may be wrong
+                int32_t wrist_roll_dial_value = read_sdo_value(WRIST_ROLL_IDX + 1, 0x2402, 0x00);
+                // Scale the value from [-1,1]
+                int32_t normalized_dial = (wrist_roll_dial_value - ANALOG_INPUT_MIDPOINT) / ANALOG_INPUT_MIDPOINT;
+                double velocity = normalized_dial * MAX_WRIST_PITCH_VELOCITY;
+                std::cout << "Wrist roll velocity: " << velocity << std::endl;
+
+                // TODO: scale the dial value to a velocity
+                out_somanet_[joint_idx]->TargetVelocity = 0;
+                out_somanet_[joint_idx]->OpMode = CYCLIC_VELOCITY_MODE;
+                out_somanet_[joint_idx]->VelocityOffset = 0;
+                out_somanet_[joint_idx]->Controlword = NORMAL_OPERATION_BRAKES_OFF;
+              } else {
                 if (!std::isnan(threadsafe_commands_efforts_[joint_idx])) {
                   out_somanet_[joint_idx]->TargetTorque =
                       threadsafe_commands_efforts_[joint_idx];
@@ -738,7 +761,7 @@ void SynapticonSystemInterface::somanetCyclicLoop(
             }  else if (control_level_[joint_idx] == control_level_t::SPRING_ADJUST)
             {
               // Spring adjust joint: proportional control based on analog input 2 potentiometer
-              if (joint_idx == SPRING_ADJUST_JOINT_IDX) {
+              if (joint_idx == SPRING_ADJUST_IDX) {
                 // Ensure a valid command
                 if (std::isnan(threadsafe_commands_spring_adjust_[joint_idx])) {
                   out_somanet_[joint_idx]->TargetTorque = 0;
@@ -771,7 +794,7 @@ void SynapticonSystemInterface::somanetCyclicLoop(
             } else if (control_level_[joint_idx] == control_level_t::COMPENSATE_FOR_REMOVED_LOAD)
             {
               // Spring adjust joint: proportional control based on analog input 2 potentiometer
-              if (joint_idx == SPRING_ADJUST_JOINT_IDX) {
+              if (joint_idx == SPRING_ADJUST_IDX) {
 
                 // Create a local boolean variable since atomics can't be passed by reference
                 bool allow_mode_change = allow_mode_change_.load();
@@ -795,7 +818,7 @@ void SynapticonSystemInterface::somanetCyclicLoop(
             } else if (control_level_[joint_idx] == control_level_t::COMPENSATE_FOR_ADDED_LOAD)
             {
               // Spring adjust joint: proportional control based on analog input 2 potentiometer
-              if (joint_idx == SPRING_ADJUST_JOINT_IDX) {
+              if (joint_idx == SPRING_ADJUST_IDX) {
 
                 // Create a local boolean variable since atomics can't be passed by reference
                 bool allow_mode_change = allow_mode_change_.load();

@@ -38,12 +38,12 @@
 
 namespace synapticon_ros2_control {
 
-namespace {
 struct SpringAdjustState {
     std::chrono::steady_clock::time_point time_prev_;
     std::optional<double> error_prev_;
 };
 
+namespace {
 /**
  * @brief Computes control output for spring adjust joint using a custom PID implementation
  *
