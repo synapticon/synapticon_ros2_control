@@ -53,7 +53,10 @@ constexpr double SPRING_POSITION_WITHOUT_PAYLOAD = 18000;
 constexpr double SPRING_POSITION_MAX_PAYLOAD = 18000;
 // Expected midpoint of the 16-bit analog inputs
 constexpr int32_t ANALOG_INPUT_MIDPOINT = 32768;
+constexpr int32_t WRIST_DIAL_MIN = 19000;
+constexpr int32_t WRIST_DIAL_MAX = 46000;
 constexpr double MAX_WRIST_PITCH_VELOCITY = 0.05;
+constexpr double MAX_WRIST_ROLL_VELOCITY = 0.05;
 
 int32_t read_sdo_value(uint16_t slave_idx, uint16_t index, uint8_t subindex) {
     int32_t value_holder;
@@ -697,29 +700,26 @@ void SynapticonSystemInterface::somanetCyclicLoop(
               // Wrist pitch and wrist roll velocity are controlled by dials
               // The other joints are in a zero-torque mode (plus friction offset)
               if (joint_idx == WRIST_PITCH_IDX) {
-                // TODO: address may be wrong
-                // 2401-4: analog input 1-4
-                int32_t wrist_pitch_dial_value = read_sdo_value(WRIST_ROLL_IDX + 1, 0x2402, 0x00);
+                int32_t wrist_pitch_dial_value = read_sdo_value(WRIST_ROLL_IDX + 1, 0x2403, 0x00);
+                // std::cout << "Wrist pitch dial: " << wrist_pitch_dial_value << std::endl;
                 // Scale the value from [-1,1]
-                int32_t normalized_dial = (wrist_pitch_dial_value - ANALOG_INPUT_MIDPOINT) / ANALOG_INPUT_MIDPOINT;
-                double velocity = normalized_dial * MAX_WRIST_PITCH_VELOCITY;
-                std::cout << "Wrist pitch velocity: " << velocity << std::endl;
+                double normalized_dial = (wrist_pitch_dial_value - ANALOG_INPUT_MIDPOINT) / (0.5 * (WRIST_DIAL_MAX - WRIST_DIAL_MIN));
+                double velocity = normalized_dial * mechanical_reductions_.at(joint_idx) * MAX_WRIST_PITCH_VELOCITY;
+                // std::cout << "Wrist pitch velocity: " << velocity << std::endl;
 
-                // TODO: scale the dial value to a velocity
                 out_somanet_[joint_idx]->TargetVelocity = 0;
                 out_somanet_[joint_idx]->OpMode = CYCLIC_VELOCITY_MODE;
                 out_somanet_[joint_idx]->VelocityOffset = 0;
                 out_somanet_[joint_idx]->Controlword = NORMAL_OPERATION_BRAKES_OFF;
               } else if (joint_idx == WRIST_ROLL_IDX) {
-                // TODO: address may be wrong
-                int32_t wrist_roll_dial_value = read_sdo_value(WRIST_ROLL_IDX + 1, 0x2402, 0x00);
+                int32_t wrist_roll_dial_value = read_sdo_value(WRIST_ROLL_IDX + 1, 0x2404, 0x00);
                 // Scale the value from [-1,1]
-                int32_t normalized_dial = (wrist_roll_dial_value - ANALOG_INPUT_MIDPOINT) / ANALOG_INPUT_MIDPOINT;
-                double velocity = normalized_dial * MAX_WRIST_PITCH_VELOCITY;
-                std::cout << "Wrist roll velocity: " << velocity << std::endl;
+                double normalized_dial = (wrist_roll_dial_value - ANALOG_INPUT_MIDPOINT) / (0.5 * (WRIST_DIAL_MAX - WRIST_DIAL_MIN));
+                // TODO: what's with the bullshit multiplier?
+                double velocity = normalized_dial * 40000 * mechanical_reductions_.at(joint_idx) * MAX_WRIST_ROLL_VELOCITY;
 
-                // TODO: scale the dial value to a velocity
-                out_somanet_[joint_idx]->TargetVelocity = 0;
+                // TODO: is mechanical reductions_.at(i) threadsafe?
+                out_somanet_[joint_idx]->TargetVelocity = velocity;
                 out_somanet_[joint_idx]->OpMode = CYCLIC_VELOCITY_MODE;
                 out_somanet_[joint_idx]->VelocityOffset = 0;
                 out_somanet_[joint_idx]->Controlword = NORMAL_OPERATION_BRAKES_OFF;
