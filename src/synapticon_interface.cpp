@@ -701,13 +701,13 @@ void SynapticonSystemInterface::somanetCyclicLoop(
               // The other joints are in a zero-torque mode (plus friction offset)
               if (joint_idx == WRIST_PITCH_IDX) {
                 int32_t wrist_pitch_dial_value = read_sdo_value(WRIST_ROLL_IDX + 1, 0x2403, 0x00);
-                // std::cout << "Wrist pitch dial: " << wrist_pitch_dial_value << std::endl;
                 // Scale the value from [-1,1]
                 double normalized_dial = (wrist_pitch_dial_value - ANALOG_INPUT_MIDPOINT) / (0.5 * (WRIST_DIAL_MAX - WRIST_DIAL_MIN));
-                double velocity = normalized_dial * mechanical_reductions_.at(joint_idx) * MAX_WRIST_PITCH_VELOCITY;
-                // std::cout << "Wrist pitch velocity: " << velocity << std::endl;
+                // TODO: what's with the bullshit multiplier?
+                // TODO: is mechanical reductions_.at(i) threadsafe?
+                double velocity = normalized_dial * 10000 * mechanical_reductions_.at(joint_idx) * MAX_WRIST_PITCH_VELOCITY;
 
-                out_somanet_[joint_idx]->TargetVelocity = 0;
+                out_somanet_[joint_idx]->TargetVelocity = velocity;
                 out_somanet_[joint_idx]->OpMode = CYCLIC_VELOCITY_MODE;
                 out_somanet_[joint_idx]->VelocityOffset = 0;
                 out_somanet_[joint_idx]->Controlword = NORMAL_OPERATION_BRAKES_OFF;
@@ -716,9 +716,9 @@ void SynapticonSystemInterface::somanetCyclicLoop(
                 // Scale the value from [-1,1]
                 double normalized_dial = (wrist_roll_dial_value - ANALOG_INPUT_MIDPOINT) / (0.5 * (WRIST_DIAL_MAX - WRIST_DIAL_MIN));
                 // TODO: what's with the bullshit multiplier?
-                double velocity = normalized_dial * 40000 * mechanical_reductions_.at(joint_idx) * MAX_WRIST_ROLL_VELOCITY;
-
                 // TODO: is mechanical reductions_.at(i) threadsafe?
+                double velocity = normalized_dial * 10000 * mechanical_reductions_.at(joint_idx) * MAX_WRIST_ROLL_VELOCITY;
+
                 out_somanet_[joint_idx]->TargetVelocity = velocity;
                 out_somanet_[joint_idx]->OpMode = CYCLIC_VELOCITY_MODE;
                 out_somanet_[joint_idx]->VelocityOffset = 0;
