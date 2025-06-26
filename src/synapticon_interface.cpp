@@ -38,6 +38,12 @@ unsigned int NORMAL_OPERATION_BRAKES_OFF = 0b00001111;
 // Bit 2 (0-indexed) goes to 0 to turn on Quick Stop
 unsigned int NORMAL_OPERATION_BRAKES_ON = 0b00001011;
 constexpr char EXPECTED_SLAVE_NAME[] = "SOMANET";
+
+// This is related to making a member function appear static
+OSAL_THREAD_FUNC ecatCheckWrapper(void *ptr) {
+    SynapticonSystemInterface* interface = static_cast<SynapticonSystemInterface*>(ptr);
+    return interface->ecatCheck(ptr);
+}
 } // namespace
 
 hardware_interface::CallbackReturn SynapticonSystemInterface::on_init(
@@ -122,8 +128,8 @@ hardware_interface::CallbackReturn SynapticonSystemInterface::on_init(
 
   // A thread to handle ethercat errors
   osal_thread_create(&ecat_error_thread_, 128000,
-                     (void *)&SynapticonSystemInterface::ecatCheck,
-                     (void *)&ctime);
+                     (void*)&ecatCheckWrapper,
+                     this);
 
   // Ethercat initialization
   // Define the interface name (e.g. eth0 or eno0) in the ros2_control.xacro
