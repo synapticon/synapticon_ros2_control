@@ -46,11 +46,11 @@ constexpr size_t WRIST_ROLL_IDX = 6;
 // Minimum spring position: no wrist attached
 constexpr double MIN_SPRING_POTENTIOMETER_TICKS = 5000;
 // Maximum spring position: max payload
-constexpr double MAX_SPRING_POTENTIOMETER_TICKS = 44000;
+constexpr double MAX_SPRING_POTENTIOMETER_TICKS = 44500;
 // TODO: update this if the wrist or EE is added
 constexpr double SPRING_POSITION_WITHOUT_PAYLOAD = 31000;
 // TODO: update this if the payload changes. Eventually replace with a fully dynamic algorithm
-constexpr double SPRING_POSITION_MAX_PAYLOAD = 44000;
+constexpr double SPRING_POSITION_MAX_PAYLOAD = 44500;
 // Expected midpoint of the 16-bit analog inputs
 constexpr int32_t ANALOG_INPUT_MIDPOINT = 32768;
 constexpr int32_t WRIST_DIAL_MIN = 19000;
@@ -709,7 +709,7 @@ void SynapticonSystemInterface::somanetCyclicLoop(
                 wrist_pitch_dial_value = std::clamp(wrist_pitch_dial_value, WRIST_DIAL_MIN, WRIST_DIAL_MAX);
                 // Scale the value from [-1,1]
                 double normalized_dial = (wrist_pitch_dial_value - ANALOG_INPUT_MIDPOINT) / (0.5 * (WRIST_DIAL_MAX - WRIST_DIAL_MIN));
-                double velocity = normalized_dial * MYSTERY_VELOCITY_MULTIPLIER * mechanical_reductions_.at(joint_idx) * MAX_WRIST_PITCH_VELOCITY;
+                double velocity = normalized_dial * 1.2 * MYSTERY_VELOCITY_MULTIPLIER * mechanical_reductions_.at(joint_idx) * MAX_WRIST_PITCH_VELOCITY;
 
                 out_somanet_[joint_idx]->TargetVelocity = velocity;
                 out_somanet_[joint_idx]->OpMode = CYCLIC_VELOCITY_MODE;
@@ -720,7 +720,7 @@ void SynapticonSystemInterface::somanetCyclicLoop(
                 wrist_roll_dial_value = std::clamp(wrist_roll_dial_value, WRIST_DIAL_MIN, WRIST_DIAL_MAX);
                 // Scale the value from [-1,1]
                 double normalized_dial = (wrist_roll_dial_value - ANALOG_INPUT_MIDPOINT) / (0.5 * (WRIST_DIAL_MAX - WRIST_DIAL_MIN));
-                double velocity = normalized_dial * MYSTERY_VELOCITY_MULTIPLIER * mechanical_reductions_.at(joint_idx) * MAX_WRIST_ROLL_VELOCITY;
+                double velocity = normalized_dial * 4.0 * MYSTERY_VELOCITY_MULTIPLIER * mechanical_reductions_.at(joint_idx) * MAX_WRIST_ROLL_VELOCITY;
 
                 out_somanet_[joint_idx]->TargetVelocity = velocity;
                 out_somanet_[joint_idx]->OpMode = CYCLIC_VELOCITY_MODE;
