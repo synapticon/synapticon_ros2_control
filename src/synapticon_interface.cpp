@@ -46,11 +46,11 @@ constexpr size_t WRIST_ROLL_IDX = 6;
 // Minimum spring position: no wrist attached
 constexpr double MIN_SPRING_POTENTIOMETER_TICKS = 5000;
 // Maximum spring position: max payload
-constexpr double MAX_SPRING_POTENTIOMETER_TICKS = 34000;
+constexpr double MAX_SPRING_POTENTIOMETER_TICKS = 44000;
 // TODO: update this if the wrist or EE is added
 constexpr double SPRING_POSITION_WITHOUT_PAYLOAD = 31000;
 // TODO: update this if the payload changes. Eventually replace with a fully dynamic algorithm
-constexpr double SPRING_POSITION_MAX_PAYLOAD = 31000;
+constexpr double SPRING_POSITION_MAX_PAYLOAD = 44000;
 // Expected midpoint of the 16-bit analog inputs
 constexpr int32_t ANALOG_INPUT_MIDPOINT = 32768;
 constexpr int32_t WRIST_DIAL_MIN = 19000;
