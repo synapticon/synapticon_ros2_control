@@ -39,7 +39,7 @@ unsigned int NORMAL_OPERATION_BRAKES_OFF = 0b00001111;
 // Bit 2 (0-indexed) goes to 0 to turn on Quick Stop
 unsigned int NORMAL_OPERATION_BRAKES_ON = 0b00001011;
 constexpr char EXPECTED_SLAVE_NAME[] = "SOMANET";
-constexpr std::array<double, 7> TORQUE_FRICTION_OFFSET = {20, 20, 0, 20, 10, 10, 10}; // per mill
+constexpr std::array<double, 7> TORQUE_FRICTION_OFFSET = {0, 0, 0, 0, 0, 0, 0}; // per mill
 constexpr size_t SPRING_ADJUST_IDX = 2;
 constexpr size_t WRIST_PITCH_IDX = 5;
 constexpr size_t WRIST_ROLL_IDX = 6;
