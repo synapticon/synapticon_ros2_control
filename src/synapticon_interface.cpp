@@ -39,7 +39,7 @@ unsigned int NORMAL_OPERATION_BRAKES_OFF = 0b00001111;
 // Bit 2 (0-indexed) goes to 0 to turn on Quick Stop
 unsigned int NORMAL_OPERATION_BRAKES_ON = 0b00001011;
 constexpr char EXPECTED_SLAVE_NAME[] = "SOMANET";
-constexpr std::array<double, 7> TORQUE_FRICTION_OFFSET = {0, 0, 0, 0, 0, 0, 0}; // per mill
+constexpr std::array<double, 7> TORQUE_FRICTION_OFFSET = {0, 0, 0, 0, 10, 0, 0}; // per mill
 constexpr size_t SPRING_ADJUST_IDX = 2;
 constexpr size_t WRIST_PITCH_IDX = 5;
 constexpr size_t WRIST_ROLL_IDX = 6;
@@ -51,8 +51,8 @@ constexpr double SPRING_POSITION_MAX_PAYLOAD = 45000;
 constexpr int32_t ANALOG_INPUT_MIDPOINT = 32768;
 constexpr int32_t WRIST_DIAL_MIN = 19000;
 constexpr int32_t WRIST_DIAL_MAX = 46000;
-constexpr double MAX_WRIST_PITCH_VELOCITY = 0.05;
-constexpr double MAX_WRIST_ROLL_VELOCITY = 0.05;
+constexpr double MAX_WRIST_PITCH_VELOCITY = 0.3;
+constexpr double MAX_WRIST_ROLL_VELOCITY = 0.15;
 // TODO: what's with the bullshit multiplier?
 constexpr double MYSTERY_VELOCITY_MULTIPLIER = 10000;
 
@@ -709,7 +709,7 @@ void SynapticonSystemInterface::somanetCyclicLoop(
                 wrist_pitch_dial_value = std::clamp(wrist_pitch_dial_value, WRIST_DIAL_MIN, WRIST_DIAL_MAX);
                 // Scale the value from [-1,1]
                 double normalized_dial = (wrist_pitch_dial_value - ANALOG_INPUT_MIDPOINT) / (0.5 * (WRIST_DIAL_MAX - WRIST_DIAL_MIN));
-                double velocity = normalized_dial * 1.2 * MYSTERY_VELOCITY_MULTIPLIER * mechanical_reductions_.at(joint_idx) * MAX_WRIST_PITCH_VELOCITY;
+                double velocity = normalized_dial * MYSTERY_VELOCITY_MULTIPLIER * mechanical_reductions_.at(joint_idx) * MAX_WRIST_PITCH_VELOCITY;
 
                 out_somanet_[joint_idx]->TargetVelocity = velocity;
                 out_somanet_[joint_idx]->OpMode = CYCLIC_VELOCITY_MODE;
@@ -720,7 +720,7 @@ void SynapticonSystemInterface::somanetCyclicLoop(
                 wrist_roll_dial_value = std::clamp(wrist_roll_dial_value, WRIST_DIAL_MIN, WRIST_DIAL_MAX);
                 // Scale the value from [-1,1]
                 double normalized_dial = (wrist_roll_dial_value - ANALOG_INPUT_MIDPOINT) / (0.5 * (WRIST_DIAL_MAX - WRIST_DIAL_MIN));
-                double velocity = normalized_dial * 4.0 * MYSTERY_VELOCITY_MULTIPLIER * mechanical_reductions_.at(joint_idx) * MAX_WRIST_ROLL_VELOCITY;
+                double velocity = normalized_dial * MYSTERY_VELOCITY_MULTIPLIER * mechanical_reductions_.at(joint_idx) * MAX_WRIST_ROLL_VELOCITY;
 
                 out_somanet_[joint_idx]->TargetVelocity = velocity;
                 out_somanet_[joint_idx]->OpMode = CYCLIC_VELOCITY_MODE;
