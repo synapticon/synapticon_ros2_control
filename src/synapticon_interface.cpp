@@ -666,8 +666,12 @@ void SynapticonSystemInterface::somanetCyclicLoop(
           // Fault reset: Fault -> Switch on disabled, if the drive is in fault
           // state
           if ((in_somanet_[joint_idx]->Statusword & 0b0000000001001111) ==
-              0b0000000000001000)
+              0b0000000000001000) {
             out_somanet_[joint_idx]->Controlword = 0b10000000;
+            RCLCPP_ERROR_STREAM(getLogger(), "Ethercat state fault detected on joint " << joint_idx
+                              << ", TorqueDemand: " << in_somanet_[joint_idx]->TorqueDemand
+                              << ", VelocityDemandValue: " << in_somanet_[joint_idx]->VelocityDemandValue);
+          }
 
           // Shutdown: Switch on disabled -> Ready to switch on
           else if ((in_somanet_[joint_idx]->Statusword &
@@ -849,6 +853,14 @@ void SynapticonSystemInterface::somanetCyclicLoop(
               out_somanet_[joint_idx]->Controlword = NORMAL_OPERATION_BRAKES_OFF;
             }
           } // normal operation
+
+          // Error logging
+          // See https://doc.synapticon.com/node/system_integration/status_and_controlword.html?Highlight=status%20word
+          if (in_somanet_[joint_idx]->Statusword & (1 << 11)) {
+            RCLCPP_WARN_STREAM(getLogger(), "Internal limit is active for joint " << joint_idx
+                              << ", TorqueDemand: " << in_somanet_[joint_idx]->TorqueDemand
+                              << ", VelocityDemandValue: " << in_somanet_[joint_idx]->VelocityDemandValue);
+          }
         }
 
         // printf("Processdata cycle %4d , WKC %d ,", i, wkc);
