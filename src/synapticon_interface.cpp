@@ -861,6 +861,13 @@ void SynapticonSystemInterface::somanetCyclicLoop(
                               << ", TorqueDemand: " << in_somanet_[joint_idx]->TorqueDemand
                               << ", VelocityDemandValue: " << in_somanet_[joint_idx]->VelocityDemandValue);
           }
+          int32_t int_wrist_pitch_temperature = read_sdo_value(WRIST_PITCH_IDX + 1, 0x2038, 0x01);
+          float wrist_pitch_thermistor_temperature;
+          std::memcpy(&wrist_pitch_thermistor_temperature, &int_wrist_pitch_temperature, sizeof(float));
+          if (wrist_pitch_thermistor_temperature > 50) {
+            RCLCPP_WARN_STREAM(getLogger(), "High temperature on wrist pitch thermistor [C]: " << wrist_pitch_thermistor_temperature);
+          }
+          RCLCPP_INFO_STREAM(getLogger(), "Wrist pitch thermistor [C]: " << wrist_pitch_thermistor_temperature);
         }
 
         // printf("Processdata cycle %4d , WKC %d ,", i, wkc);
