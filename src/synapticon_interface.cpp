@@ -55,6 +55,8 @@ constexpr double MAX_WRIST_PITCH_VELOCITY = 0.3;
 constexpr double MAX_WRIST_ROLL_VELOCITY = 0.15;
 // TODO: what's with the bullshit multiplier?
 constexpr double MYSTERY_VELOCITY_MULTIPLIER = 10000;
+constexpr double WRIST_PITCH_DEADBAND = 0.05;
+constexpr double WRIST_ROLL_DEADBAND = 0.05;
 
 int32_t read_sdo_value(uint16_t slave_idx, uint16_t index, uint8_t subindex) {
     int32_t value_holder;
@@ -709,6 +711,10 @@ void SynapticonSystemInterface::somanetCyclicLoop(
                 wrist_pitch_dial_value = std::clamp(wrist_pitch_dial_value, WRIST_DIAL_MIN, WRIST_DIAL_MAX);
                 // Scale the value from [-1,1]
                 double normalized_dial = (wrist_pitch_dial_value - ANALOG_INPUT_MIDPOINT) / (0.5 * (WRIST_DIAL_MAX - WRIST_DIAL_MIN));
+                // Deadband
+                if (std::abs(normalized_dial) < WRIST_PITCH_DEADBAND) {
+                  normalized_dial = 0;
+                }
                 double velocity = normalized_dial * MYSTERY_VELOCITY_MULTIPLIER * mechanical_reductions_.at(joint_idx) * MAX_WRIST_PITCH_VELOCITY;
 
                 out_somanet_[joint_idx]->TargetVelocity = velocity;
@@ -720,6 +726,10 @@ void SynapticonSystemInterface::somanetCyclicLoop(
                 wrist_roll_dial_value = std::clamp(wrist_roll_dial_value, WRIST_DIAL_MIN, WRIST_DIAL_MAX);
                 // Scale the value from [-1,1]
                 double normalized_dial = (wrist_roll_dial_value - ANALOG_INPUT_MIDPOINT) / (0.5 * (WRIST_DIAL_MAX - WRIST_DIAL_MIN));
+                // Deadband
+                if (std::abs(normalized_dial) < WRIST_ROLL_DEADBAND) {
+                  normalized_dial = 0;
+                }
                 double velocity = normalized_dial * MYSTERY_VELOCITY_MULTIPLIER * mechanical_reductions_.at(joint_idx) * MAX_WRIST_ROLL_VELOCITY;
 
                 out_somanet_[joint_idx]->TargetVelocity = velocity;
