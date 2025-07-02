@@ -867,7 +867,6 @@ void SynapticonSystemInterface::somanetCyclicLoop(
           if (wrist_pitch_thermistor_temperature > 50) {
             RCLCPP_WARN_STREAM(getLogger(), "High temperature on wrist pitch thermistor [C]: " << wrist_pitch_thermistor_temperature);
           }
-          RCLCPP_INFO_STREAM(getLogger(), "Wrist pitch thermistor [C]: " << wrist_pitch_thermistor_temperature);
         }
 
         // printf("Processdata cycle %4d , WKC %d ,", i, wkc);
