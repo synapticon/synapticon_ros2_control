@@ -41,11 +41,12 @@ unsigned int NORMAL_OPERATION_BRAKES_ON = 0b00001011;
 constexpr char EXPECTED_SLAVE_NAME[] = "SOMANET";
 constexpr std::array<double, 7> TORQUE_FRICTION_OFFSET = {0, 0, 0, 0, 10, 0, 0}; // per mill
 constexpr size_t SPRING_ADJUST_IDX = 2;
+constexpr size_t INERTIAL_ACTUATOR_IDX = 3;
 constexpr size_t WRIST_PITCH_IDX = 5;
 constexpr size_t WRIST_ROLL_IDX = 6;
 // TODO: update this if the wrist or EE is added
 constexpr double SPRING_POSITION_WITHOUT_PAYLOAD = 31000;
-// TODO: update this if the payload changes. Eventually replace with a fully dynamic algorithm
+// TODO: update this if the max payload changes
 constexpr double SPRING_POSITION_MAX_PAYLOAD = 45000;
 // Expected midpoint of the 16-bit analog inputs
 constexpr int32_t ANALOG_INPUT_MIDPOINT = 32768;
@@ -57,6 +58,9 @@ constexpr double MAX_WRIST_ROLL_VELOCITY = 0.15;
 constexpr double MYSTERY_VELOCITY_MULTIPLIER = 10000;
 constexpr double WRIST_PITCH_DEADBAND = 0.05;
 constexpr double WRIST_ROLL_DEADBAND = 0.05;
+// Motion threshold of the inertial actuator
+constexpr double DYNAMIC_COMP_MOTION_THRESHOLD = 0.09;  // rad
+constexpr double SPRING_ADJUST_MAX_TORQUE = 2500.0;  // per mill of rated torque
 
 int32_t read_sdo_value(uint16_t slave_idx, uint16_t index, uint8_t subindex) {
     int32_t value_holder;
@@ -90,9 +94,9 @@ double spring_adjust_torque_pd(
   // We overdrive the motor, higher than rated torque, since it's a quick motion
   if (actuator_torque > 0) {
       // Per mill of rated torque
-      actuator_torque = std::clamp(actuator_torque, 900.0, 2500.0);
+      actuator_torque = std::clamp(actuator_torque, 900.0, SPRING_ADJUST_MAX_TORQUE);
   } else {
-      actuator_torque = std::clamp(actuator_torque, -2500.0, -900.0);
+      actuator_torque = std::clamp(actuator_torque, -SPRING_ADJUST_MAX_TORQUE, -900.0);
   }
 
   // Don't allow control mode to change until the target position is reached and is stable
@@ -330,6 +334,9 @@ SynapticonSystemInterface::prepare_command_mode_switch(
     return hardware_interface::return_type::ERROR;
   }
 
+  // This should be cleared unless in COMPENSATE_FOR_ADDED_LOAD mode
+  initial_inertial_actuator_position_ = std::nullopt;
+
   // Prepare for new command modes
   std::vector<control_level_t> new_modes = {};
   for (const std::string& key : start_interfaces) {
@@ -362,8 +369,12 @@ SynapticonSystemInterface::prepare_command_mode_switch(
           new_modes.push_back(control_level_t::QUICK_STOP);
         }
       } else if (key == info_.joints[i].name + "/compensate_for_added_load") {
-        // compensate_for_added_load puts all joints in QUICK_STOP mode except the spring adjust joint
-        if (i == SPRING_ADJUST_IDX) {
+        {
+          std::lock_guard<std::mutex> lock(hw_state_mtx_);
+          initial_inertial_actuator_position_ = hw_states_positions_[INERTIAL_ACTUATOR_IDX];
+        }
+        // compensate_for_added_load puts all joints in QUICK_STOP mode except those in the elevation link
+        if ((i == SPRING_ADJUST_IDX) || (i == INERTIAL_ACTUATOR_IDX)) {
           new_modes.push_back(control_level_t::COMPENSATE_FOR_ADDED_LOAD);
         } else {
           new_modes.push_back(control_level_t::QUICK_STOP);
@@ -467,7 +478,7 @@ hardware_interface::CallbackReturn SynapticonSystemInterface::on_deactivate(
 hardware_interface::return_type
 SynapticonSystemInterface::read(const rclcpp::Time & /*time*/,
                                 const rclcpp::Duration & /*period*/) {
-  std::lock_guard<std::mutex> lock(in_somanet_mtx_);
+  std::lock_guard<std::mutex> lock(hw_state_mtx_);
   for (std::size_t i = 0; i < num_joints_; i++) {
     // InSomanet50t doesn't include acceleration
     hw_states_accelerations_[i] = 0;
@@ -646,9 +657,15 @@ void SynapticonSystemInterface::somanetCyclicLoop(
   while (rclcpp::ok() && !eStopEngaged()) {
 
     {
-      std::lock_guard<std::mutex> lock(in_somanet_mtx_);
+      std::lock_guard<std::mutex> lock(hw_state_mtx_);
       ec_send_processdata();
       wkc_ = ec_receive_processdata(EC_TIMEOUTRET);
+
+      // This is for COMPENSATE_FOR_ADDED_LOAD mode
+      bool need_more_spring_adjust = false;
+      if (initial_inertial_actuator_position_) {
+        need_more_spring_adjust = std::abs(in_somanet_[INERTIAL_ACTUATOR_IDX]->PositionValue - initial_inertial_actuator_position_.value()) > DYNAMIC_COMP_MOTION_THRESHOLD;
+      }
 
       if (wkc_ >= expected_wkc_) {
         for (size_t joint_idx = 0; joint_idx < num_joints_; ++joint_idx) {
@@ -830,23 +847,37 @@ void SynapticonSystemInterface::somanetCyclicLoop(
               }
             } else if (control_level_[joint_idx] == control_level_t::COMPENSATE_FOR_ADDED_LOAD)
             {
-              // Spring adjust joint: proportional control based on analog input 2 potentiometer
+              // All actuators except those in the elevation link have been put in brake mode
+              // The trident brake should be released
+              // TODO: put all actuators except those in the elevation link in impedance mode so they can allow arcing motion
+              // Record the starting position of the inertial actuator
+              // Begin moving the spring adjust joint (velocity mode)
+              // Monitor for the inertial actuator position to change more than X rad
+              // Then stop the spring adjust motion
+              // TODO: if spring adjust hits a position limit, stop and go to QUICK_STOP mode
+
               if (joint_idx == SPRING_ADJUST_IDX) {
-
-                // Create a local boolean variable since atomics can't be passed by reference
-                bool allow_mode_change = allow_mode_change_.load();
-                double actuator_torque = spring_adjust_torque_pd(
-                  SPRING_POSITION_MAX_PAYLOAD,
-                  spring_pot_position,
-                  spring_adjust_state_,
-                  allow_mode_change  // Pass the local variable instead of the atomic member
-                );
-                // Update the atomic member with the new value
-                allow_mode_change_.store(allow_mode_change);
-
-                out_somanet_[joint_idx]->TargetTorque = actuator_torque;
+                if (need_more_spring_adjust)
+                {
+                  allow_mode_change_ = false;
+                  out_somanet_[joint_idx]->TargetTorque = SPRING_ADJUST_MAX_TORQUE;
+                  out_somanet_[joint_idx]->OpMode = PROFILE_TORQUE_MODE;
+                  out_somanet_[joint_idx]->TorqueOffset = 0;
+                  out_somanet_[joint_idx]->Controlword = NORMAL_OPERATION_BRAKES_OFF;
+                }
+                // else, stop the spring adjust motion
+                else
+                {
+                  allow_mode_change_ = true;
+                  out_somanet_[joint_idx]->OpMode = CYCLIC_VELOCITY_MODE;
+                  out_somanet_[joint_idx]->VelocityOffset = 0;
+                  out_somanet_[joint_idx]->Controlword = NORMAL_OPERATION_BRAKES_OFF;
+                }
+              }
+              // Inertial actuator joint should be free to move (zero-torque setpoint)
+              else if (joint_idx == INERTIAL_ACTUATOR_IDX) {
+                out_somanet_[joint_idx]->TargetTorque = 0;
                 out_somanet_[joint_idx]->OpMode = PROFILE_TORQUE_MODE;
-                out_somanet_[joint_idx]->TorqueOffset = 0;
                 out_somanet_[joint_idx]->Controlword = NORMAL_OPERATION_BRAKES_OFF;
               }
               else {
@@ -899,7 +930,7 @@ void SynapticonSystemInterface::somanetCyclicLoop(
   }
 
   // Before exiting, set all motors to safe state with brakes on
-  std::lock_guard<std::mutex> lock(in_somanet_mtx_);
+  std::lock_guard<std::mutex> lock(hw_state_mtx_);
   for (size_t joint_idx = 0; joint_idx < num_joints_; ++joint_idx) {
     out_somanet_[joint_idx]->OpMode = PROFILE_TORQUE_MODE;
     out_somanet_[joint_idx]->TorqueOffset = 0;

@@ -212,7 +212,7 @@ private:
   char io_map_[4096];
 
   std::vector<InSomanet50t *> in_somanet_;
-  std::mutex in_somanet_mtx_;
+  std::mutex hw_state_mtx_;
   std::vector<OutSomanet50t *> out_somanet_;
 
   std::vector<uint32_t> encoder_resolutions_;
@@ -225,6 +225,9 @@ private:
   // During spring adjust, don't allow control mode to change until the target position is reached
   std::atomic<bool> allow_mode_change_ = true;
   SpringAdjustState spring_adjust_state_;
+
+  // This variable is used during dynamic spring compensation
+  std::optional<double> initial_inertial_actuator_position_;
 };
 
 } // namespace synapticon_ros2_control
