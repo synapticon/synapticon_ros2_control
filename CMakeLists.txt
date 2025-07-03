@@ -100,26 +100,28 @@ install(
   DESTINATION share/synapticon_ros2_control
 )
 install(
-  DIRECTORY bringup/launch bringup/config
+  DIRECTORY bringup/launch bringup/config scripts
   DESTINATION share/synapticon_ros2_control
 )
+install(
+  DIRECTORY test/
+  DESTINATION share/synapticon_ros2_control/test
+)
+
+ament_export_targets(synapticon_soem HAS_LIBRARY_TARGET)
+ament_export_dependencies(${THIS_PACKAGE_INCLUDE_DEPENDS})
 
 if(BUILD_TESTING)
-  # TODO
+  find_package(ament_cmake_gtest REQUIRED)
+  find_package(ros_testing REQUIRED)
+  
+  # Test that controller_manager launching succeeds
+  ament_add_gtest_executable(test_controller_manager_integration 
+    test/test_controller_manager_integration.cpp)
+  ament_target_dependencies(test_controller_manager_integration
+    ${THIS_PACKAGE_INCLUDE_DEPENDS})
+  add_ros_test(test/launch/simple_test_with_virtual_eth.launch.py 
+    TIMEOUT 30 ARGS "test_binary_dir:=${CMAKE_CURRENT_BINARY_DIR}")
 endif()
 
-ament_export_dependencies(${THIS_PACKAGE_INCLUDE_DEPENDS})
-ament_export_include_directories(
-  include
-  ${CMAKE_CURRENT_SOURCE_DIR}/src/osal
-  ${CMAKE_CURRENT_SOURCE_DIR}/src/osal/${OS}
-  ${CMAKE_CURRENT_SOURCE_DIR}/src/oshw/${OS}
-  ${CMAKE_CURRENT_SOURCE_DIR}/src/soem
-)
-
-# Install meshes directory
-install(DIRECTORY meshes/
-  DESTINATION share/${PROJECT_NAME}/meshes
-)
-ament_export_targets(synapticon_soem HAS_LIBRARY_TARGET)
 ament_package()
