@@ -664,7 +664,10 @@ void SynapticonSystemInterface::somanetCyclicLoop(
       // This is for COMPENSATE_FOR_ADDED_LOAD mode
       bool need_more_spring_adjust = false;
       if (initial_inertial_actuator_position_) {
-        need_more_spring_adjust = std::abs(in_somanet_[INERTIAL_ACTUATOR_IDX]->PositionValue - initial_inertial_actuator_position_.value()) > DYNAMIC_COMP_MOTION_THRESHOLD;
+        double current_position_rad = (1 / mechanical_reductions_.at(INERTIAL_ACTUATOR_IDX)) *
+                                    in_somanet_[INERTIAL_ACTUATOR_IDX]->PositionValue *
+                                    2 * 3.14159 / encoder_resolutions_[INERTIAL_ACTUATOR_IDX];
+        need_more_spring_adjust = std::abs(current_position_rad - initial_inertial_actuator_position_.value()) > DYNAMIC_COMP_MOTION_THRESHOLD;
       }
 
       if (wkc_ >= expected_wkc_) {
