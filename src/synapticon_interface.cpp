@@ -873,15 +873,24 @@ void SynapticonSystemInterface::somanetCyclicLoop(
                 {
                   allow_mode_change_ = true;
                   out_somanet_[joint_idx]->OpMode = CYCLIC_VELOCITY_MODE;
+                  out_somanet_[joint_idx]->TargetVelocity = 0;
                   out_somanet_[joint_idx]->VelocityOffset = 0;
                   out_somanet_[joint_idx]->Controlword = NORMAL_OPERATION_BRAKES_OFF;
                 }
               }
-              // Inertial actuator joint should be free to move (zero-torque setpoint)
+              // Inertial actuator joint should be free to move so we can detect when motion is complete
               else if (joint_idx == INERTIAL_ACTUATOR_IDX) {
-                out_somanet_[joint_idx]->TargetTorque = 0;
-                out_somanet_[joint_idx]->OpMode = PROFILE_TORQUE_MODE;
-                out_somanet_[joint_idx]->Controlword = NORMAL_OPERATION_BRAKES_OFF;
+                if (need_more_spring_adjust) {
+                  out_somanet_[joint_idx]->TargetTorque = 0;
+                  out_somanet_[joint_idx]->OpMode = PROFILE_TORQUE_MODE;
+                  out_somanet_[joint_idx]->Controlword = NORMAL_OPERATION_BRAKES_OFF;
+                }
+                else {
+                  out_somanet_[joint_idx]->OpMode = CYCLIC_VELOCITY_MODE;
+                  out_somanet_[joint_idx]->TargetVelocity = 0;
+                  out_somanet_[joint_idx]->VelocityOffset = 0;
+                  out_somanet_[joint_idx]->Controlword = NORMAL_OPERATION_BRAKES_OFF;
+                }
               }
               else {
                 RCLCPP_ERROR(getLogger(), "Should never get here since the other joints are in QUICK_STOP mode");
