@@ -70,6 +70,10 @@ int32_t read_sdo_value(uint16_t slave_idx, uint16_t index, uint8_t subindex) {
     return value_holder;
 }
 
+double ticks_to_output_shaft_rad(int32_t ticks, double mechanical_reduction, uint32_t encoder_resolution) {
+  return (static_cast<double>(ticks) / encoder_resolution) * 2.0 * M_PI / mechanical_reduction;
+}
+
 double spring_adjust_torque_pd(
   double target_position,
   int32_t current_spring_pot_position,
@@ -482,9 +486,9 @@ SynapticonSystemInterface::read(const rclcpp::Time & /*time*/,
   for (std::size_t i = 0; i < num_joints_; i++) {
     // InSomanet50t doesn't include acceleration
     hw_states_accelerations_[i] = 0;
-    hw_states_velocities_[i] = (1 / mechanical_reductions_.at(i)) * in_somanet_[i]->VelocityValue * RPM_TO_RAD_PER_S;
-    hw_states_positions_[i] = (1 / mechanical_reductions_.at(i)) * in_somanet_[i]->PositionValue * 2 * 3.14159 / encoder_resolutions_[i];
-    hw_states_efforts_[i] = mechanical_reductions_.at(i) * in_somanet_[i]->TorqueValue;
+    hw_states_velocities_[i] = ticks_to_output_shaft_rad(in_somanet_[i]->VelocityValue, mechanical_reductions_.at(i).load(), encoder_resolutions_[i]);
+    hw_states_positions_[i] = ticks_to_output_shaft_rad(in_somanet_[i]->PositionValue, mechanical_reductions_.at(i).load(), encoder_resolutions_[i]);
+    hw_states_efforts_[i] = mechanical_reductions_.at(i).load() * in_somanet_[i]->TorqueValue;
   }
 
   return hardware_interface::return_type::OK;
@@ -507,11 +511,12 @@ SynapticonSystemInterface::write(const rclcpp::Time & /*time*/,
     }
     if (!std::isnan(hw_commands_velocities_[i]))
     {
-      threadsafe_commands_velocities_[i] = mechanical_reductions_.at(i) * hw_commands_velocities_[i] * RAD_PER_S_TO_RPM;
+      // TODO: should this command be ticks per seconds?
+      threadsafe_commands_velocities_[i] = mechanical_reductions_.at(i).load() * hw_commands_velocities_[i] * RAD_PER_S_TO_RPM;
     }
     if (!std::isnan(hw_commands_positions_[i]))
     {
-      threadsafe_commands_positions_[i] = mechanical_reductions_.at(i) * hw_commands_positions_[i] * encoder_resolutions_[i] / (2 * 3.14159);
+      threadsafe_commands_positions_[i] = mechanical_reductions_.at(i).load() * hw_commands_positions_[i] * encoder_resolutions_[i] / (2 * M_PI);
     }
     if (!std::isnan(hw_commands_spring_adjust_[i]))
     {
@@ -664,9 +669,7 @@ void SynapticonSystemInterface::somanetCyclicLoop(
       // This is for COMPENSATE_FOR_ADDED_LOAD mode
       bool need_more_spring_adjust = false;
       if (initial_inertial_actuator_position_) {
-        double current_position_rad = (1 / mechanical_reductions_.at(INERTIAL_ACTUATOR_IDX)) *
-                                    in_somanet_[INERTIAL_ACTUATOR_IDX]->PositionValue *
-                                    2 * 3.14159 / encoder_resolutions_[INERTIAL_ACTUATOR_IDX];
+        double current_position_rad = ticks_to_output_shaft_rad(in_somanet_[INERTIAL_ACTUATOR_IDX]->PositionValue, mechanical_reductions_.at(INERTIAL_ACTUATOR_IDX).load(), encoder_resolutions_[INERTIAL_ACTUATOR_IDX]);
         need_more_spring_adjust = std::abs(current_position_rad - initial_inertial_actuator_position_.value()) < DYNAMIC_COMP_MOTION_THRESHOLD;
       }
 
@@ -735,7 +738,7 @@ void SynapticonSystemInterface::somanetCyclicLoop(
                 if (std::abs(normalized_dial) < WRIST_PITCH_DEADBAND) {
                   normalized_dial = 0;
                 }
-                double velocity = normalized_dial * MYSTERY_VELOCITY_MULTIPLIER * mechanical_reductions_.at(joint_idx) * MAX_WRIST_PITCH_VELOCITY;
+                double velocity = normalized_dial * MYSTERY_VELOCITY_MULTIPLIER * mechanical_reductions_.at(joint_idx).load() * MAX_WRIST_PITCH_VELOCITY;
 
                 out_somanet_[joint_idx]->TargetVelocity = velocity;
                 out_somanet_[joint_idx]->OpMode = CYCLIC_VELOCITY_MODE;
@@ -750,7 +753,7 @@ void SynapticonSystemInterface::somanetCyclicLoop(
                 if (std::abs(normalized_dial) < WRIST_ROLL_DEADBAND) {
                   normalized_dial = 0;
                 }
-                double velocity = normalized_dial * MYSTERY_VELOCITY_MULTIPLIER * mechanical_reductions_.at(joint_idx) * MAX_WRIST_ROLL_VELOCITY;
+                double velocity = normalized_dial * MYSTERY_VELOCITY_MULTIPLIER * mechanical_reductions_.at(joint_idx).load() * MAX_WRIST_ROLL_VELOCITY;
 
                 out_somanet_[joint_idx]->TargetVelocity = velocity;
                 out_somanet_[joint_idx]->OpMode = CYCLIC_VELOCITY_MODE;
