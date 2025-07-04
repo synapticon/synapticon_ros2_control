@@ -304,12 +304,14 @@ hardware_interface::CallbackReturn SynapticonSystemInterface::on_init(
     uint8_t encoder_source;
     int size = sizeof(encoder_source);
     ec_SDOread(joint_idx, 0x2012, 0x09, false, &size, &encoder_source, EC_TIMEOUTRXM);
-    size = sizeof(encoder_resolutions_[joint_idx-1]);
+    
+    uint32_t encoder_resolution;
+    size = sizeof(encoder_resolution);
     if (encoder_source == 1) {
-      ec_SDOread(joint_idx, 0x2110, 0x03, false, &size, &encoder_resolutions_[joint_idx-1],
+      ec_SDOread(joint_idx, 0x2110, 0x03, false, &size, &encoder_resolution,
                 EC_TIMEOUTRXM);
     } else if (encoder_source == 2) {
-      ec_SDOread(joint_idx, 0x2112, 0x03, false, &size, &encoder_resolutions_[joint_idx-1],
+      ec_SDOread(joint_idx, 0x2112, 0x03, false, &size, &encoder_resolution,
                 EC_TIMEOUTRXM);
     } else {
       RCLCPP_FATAL(
@@ -318,6 +320,7 @@ hardware_interface::CallbackReturn SynapticonSystemInterface::on_init(
           joint_idx);
       return hardware_interface::CallbackReturn::ERROR;
     }
+    encoder_resolutions_[joint_idx-1].store(encoder_resolution);
   }
 
   // Start the control loop, wait for it to reach normal operation mode
@@ -486,8 +489,8 @@ SynapticonSystemInterface::read(const rclcpp::Time & /*time*/,
   for (std::size_t i = 0; i < num_joints_; i++) {
     // InSomanet50t doesn't include acceleration
     hw_states_accelerations_[i] = 0;
-    hw_states_velocities_[i] = ticks_to_output_shaft_rad(in_somanet_[i]->VelocityValue, mechanical_reductions_.at(i).load(), encoder_resolutions_[i]);
-    hw_states_positions_[i] = ticks_to_output_shaft_rad(in_somanet_[i]->PositionValue, mechanical_reductions_.at(i).load(), encoder_resolutions_[i]);
+    hw_states_velocities_[i] = ticks_to_output_shaft_rad(in_somanet_[i]->VelocityValue, mechanical_reductions_.at(i).load(), encoder_resolutions_[i].load());
+    hw_states_positions_[i] = ticks_to_output_shaft_rad(in_somanet_[i]->PositionValue, mechanical_reductions_.at(i).load(), encoder_resolutions_[i].load());
     hw_states_efforts_[i] = mechanical_reductions_.at(i).load() * in_somanet_[i]->TorqueValue;
   }
 
@@ -511,12 +514,12 @@ SynapticonSystemInterface::write(const rclcpp::Time & /*time*/,
     }
     if (!std::isnan(hw_commands_velocities_[i]))
     {
-      // TODO: should this command be ticks per seconds?
+      // TODO: should this command be ticks per second?
       threadsafe_commands_velocities_[i] = mechanical_reductions_.at(i).load() * hw_commands_velocities_[i] * RAD_PER_S_TO_RPM;
     }
     if (!std::isnan(hw_commands_positions_[i]))
     {
-      threadsafe_commands_positions_[i] = mechanical_reductions_.at(i).load() * hw_commands_positions_[i] * encoder_resolutions_[i] / (2 * M_PI);
+      threadsafe_commands_positions_[i] = mechanical_reductions_.at(i).load() * hw_commands_positions_[i] * encoder_resolutions_[i].load() / (2 * M_PI);
     }
     if (!std::isnan(hw_commands_spring_adjust_[i]))
     {
@@ -669,7 +672,7 @@ void SynapticonSystemInterface::somanetCyclicLoop(
       // This is for COMPENSATE_FOR_ADDED_LOAD mode
       bool need_more_spring_adjust = false;
       if (initial_inertial_actuator_position_) {
-        double current_position_rad = ticks_to_output_shaft_rad(in_somanet_[INERTIAL_ACTUATOR_IDX]->PositionValue, mechanical_reductions_.at(INERTIAL_ACTUATOR_IDX).load(), encoder_resolutions_[INERTIAL_ACTUATOR_IDX]);
+        double current_position_rad = ticks_to_output_shaft_rad(in_somanet_[INERTIAL_ACTUATOR_IDX]->PositionValue, mechanical_reductions_.at(INERTIAL_ACTUATOR_IDX).load(), encoder_resolutions_[INERTIAL_ACTUATOR_IDX].load());
         need_more_spring_adjust = std::abs(current_position_rad - initial_inertial_actuator_position_.value()) < DYNAMIC_COMP_MOTION_THRESHOLD;
       }
 
