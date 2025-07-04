@@ -131,7 +131,8 @@ private:
   // Objects for logging
   std::shared_ptr<rclcpp::Logger> logger_;
 
-  std::vector<double> mechanical_reductions_;
+  std::deque<std::atomic<double>> mechanical_reductions_;
+  std::deque<std::atomic<uint32_t>> encoder_resolutions_;
 
   // Store the commands for the simulated robot
   std::vector<double> hw_commands_positions_;
@@ -167,8 +168,6 @@ private:
   std::vector<InSomanet50t *> in_somanet_;
   std::mutex hw_state_mtx_;
   std::vector<OutSomanet50t *> out_somanet_;
-
-  std::vector<uint32_t> encoder_resolutions_;
 
   // For coordination between threads
   volatile std::atomic<int> wkc_;
