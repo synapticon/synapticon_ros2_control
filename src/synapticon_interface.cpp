@@ -74,6 +74,10 @@ hardware_interface::CallbackReturn SynapticonSystemInterface::on_init(
                               std::numeric_limits<double>::quiet_NaN());
   control_level_.resize(num_joints_, control_level_t::UNDEFINED);
   // Atomic deques are difficult to initialize
+  mechanical_reductions_.resize(num_joints_);
+  for (auto &reduction : mechanical_reductions_) {
+    reduction.store(1.0);
+  }
   threadsafe_commands_efforts_.resize(num_joints_);
   for (auto &effort : threadsafe_commands_efforts_) {
     effort.store(std::numeric_limits<double>::quiet_NaN());
@@ -124,6 +128,17 @@ hardware_interface::CallbackReturn SynapticonSystemInterface::on_init(
           hardware_interface::HW_IF_EFFORT);
       return hardware_interface::CallbackReturn::ERROR;
     }
+  }
+
+  for (size_t i = 0; i < num_joints_; ++i)
+  {
+    std::string reduction_param_name = info_.joints.at(i).name + "_mechanical_reduction";
+    if (info_.hardware_parameters.find(reduction_param_name) == info_.hardware_parameters.end())
+    {
+      mechanical_reductions_.at(i) = 1.0;
+      continue;
+    }
+    mechanical_reductions_.at(i) = stod(info_.hardware_parameters[reduction_param_name]);
   }
 
   // A thread to handle ethercat errors
@@ -198,12 +213,14 @@ hardware_interface::CallbackReturn SynapticonSystemInterface::on_init(
     uint8_t encoder_source;
     int size = sizeof(encoder_source);
     ec_SDOread(joint_idx, 0x2012, 0x09, false, &size, &encoder_source, EC_TIMEOUTRXM);
-    size = sizeof(encoder_resolutions_[joint_idx-1]);
+    
+    uint32_t encoder_resolution;
+    size = sizeof(encoder_resolution);
     if (encoder_source == 1) {
-      ec_SDOread(joint_idx, 0x2110, 0x03, false, &size, &encoder_resolutions_[joint_idx-1],
+      ec_SDOread(joint_idx, 0x2110, 0x03, false, &size, &encoder_resolution,
                 EC_TIMEOUTRXM);
     } else if (encoder_source == 2) {
-      ec_SDOread(joint_idx, 0x2112, 0x03, false, &size, &encoder_resolutions_[joint_idx-1],
+      ec_SDOread(joint_idx, 0x2112, 0x03, false, &size, &encoder_resolution,
                 EC_TIMEOUTRXM);
     } else {
       RCLCPP_FATAL(
@@ -212,6 +229,7 @@ hardware_interface::CallbackReturn SynapticonSystemInterface::on_init(
           joint_idx);
       return hardware_interface::CallbackReturn::ERROR;
     }
+    encoder_resolutions_[joint_idx-1].store(encoder_resolution);
   }
 
   // Start the control loop, wait for it to reach normal operation mode
@@ -346,9 +364,9 @@ SynapticonSystemInterface::read(const rclcpp::Time & /*time*/,
   for (std::size_t i = 0; i < num_joints_; i++) {
     // InSomanet50t doesn't include acceleration
     hw_states_accelerations_[i] = 0;
-    hw_states_velocities_[i] = in_somanet_[i]->VelocityValue * RPM_TO_RAD_PER_S;
-    hw_states_positions_[i] = in_somanet_[i]->PositionValue * 2 * 3.14159 / encoder_resolutions_[i];
-    hw_states_efforts_[i] = in_somanet_[i]->TorqueValue;
+    hw_states_velocities_[i] = ticks_to_output_shaft_rad(in_somanet_[i]->VelocityValue, mechanical_reductions_.at(i).load(), encoder_resolutions_[i].load());
+    hw_states_positions_[i] = ticks_to_output_shaft_rad(in_somanet_[i]->PositionValue, mechanical_reductions_.at(i).load(), encoder_resolutions_[i].load());
+    hw_states_efforts_[i] = mechanical_reductions_.at(i).load() * in_somanet_[i]->TorqueValue;
   }
 
   return hardware_interface::return_type::OK;
@@ -371,11 +389,12 @@ SynapticonSystemInterface::write(const rclcpp::Time & /*time*/,
     }
     if (!std::isnan(hw_commands_velocities_[i]))
     {
-      threadsafe_commands_velocities_[i] = hw_commands_velocities_[i] * RAD_PER_S_TO_RPM;
+      // TODO: should this command be ticks per second?
+      threadsafe_commands_velocities_[i] = mechanical_reductions_.at(i).load() * hw_commands_velocities_[i] * RAD_PER_S_TO_RPM;
     }
     if (!std::isnan(hw_commands_positions_[i]))
     {
-      threadsafe_commands_positions_[i] = hw_commands_positions_[i] * encoder_resolutions_[i] / (2 * 3.14159);
+      threadsafe_commands_positions_[i] = mechanical_reductions_.at(i).load() * hw_commands_positions_[i] * encoder_resolutions_[i].load() / (2 * M_PI);
     }
   }
 
