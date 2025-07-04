@@ -78,7 +78,7 @@ double spring_adjust_torque_pd(
 
   double K_P = 1.0;
   double K_D = 0.5;
-  double error = static_cast<double>(current_spring_pot_position) - target_position;
+  double error = target_position - static_cast<double>(current_spring_pot_position);
   std::chrono::steady_clock::time_point time_now = std::chrono::steady_clock::now();
   std::chrono::duration<double> time_elapsed = time_now - state.time_prev_;
   double error_dt = 0;
@@ -87,7 +87,7 @@ double spring_adjust_torque_pd(
   }
   state.error_prev_ = error;
   state.time_prev_ = time_now;
-  double actuator_torque = - K_P * error - K_D * error_dt;
+  double actuator_torque = K_P * error + K_D * error_dt;
 
   // A ceiling at X% of rated torque
   // With a floor of Y% torque (below that, the motor doesn't move)
@@ -667,7 +667,7 @@ void SynapticonSystemInterface::somanetCyclicLoop(
         double current_position_rad = (1 / mechanical_reductions_.at(INERTIAL_ACTUATOR_IDX)) *
                                     in_somanet_[INERTIAL_ACTUATOR_IDX]->PositionValue *
                                     2 * 3.14159 / encoder_resolutions_[INERTIAL_ACTUATOR_IDX];
-        need_more_spring_adjust = std::abs(current_position_rad - initial_inertial_actuator_position_.value()) > DYNAMIC_COMP_MOTION_THRESHOLD;
+        need_more_spring_adjust = std::abs(current_position_rad - initial_inertial_actuator_position_.value()) < DYNAMIC_COMP_MOTION_THRESHOLD;
       }
 
       if (wkc_ >= expected_wkc_) {
