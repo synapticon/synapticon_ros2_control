@@ -47,8 +47,18 @@ int32_t read_sdo_value(uint16_t slave_idx, uint16_t index, uint8_t subindex) {
     return value_holder;
 }
 
-double ticks_to_output_shaft_rad(int32_t ticks, double mechanical_reduction, uint32_t encoder_resolution) {
+/**
+ * @brief Convert an incremental position command in input shaft encoder ticks to output shaft radians
+ */
+double input_ticks_to_output_shaft_rad(int32_t ticks, double mechanical_reduction, uint32_t encoder_resolution) {
   return (static_cast<double>(ticks) / encoder_resolution) * 2.0 * M_PI / mechanical_reduction;
+}
+
+/**
+ * @brief Convert an incremental output shaft radian command to input shaft encoder ticks
+ */
+int32_t output_shaft_rad_to_input_ticks(double output_shaft_rad, double mechanical_reduction, uint32_t encoder_resolution) {
+  return (output_shaft_rad * encoder_resolution * mechanical_reduction / (2.0 * M_PI));
 }
 
 OSAL_THREAD_FUNC ecatCheckWrapper(void *ptr) {
@@ -375,8 +385,8 @@ SynapticonSystemInterface::read(const rclcpp::Time & /*time*/,
   for (std::size_t i = 0; i < num_joints_; i++) {
     // InSomanet50t doesn't include acceleration
     hw_states_accelerations_[i] = 0;
-    hw_states_velocities_[i] = ticks_to_output_shaft_rad(in_somanet_[i]->VelocityValue, mechanical_reductions_.at(i).load(), encoder_resolutions_[i]);
-    hw_states_positions_[i] = ticks_to_output_shaft_rad(in_somanet_[i]->PositionValue, mechanical_reductions_.at(i).load(), encoder_resolutions_[i]);
+    hw_states_velocities_[i] = input_ticks_to_output_shaft_rad(in_somanet_[i]->VelocityValue, mechanical_reductions_.at(i).load(), encoder_resolutions_[i].load());
+    hw_states_positions_[i] = input_ticks_to_output_shaft_rad(in_somanet_[i]->PositionValue, mechanical_reductions_.at(i).load(), encoder_resolutions_[i].load());
     hw_states_efforts_[i] = mechanical_reductions_.at(i).load() * in_somanet_[i]->TorqueValue;
   }
 
@@ -405,7 +415,7 @@ SynapticonSystemInterface::write(const rclcpp::Time & /*time*/,
     }
     if (!std::isnan(hw_commands_positions_[i]))
     {
-      threadsafe_commands_positions_[i] = mechanical_reductions_.at(i).load() * hw_commands_positions_[i] * encoder_resolutions_[i] / (2 * M_PI);
+      threadsafe_commands_positions_[i] = output_shaft_rad_to_input_ticks(hw_commands_positions_[i], mechanical_reductions_.at(i).load(), encoder_resolutions_[i].load());
     }
   }
 
