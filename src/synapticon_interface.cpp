@@ -70,8 +70,18 @@ int32_t read_sdo_value(uint16_t slave_idx, uint16_t index, uint8_t subindex) {
     return value_holder;
 }
 
-double ticks_to_output_shaft_rad(int32_t ticks, double mechanical_reduction, uint32_t encoder_resolution) {
+/**
+ * @brief Convert an incremental position command in input shaft encoder ticks to output shaft radians
+ */
+double input_ticks_to_output_shaft_rad(int32_t ticks, double mechanical_reduction, uint32_t encoder_resolution) {
   return (static_cast<double>(ticks) / encoder_resolution) * 2.0 * M_PI / mechanical_reduction;
+}
+
+/**
+ * @brief Convert an incremental output shaft radian command to input shaft encoder ticks
+ */
+int32_t output_shaft_rad_to_input_ticks(double output_shaft_rad, double mechanical_reduction, uint32_t encoder_resolution) {
+  return (output_shaft_rad * encoder_resolution * mechanical_reduction / (2.0 * M_PI));
 }
 
 double spring_adjust_torque_pd(
@@ -489,8 +499,8 @@ SynapticonSystemInterface::read(const rclcpp::Time & /*time*/,
   for (std::size_t i = 0; i < num_joints_; i++) {
     // InSomanet50t doesn't include acceleration
     hw_states_accelerations_[i] = 0;
-    hw_states_velocities_[i] = ticks_to_output_shaft_rad(in_somanet_[i]->VelocityValue, mechanical_reductions_.at(i).load(), encoder_resolutions_[i].load());
-    hw_states_positions_[i] = ticks_to_output_shaft_rad(in_somanet_[i]->PositionValue, mechanical_reductions_.at(i).load(), encoder_resolutions_[i].load());
+    hw_states_velocities_[i] = input_ticks_to_output_shaft_rad(in_somanet_[i]->VelocityValue, mechanical_reductions_.at(i).load(), encoder_resolutions_[i].load());
+    hw_states_positions_[i] = input_ticks_to_output_shaft_rad(in_somanet_[i]->PositionValue, mechanical_reductions_.at(i).load(), encoder_resolutions_[i].load());
     hw_states_efforts_[i] = mechanical_reductions_.at(i).load() * in_somanet_[i]->TorqueValue;
   }
 
@@ -519,7 +529,7 @@ SynapticonSystemInterface::write(const rclcpp::Time & /*time*/,
     }
     if (!std::isnan(hw_commands_positions_[i]))
     {
-      threadsafe_commands_positions_[i] = mechanical_reductions_.at(i).load() * hw_commands_positions_[i] * encoder_resolutions_[i].load() / (2 * M_PI);
+      threadsafe_commands_positions_[i] = output_shaft_rad_to_input_ticks(hw_commands_positions_[i], mechanical_reductions_.at(i).load(), encoder_resolutions_[i].load());
     }
     if (!std::isnan(hw_commands_spring_adjust_[i]))
     {
@@ -672,7 +682,7 @@ void SynapticonSystemInterface::somanetCyclicLoop(
       // This is for COMPENSATE_FOR_ADDED_LOAD mode
       bool need_more_spring_adjust = false;
       if (initial_inertial_actuator_position_) {
-        double current_position_rad = ticks_to_output_shaft_rad(in_somanet_[INERTIAL_ACTUATOR_IDX]->PositionValue, mechanical_reductions_.at(INERTIAL_ACTUATOR_IDX).load(), encoder_resolutions_[INERTIAL_ACTUATOR_IDX].load());
+        double current_position_rad = input_ticks_to_output_shaft_rad(in_somanet_[INERTIAL_ACTUATOR_IDX]->PositionValue, mechanical_reductions_.at(INERTIAL_ACTUATOR_IDX).load(), encoder_resolutions_[INERTIAL_ACTUATOR_IDX].load());
         need_more_spring_adjust = std::abs(current_position_rad - initial_inertial_actuator_position_.value()) < DYNAMIC_COMP_MOTION_THRESHOLD;
       }
 
