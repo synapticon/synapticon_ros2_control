@@ -116,6 +116,16 @@ if(BUILD_TESTING)
     ${THIS_PACKAGE_INCLUDE_DEPENDS})
   add_ros_test(test/launch/simple_test_with_virtual_eth.launch.py 
     TIMEOUT 30 ARGS "test_binary_dir:=${CMAKE_CURRENT_BINARY_DIR}")
+  
+  # Unit conversions
+  ament_add_gtest_executable(test_unit_conversions 
+    test/test_unit_conversions.cpp)
+  target_include_directories(test_unit_conversions PUBLIC
+    $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/include>
+  )
+  target_link_libraries(test_unit_conversions synapticon_ros2_control)
+  ament_target_dependencies(test_unit_conversions
+    ${THIS_PACKAGE_INCLUDE_DEPENDS})
 endif()
 
 ament_package()
