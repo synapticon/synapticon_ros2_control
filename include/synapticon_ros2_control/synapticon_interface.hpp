@@ -35,6 +35,7 @@
 #include <rclcpp_lifecycle/state.hpp>
 
 #include "ethercat.h"
+#include "synapticon_ros2_control/unit_conversions.hpp"
 
 namespace synapticon_ros2_control {
 

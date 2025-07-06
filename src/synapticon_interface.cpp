@@ -47,20 +47,6 @@ int32_t read_sdo_value(uint16_t slave_idx, uint16_t index, uint8_t subindex) {
     return value_holder;
 }
 
-/**
- * @brief Convert an incremental position command in input shaft encoder ticks to output shaft radians
- */
-double input_ticks_to_output_shaft_rad(int32_t ticks, double mechanical_reduction, uint32_t encoder_resolution) {
-  return (static_cast<double>(ticks) / encoder_resolution) * 2.0 * M_PI / mechanical_reduction;
-}
-
-/**
- * @brief Convert an incremental output shaft radian command to input shaft encoder ticks
- */
-int32_t output_shaft_rad_to_input_ticks(double output_shaft_rad, double mechanical_reduction, uint32_t encoder_resolution) {
-  return (output_shaft_rad * encoder_resolution * mechanical_reduction / (2.0 * M_PI));
-}
-
 OSAL_THREAD_FUNC ecatCheckWrapper(void *ptr) {
     SynapticonSystemInterface* interface = static_cast<SynapticonSystemInterface*>(ptr);
     return interface->ecatCheck(ptr);
