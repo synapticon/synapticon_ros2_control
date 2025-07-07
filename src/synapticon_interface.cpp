@@ -97,15 +97,17 @@ double spring_adjust_torque_pd(
       actuator_torque = std::clamp(actuator_torque, -SPRING_ADJUST_MAX_TORQUE, -900.0);
   }
 
-  // Don't allow control mode to change until the target position is reached and is stable
-  // This is also a deadband
+  // Only set allow_mode_change to true when we're very close to target and stable
+  // This should be a one-time transition, not continuous updates
   if (std::abs(error) < 500 && error_dt <= 1) {
-      allow_mode_change = true;
       // We can safely set the target torque to zero b/c this actuator is not backdrivable
       actuator_torque = 0;
-  } else {
-      allow_mode_change = false;
+      // Only set allow_mode_change to true if it was previously false (one-time transition)
+      if (!allow_mode_change) {
+          allow_mode_change = true;
+      }
   }
+  // Don't set allow_mode_change to false here - it should be set when entering the mode
 
   return actuator_torque;
 }
