@@ -119,6 +119,22 @@ OSAL_THREAD_FUNC ecatCheckWrapper(void *ptr) {
     SynapticonSystemInterface* interface = static_cast<SynapticonSystemInterface*>(ptr);
     return interface->ecatCheck(ptr);
 }
+
+/**
+ * @brief Wait for initial ecat communication to be established
+ */
+void ensure_process_data_works() {
+  // Ensure process data communication is working
+  int wkc = -1;
+  ec_send_processdata();
+  wkc = ec_receive_processdata(EC_TIMEOUTRET);
+
+  while (wkc < 0) {
+    ec_send_processdata();
+    wkc = ec_receive_processdata(EC_TIMEOUTRET);
+    osal_usleep(100000);
+  }
+}
 } // namespace
 
 hardware_interface::CallbackReturn SynapticonSystemInterface::on_init(
@@ -320,6 +336,8 @@ hardware_interface::CallbackReturn SynapticonSystemInterface::on_init(
     }
     encoder_resolutions_[joint_idx-1].store(encoder_resolution);
   }
+
+  ensure_process_data_works();
 
   // Start the control loop, wait for it to reach normal operation mode
   somanet_control_thread_ =
