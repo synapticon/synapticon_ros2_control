@@ -57,7 +57,7 @@ constexpr double MYSTERY_VELOCITY_MULTIPLIER = 10000;
 constexpr double WRIST_PITCH_DEADBAND = 0.05;
 constexpr double WRIST_ROLL_DEADBAND = 0.05;
 // Motion threshold of the inertial actuator
-constexpr double DYNAMIC_COMP_MOTION_THRESHOLD = 0.09;  // rad
+constexpr double DYNAMIC_COMP_MOTION_THRESHOLD = 0.04;  // rad
 constexpr double SPRING_ADJUST_MAX_TORQUE = 2500.0;  // per mill of rated torque
 
 int32_t read_sdo_value(uint16_t slave_idx, uint16_t index, uint8_t subindex) {
@@ -791,7 +791,7 @@ void SynapticonSystemInterface::somanetCyclicLoop(
               out_somanet_[joint_idx]->OpMode = PROFILE_TORQUE_MODE;
               out_somanet_[joint_idx]->TorqueOffset = 0;
               out_somanet_[joint_idx]->Controlword = NORMAL_OPERATION_BRAKES_ON;
-            }  else if (control_level_[joint_idx] == control_level_t::SPRING_ADJUST)
+            } else if (control_level_[joint_idx] == control_level_t::SPRING_ADJUST)
             {
               // Spring adjust joint: proportional control based on analog input 2 potentiometer
               if (joint_idx == SPRING_ADJUST_IDX) {
@@ -896,14 +896,11 @@ void SynapticonSystemInterface::somanetCyclicLoop(
                 RCLCPP_ERROR(getLogger(), "Should never get here since the other joints are in QUICK_STOP mode");
               }
             } else if (control_level_[joint_idx] == control_level_t::UNDEFINED) {
+              // Turn the brake on
               out_somanet_[joint_idx]->OpMode = PROFILE_TORQUE_MODE;
-              // small offset to account for friction
-              if (in_somanet_[joint_idx]->VelocityValue > 0) {
-                out_somanet_[joint_idx]->TorqueOffset = TORQUE_FRICTION_OFFSET.at(joint_idx);
-              } else {
-                out_somanet_[joint_idx]->TorqueOffset = -TORQUE_FRICTION_OFFSET.at(joint_idx);
-              }
-              out_somanet_[joint_idx]->Controlword = NORMAL_OPERATION_BRAKES_OFF;
+              out_somanet_[joint_idx]->TorqueOffset = 0;
+              out_somanet_[joint_idx]->Controlword = NORMAL_OPERATION_BRAKES_ON;
+              RCLCPP_ERROR(getLogger(), "UNDEFINED mode should never be reached");
             }
           } // normal operation
 
