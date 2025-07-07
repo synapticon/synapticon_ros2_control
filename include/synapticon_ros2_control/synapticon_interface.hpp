@@ -109,7 +109,7 @@ public:
   /**
    * \return logger of the SystemInterface.
    */
-  rclcpp::Logger get_logger() const { return *logger_; }
+  rclcpp::Logger getLogger() const { return *logger_; }
 
   /**
    * @brief Error checking. Typically runs in a separate thread.

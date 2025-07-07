@@ -97,6 +97,10 @@ install(
   DIRECTORY bringup/launch bringup/config
   DESTINATION share/synapticon_ros2_control
 )
+install(
+  DIRECTORY test/
+  DESTINATION share/synapticon_ros2_control/test
+)
 
 if(BUILD_TESTING)
   find_package(ament_cmake_gtest REQUIRED)
