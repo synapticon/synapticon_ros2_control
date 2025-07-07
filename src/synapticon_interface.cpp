@@ -123,7 +123,7 @@ OSAL_THREAD_FUNC ecatCheckWrapper(void *ptr) {
 /**
  * @brief Wait for initial ecat communication to be established
  */
-void ensure_process_data_works() {
+void wait_for_good_process_data() {
   // Ensure process data communication is working
   int wkc = -1;
   ec_send_processdata();
@@ -337,7 +337,7 @@ hardware_interface::CallbackReturn SynapticonSystemInterface::on_init(
     encoder_resolutions_[joint_idx-1].store(encoder_resolution);
   }
 
-  ensure_process_data_works();
+  wait_for_good_process_data();
 
   // Start the control loop, wait for it to reach normal operation mode
   somanet_control_thread_ =
