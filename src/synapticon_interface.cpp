@@ -873,12 +873,13 @@ void SynapticonSystemInterface::somanetCyclicLoop(
                   out_somanet_[joint_idx]->Controlword = NORMAL_OPERATION_BRAKES_OFF;
                 }
                 // else, stop the spring adjust motion
+                // It's not backdrivable
                 else
                 {
                   allow_mode_change_ = true;
-                  out_somanet_[joint_idx]->OpMode = CYCLIC_VELOCITY_MODE;
-                  out_somanet_[joint_idx]->TargetVelocity = 0;
-                  out_somanet_[joint_idx]->VelocityOffset = 0;
+                  out_somanet_[joint_idx]->TargetTorque = 0;
+                  out_somanet_[joint_idx]->OpMode = PROFILE_TORQUE_MODE;
+                  out_somanet_[joint_idx]->TorqueOffset = 0;
                   out_somanet_[joint_idx]->Controlword = NORMAL_OPERATION_BRAKES_OFF;
                 }
               }
