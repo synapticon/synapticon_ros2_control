@@ -68,6 +68,8 @@ int32_t read_sdo_value(uint16_t slave_idx, uint16_t index, uint8_t subindex) {
     return value_holder;
 }
 
+// TODO: this function seems to be called repeatedly when I don't expect it
+/* brief Use a PD controller to move the spring adjust actuator to given potentiometer position */
 double spring_adjust_torque_pd(
   double target_position,
   int32_t current_spring_pot_position,
