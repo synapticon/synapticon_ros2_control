@@ -107,7 +107,7 @@ hardware_interface::CallbackReturn SynapticonSystemInterface::on_init(
           joint.command_interfaces[0].name ==
               hardware_interface::HW_IF_EFFORT)) {
       RCLCPP_FATAL(
-          get_logger(),
+          getLogger(),
           "Joint '%s' has %s command interface. Expected %s, %s, %s, or %s.",
           joint.name.c_str(), joint.command_interfaces[0].name.c_str(),
           hardware_interface::HW_IF_POSITION,
@@ -125,7 +125,7 @@ hardware_interface::CallbackReturn SynapticonSystemInterface::on_init(
               hardware_interface::HW_IF_ACCELERATION ||
           joint.state_interfaces[0].name == hardware_interface::HW_IF_EFFORT)) {
       RCLCPP_FATAL(
-          get_logger(),
+          getLogger(),
           "Joint '%s' has %s state interface. Expected %s, %s, %s, or %s.",
           joint.name.c_str(), joint.state_interfaces[0].name.c_str(),
           hardware_interface::HW_IF_POSITION,
@@ -157,7 +157,7 @@ hardware_interface::CallbackReturn SynapticonSystemInterface::on_init(
   std::string eth_device = info_.hardware_parameters["eth_device"];
   int ec_init_status = ec_init(eth_device.c_str());
   if (ec_init_status <= 0) {
-    RCLCPP_FATAL_STREAM(get_logger(),
+    RCLCPP_FATAL_STREAM(getLogger(),
                         "Error during initialization of ethercat interface: "
                             << eth_device.c_str() << " with status: "
                             << ec_init_status);
@@ -165,7 +165,7 @@ hardware_interface::CallbackReturn SynapticonSystemInterface::on_init(
   }
 
   if (ec_config_init(false) <= 0) {
-    RCLCPP_FATAL(get_logger(), "No ethercat slaves found!");
+    RCLCPP_FATAL(getLogger(), "No ethercat slaves found!");
     ec_close();
     return hardware_interface::CallbackReturn::ERROR;
   }
@@ -193,7 +193,7 @@ hardware_interface::CallbackReturn SynapticonSystemInterface::on_init(
   } while (chk-- && (ec_slave[0].state != EC_STATE_OPERATIONAL));
 
   if (ec_slave[0].state != EC_STATE_OPERATIONAL) {
-    RCLCPP_FATAL(get_logger(),
+    RCLCPP_FATAL(getLogger(),
                  "An ethercat slave failed to reach OPERATIONAL state");
     return hardware_interface::CallbackReturn::ERROR;
   }
@@ -210,7 +210,7 @@ hardware_interface::CallbackReturn SynapticonSystemInterface::on_init(
     // Verify slave name
     if (strcmp(ec_slave[joint_idx].name, EXPECTED_SLAVE_NAME) != 0) {
       RCLCPP_FATAL(
-          get_logger(),
+          getLogger(),
           "Expected slave %s at position %zu, but got %s instead",
           EXPECTED_SLAVE_NAME, joint_idx, ec_slave[joint_idx].name);
       return hardware_interface::CallbackReturn::ERROR;
@@ -230,7 +230,7 @@ hardware_interface::CallbackReturn SynapticonSystemInterface::on_init(
                 EC_TIMEOUTRXM);
     } else {
       RCLCPP_FATAL(
-          get_logger(),
+          getLogger(),
           "No encoder configured for position control on joint %zu. Terminating the program",
           joint_idx);
       return hardware_interface::CallbackReturn::ERROR;
@@ -270,7 +270,7 @@ SynapticonSystemInterface::prepare_command_mode_switch(
   }
   // All joints must be given new command mode at the same time
   if (!start_interfaces.empty() && (new_modes.size() != num_joints_)) {
-    RCLCPP_FATAL(get_logger(),
+    RCLCPP_FATAL(getLogger(),
                  "All joints must be given a new mode at the same time.");
     return hardware_interface::return_type::ERROR;
   }
@@ -278,7 +278,7 @@ SynapticonSystemInterface::prepare_command_mode_switch(
   if (!std::all_of(
           new_modes.begin() + 1, new_modes.end(),
           [&](control_level_t mode) { return mode == new_modes[0]; })) {
-    RCLCPP_FATAL(get_logger(), "All joints must have the same command mode.");
+    RCLCPP_FATAL(getLogger(), "All joints must have the same command mode.");
     return hardware_interface::return_type::ERROR;
   }
 
@@ -304,7 +304,7 @@ SynapticonSystemInterface::prepare_command_mode_switch(
       if (key.find(info_.joints[i].name) != std::string::npos) {
         if (control_level_[i] != control_level_t::UNDEFINED) {
           // Something else is using the joint! Abort!
-          RCLCPP_FATAL(get_logger(),
+          RCLCPP_FATAL(getLogger(),
                        "Something else is using the joint. Abort!");
           return hardware_interface::return_type::ERROR;
         }
@@ -340,7 +340,7 @@ hardware_interface::CallbackReturn SynapticonSystemInterface::on_activate(
         std::numeric_limits<double>::quiet_NaN();
   }
 
-  RCLCPP_INFO(get_logger(), "System successfully activated! Control level: %u",
+  RCLCPP_INFO(getLogger(), "System successfully activated! Control level: %u",
               control_level_[0]);
 
   return hardware_interface::CallbackReturn::SUCCESS;
