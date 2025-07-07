@@ -33,8 +33,6 @@ constexpr double DEG_TO_RAD = 0.0174533;
 constexpr size_t PROFILE_TORQUE_MODE = 4;
 constexpr size_t CYCLIC_VELOCITY_MODE = 9;
 constexpr size_t CYCLIC_POSITION_MODE = 8;
-constexpr double RPM_TO_RAD_PER_S = 0.10472;
-constexpr double RAD_PER_S_TO_RPM = 1 / RPM_TO_RAD_PER_S;
 unsigned int NORMAL_OPERATION_BRAKES_OFF = 0b00001111;
 // Bit 2 (0-indexed) goes to 0 to turn on Quick Stop
 unsigned int NORMAL_OPERATION_BRAKES_ON = 0b00001011;
@@ -511,7 +509,7 @@ SynapticonSystemInterface::write(const rclcpp::Time & /*time*/,
     if (!std::isnan(hw_commands_velocities_[i]))
     {
       // TODO: should this command be ticks per second?
-      threadsafe_commands_velocities_[i] = mechanical_reductions_.at(i).load() * hw_commands_velocities_[i] * RAD_PER_S_TO_RPM;
+      threadsafe_commands_velocities_[i] = mechanical_reductions_.at(i).load() * hw_commands_velocities_[i];
     }
     if (!std::isnan(hw_commands_positions_[i]))
     {
