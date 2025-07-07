@@ -32,14 +32,19 @@ constexpr double DEG_TO_RAD = 0.0174533;
 constexpr size_t PROFILE_TORQUE_MODE = 4;
 constexpr size_t CYCLIC_VELOCITY_MODE = 9;
 constexpr size_t CYCLIC_POSITION_MODE = 8;
-constexpr double RPM_TO_RAD_PER_S = 0.10472;
-constexpr double RAD_PER_S_TO_RPM = 1 / RPM_TO_RAD_PER_S;
 unsigned int NORMAL_OPERATION_BRAKES_OFF = 0b00001111;
 // Bit 2 (0-indexed) goes to 0 to turn on Quick Stop
 unsigned int NORMAL_OPERATION_BRAKES_ON = 0b00001011;
 constexpr char EXPECTED_SLAVE_NAME[] = "SOMANET";
 
-// This is related to making a member function appear static
+int32_t read_sdo_value(uint16_t slave_idx, uint16_t index, uint8_t subindex) {
+    int32_t value_holder;
+    int object_size = sizeof(value_holder);
+    int timeout = EC_TIMEOUTRXM;
+    ec_SDOread(slave_idx, index, subindex, FALSE, &object_size, &value_holder, timeout);
+    return value_holder;
+}
+
 OSAL_THREAD_FUNC ecatCheckWrapper(void *ptr) {
     SynapticonSystemInterface* interface = static_cast<SynapticonSystemInterface*>(ptr);
     return interface->ecatCheck(ptr);
@@ -74,6 +79,10 @@ hardware_interface::CallbackReturn SynapticonSystemInterface::on_init(
                               std::numeric_limits<double>::quiet_NaN());
   control_level_.resize(num_joints_, control_level_t::UNDEFINED);
   // Atomic deques are difficult to initialize
+  mechanical_reductions_.resize(num_joints_);
+  for (auto &reduction : mechanical_reductions_) {
+    reduction.store(1.0);
+  }
   threadsafe_commands_efforts_.resize(num_joints_);
   for (auto &effort : threadsafe_commands_efforts_) {
     effort.store(std::numeric_limits<double>::quiet_NaN());
@@ -97,7 +106,7 @@ hardware_interface::CallbackReturn SynapticonSystemInterface::on_init(
           joint.command_interfaces[0].name ==
               hardware_interface::HW_IF_EFFORT)) {
       RCLCPP_FATAL(
-          get_logger(),
+          getLogger(),
           "Joint '%s' has %s command interface. Expected %s, %s, %s, or %s.",
           joint.name.c_str(), joint.command_interfaces[0].name.c_str(),
           hardware_interface::HW_IF_POSITION,
@@ -115,7 +124,7 @@ hardware_interface::CallbackReturn SynapticonSystemInterface::on_init(
               hardware_interface::HW_IF_ACCELERATION ||
           joint.state_interfaces[0].name == hardware_interface::HW_IF_EFFORT)) {
       RCLCPP_FATAL(
-          get_logger(),
+          getLogger(),
           "Joint '%s' has %s state interface. Expected %s, %s, %s, or %s.",
           joint.name.c_str(), joint.state_interfaces[0].name.c_str(),
           hardware_interface::HW_IF_POSITION,
@@ -124,6 +133,17 @@ hardware_interface::CallbackReturn SynapticonSystemInterface::on_init(
           hardware_interface::HW_IF_EFFORT);
       return hardware_interface::CallbackReturn::ERROR;
     }
+  }
+
+  for (size_t i = 0; i < num_joints_; ++i)
+  {
+    std::string reduction_param_name = info_.joints.at(i).name + "_mechanical_reduction";
+    if (info_.hardware_parameters.find(reduction_param_name) == info_.hardware_parameters.end())
+    {
+      mechanical_reductions_.at(i) = 1.0;
+      continue;
+    }
+    mechanical_reductions_.at(i) = stod(info_.hardware_parameters[reduction_param_name]);
   }
 
   // A thread to handle ethercat errors
@@ -136,7 +156,7 @@ hardware_interface::CallbackReturn SynapticonSystemInterface::on_init(
   std::string eth_device = info_.hardware_parameters["eth_device"];
   int ec_init_status = ec_init(eth_device.c_str());
   if (ec_init_status <= 0) {
-    RCLCPP_FATAL_STREAM(get_logger(),
+    RCLCPP_FATAL_STREAM(getLogger(),
                         "Error during initialization of ethercat interface: "
                             << eth_device.c_str() << " with status: "
                             << ec_init_status);
@@ -144,7 +164,7 @@ hardware_interface::CallbackReturn SynapticonSystemInterface::on_init(
   }
 
   if (ec_config_init(false) <= 0) {
-    RCLCPP_FATAL(get_logger(), "No ethercat slaves found!");
+    RCLCPP_FATAL(getLogger(), "No ethercat slaves found!");
     ec_close();
     return hardware_interface::CallbackReturn::ERROR;
   }
@@ -172,15 +192,15 @@ hardware_interface::CallbackReturn SynapticonSystemInterface::on_init(
   } while (chk-- && (ec_slave[0].state != EC_STATE_OPERATIONAL));
 
   if (ec_slave[0].state != EC_STATE_OPERATIONAL) {
-    RCLCPP_FATAL(get_logger(),
+    RCLCPP_FATAL(getLogger(),
                  "An ethercat slave failed to reach OPERATIONAL state");
     return hardware_interface::CallbackReturn::ERROR;
   }
 
   // Connect struct pointers to I/O
   for (size_t joint_idx = 1; joint_idx < (num_joints_ + 1); ++joint_idx) {
-    in_somanet_1_.push_back((InSomanet50t *)ec_slave[joint_idx].inputs);
-    out_somanet_1_.push_back((OutSomanet50t *)ec_slave[joint_idx].outputs);
+    in_somanet_.push_back((InSomanet50t *)ec_slave[joint_idx].inputs);
+    out_somanet_.push_back((OutSomanet50t *)ec_slave[joint_idx].outputs);
   }
 
   // Read encoder resolution for each joint
@@ -189,7 +209,7 @@ hardware_interface::CallbackReturn SynapticonSystemInterface::on_init(
     // Verify slave name
     if (strcmp(ec_slave[joint_idx].name, EXPECTED_SLAVE_NAME) != 0) {
       RCLCPP_FATAL(
-          get_logger(),
+          getLogger(),
           "Expected slave %s at position %zu, but got %s instead",
           EXPECTED_SLAVE_NAME, joint_idx, ec_slave[joint_idx].name);
       return hardware_interface::CallbackReturn::ERROR;
@@ -198,20 +218,23 @@ hardware_interface::CallbackReturn SynapticonSystemInterface::on_init(
     uint8_t encoder_source;
     int size = sizeof(encoder_source);
     ec_SDOread(joint_idx, 0x2012, 0x09, false, &size, &encoder_source, EC_TIMEOUTRXM);
-    size = sizeof(encoder_resolutions_[joint_idx-1]);
+    
+    uint32_t encoder_resolution;
+    size = sizeof(encoder_resolution);
     if (encoder_source == 1) {
-      ec_SDOread(joint_idx, 0x2110, 0x03, false, &size, &encoder_resolutions_[joint_idx-1],
+      ec_SDOread(joint_idx, 0x2110, 0x03, false, &size, &encoder_resolution,
                 EC_TIMEOUTRXM);
     } else if (encoder_source == 2) {
-      ec_SDOread(joint_idx, 0x2112, 0x03, false, &size, &encoder_resolutions_[joint_idx-1],
+      ec_SDOread(joint_idx, 0x2112, 0x03, false, &size, &encoder_resolution,
                 EC_TIMEOUTRXM);
     } else {
       RCLCPP_FATAL(
-          get_logger(),
+          getLogger(),
           "No encoder configured for position control on joint %zu. Terminating the program",
           joint_idx);
       return hardware_interface::CallbackReturn::ERROR;
     }
+    encoder_resolutions_[joint_idx-1].store(encoder_resolution);
   }
 
   // Start the control loop, wait for it to reach normal operation mode
@@ -246,7 +269,7 @@ SynapticonSystemInterface::prepare_command_mode_switch(
   }
   // All joints must be given new command mode at the same time
   if (!start_interfaces.empty() && (new_modes.size() != num_joints_)) {
-    RCLCPP_FATAL(get_logger(),
+    RCLCPP_FATAL(getLogger(),
                  "All joints must be given a new mode at the same time.");
     return hardware_interface::return_type::ERROR;
   }
@@ -254,7 +277,7 @@ SynapticonSystemInterface::prepare_command_mode_switch(
   if (!std::all_of(
           new_modes.begin() + 1, new_modes.end(),
           [&](control_level_t mode) { return mode == new_modes[0]; })) {
-    RCLCPP_FATAL(get_logger(), "All joints must have the same command mode.");
+    RCLCPP_FATAL(getLogger(), "All joints must have the same command mode.");
     return hardware_interface::return_type::ERROR;
   }
 
@@ -280,7 +303,7 @@ SynapticonSystemInterface::prepare_command_mode_switch(
       if (key.find(info_.joints[i].name) != std::string::npos) {
         if (control_level_[i] != control_level_t::UNDEFINED) {
           // Something else is using the joint! Abort!
-          RCLCPP_FATAL(get_logger(),
+          RCLCPP_FATAL(getLogger(),
                        "Something else is using the joint. Abort!");
           return hardware_interface::return_type::ERROR;
         }
@@ -316,7 +339,7 @@ hardware_interface::CallbackReturn SynapticonSystemInterface::on_activate(
         std::numeric_limits<double>::quiet_NaN();
   }
 
-  RCLCPP_INFO(get_logger(), "System successfully activated! Control level: %u",
+  RCLCPP_INFO(getLogger(), "System successfully activated! Control level: %u",
               control_level_[0]);
 
   return hardware_interface::CallbackReturn::SUCCESS;
@@ -342,13 +365,13 @@ hardware_interface::CallbackReturn SynapticonSystemInterface::on_deactivate(
 hardware_interface::return_type
 SynapticonSystemInterface::read(const rclcpp::Time & /*time*/,
                                 const rclcpp::Duration & /*period*/) {
-  std::lock_guard<std::mutex> lock(in_somanet_mtx_);
+  std::lock_guard<std::mutex> lock(hw_state_mtx_);
   for (std::size_t i = 0; i < num_joints_; i++) {
     // InSomanet50t doesn't include acceleration
     hw_states_accelerations_[i] = 0;
-    hw_states_velocities_[i] = in_somanet_1_[i]->VelocityValue * RPM_TO_RAD_PER_S;
-    hw_states_positions_[i] = in_somanet_1_[i]->PositionValue * 2 * 3.14159 / encoder_resolutions_[i];
-    hw_states_efforts_[i] = in_somanet_1_[i]->TorqueValue;
+    hw_states_velocities_[i] = input_ticks_to_output_shaft_rad(in_somanet_[i]->VelocityValue, mechanical_reductions_.at(i).load(), encoder_resolutions_[i].load());
+    hw_states_positions_[i] = input_ticks_to_output_shaft_rad(in_somanet_[i]->PositionValue, mechanical_reductions_.at(i).load(), encoder_resolutions_[i].load());
+    hw_states_efforts_[i] = mechanical_reductions_.at(i).load() * in_somanet_[i]->TorqueValue;
   }
 
   return hardware_interface::return_type::OK;
@@ -371,11 +394,12 @@ SynapticonSystemInterface::write(const rclcpp::Time & /*time*/,
     }
     if (!std::isnan(hw_commands_velocities_[i]))
     {
-      threadsafe_commands_velocities_[i] = hw_commands_velocities_[i] * RAD_PER_S_TO_RPM;
+      // TODO: should this command be ticks per second?
+      threadsafe_commands_velocities_[i] = mechanical_reductions_.at(i).load() * hw_commands_velocities_[i];
     }
     if (!std::isnan(hw_commands_positions_[i]))
     {
-      threadsafe_commands_positions_[i] = hw_commands_positions_[i] * encoder_resolutions_[i] / (2 * 3.14159);
+      threadsafe_commands_positions_[i] = output_shaft_rad_to_input_ticks(hw_commands_positions_[i], mechanical_reductions_.at(i).load(), encoder_resolutions_[i].load());
     }
   }
 
@@ -505,7 +529,7 @@ void SynapticonSystemInterface::somanetCyclicLoop(
 
   while (rclcpp::ok()) {
     {
-      std::lock_guard<std::mutex> lock(in_somanet_mtx_);
+      std::lock_guard<std::mutex> lock(hw_state_mtx_);
       ec_send_processdata();
       wkc_ = ec_receive_processdata(EC_TIMEOUTRET);
 
@@ -513,76 +537,78 @@ void SynapticonSystemInterface::somanetCyclicLoop(
         for (size_t joint_idx = 0; joint_idx < num_joints_; ++joint_idx) {
           if (first_iteration.at(joint_idx)) {
             // Default to PROFILE_TORQUE_MODE
-            out_somanet_1_[joint_idx]->OpMode = PROFILE_TORQUE_MODE;
-            out_somanet_1_[joint_idx]->TorqueOffset = 0;
-            out_somanet_1_[joint_idx]->TargetTorque = 0;
+            out_somanet_[joint_idx]->OpMode = PROFILE_TORQUE_MODE;
+            out_somanet_[joint_idx]->TorqueOffset = 0;
+            out_somanet_[joint_idx]->TargetTorque = 0;
             first_iteration.at(joint_idx) = false;
           }
 
           // Fault reset: Fault -> Switch on disabled, if the drive is in fault
           // state
-          if ((in_somanet_1_[joint_idx]->Statusword & 0b0000000001001111) ==
+          if ((in_somanet_[joint_idx]->Statusword & 0b0000000001001111) ==
               0b0000000000001000)
-            out_somanet_1_[joint_idx]->Controlword = 0b10000000;
+            out_somanet_[joint_idx]->Controlword = 0b10000000;
 
           // Shutdown: Switch on disabled -> Ready to switch on
-          else if ((in_somanet_1_[joint_idx]->Statusword &
+          else if ((in_somanet_[joint_idx]->Statusword &
                     0b0000000001001111) == 0b0000000001000000)
           {
             // If the QUICK_STOP controller is on, don't leave this state
             if ((control_level_[joint_idx] != control_level_t::QUICK_STOP) &&
                (control_level_[joint_idx] != control_level_t::UNDEFINED))
             {
-              out_somanet_1_[joint_idx]->Controlword = 0b00000110;
+              out_somanet_[joint_idx]->Controlword = 0b00000110;
             }
           }
           // Switch on: Ready to switch on -> Switched on
-          else if ((in_somanet_1_[joint_idx]->Statusword &
+          else if ((in_somanet_[joint_idx]->Statusword &
                     0b0000000001101111) == 0b0000000000100001)
-            out_somanet_1_[joint_idx]->Controlword = 0b00000111;
+            out_somanet_[joint_idx]->Controlword = 0b00000111;
 
           // Enable operation: Switched on -> Operation enabled
-          else if ((in_somanet_1_[joint_idx]->Statusword &
+          else if ((in_somanet_[joint_idx]->Statusword &
                     0b0000000001101111) == 0b0000000000100011)
-            out_somanet_1_[joint_idx]->Controlword = NORMAL_OPERATION_BRAKES_OFF;
+            out_somanet_[joint_idx]->Controlword = NORMAL_OPERATION_BRAKES_OFF;
 
           // Normal operation
-          else if ((in_somanet_1_[joint_idx]->Statusword &
+          else if ((in_somanet_[joint_idx]->Statusword &
                     0b0000000001101111) == 0b0000000000100111) {
             in_normal_op_mode = true;
             if (control_level_[joint_idx] == control_level_t::EFFORT) {
               if (!std::isnan(threadsafe_commands_efforts_[joint_idx])) {
-                out_somanet_1_[joint_idx]->TargetTorque =
+                out_somanet_[joint_idx]->TargetTorque =
                     threadsafe_commands_efforts_[joint_idx];
-                out_somanet_1_[joint_idx]->OpMode = PROFILE_TORQUE_MODE;
-                out_somanet_1_[joint_idx]->TorqueOffset = 0;
-                out_somanet_1_[joint_idx]->Controlword = NORMAL_OPERATION_BRAKES_OFF;
+                out_somanet_[joint_idx]->OpMode = PROFILE_TORQUE_MODE;
+                out_somanet_[joint_idx]->TorqueOffset = 0;
+                out_somanet_[joint_idx]->Controlword = NORMAL_OPERATION_BRAKES_OFF;
               }
             } else if (control_level_[joint_idx] == control_level_t::VELOCITY) {
               if (!std::isnan(threadsafe_commands_velocities_[joint_idx])) {
-                out_somanet_1_[joint_idx]->TargetVelocity =
+                out_somanet_[joint_idx]->TargetVelocity =
                     threadsafe_commands_velocities_[joint_idx];
-                out_somanet_1_[joint_idx]->OpMode = CYCLIC_VELOCITY_MODE;
-                out_somanet_1_[joint_idx]->VelocityOffset = 0;
-                out_somanet_1_[joint_idx]->Controlword = NORMAL_OPERATION_BRAKES_OFF;
+                out_somanet_[joint_idx]->OpMode = CYCLIC_VELOCITY_MODE;
+                out_somanet_[joint_idx]->VelocityOffset = 0;
+                out_somanet_[joint_idx]->Controlword = NORMAL_OPERATION_BRAKES_OFF;
               }
             } else if (control_level_[joint_idx] == control_level_t::POSITION) {
               if (!std::isnan(threadsafe_commands_positions_[joint_idx])) {
-                out_somanet_1_[joint_idx]->TargetPosition = threadsafe_commands_positions_[joint_idx];
-                out_somanet_1_[joint_idx]->OpMode = CYCLIC_POSITION_MODE;
-                out_somanet_1_[joint_idx]->VelocityOffset = 0;
-                out_somanet_1_[joint_idx]->Controlword = NORMAL_OPERATION_BRAKES_OFF;
+                out_somanet_[joint_idx]->TargetPosition = threadsafe_commands_positions_[joint_idx];
+                out_somanet_[joint_idx]->OpMode = CYCLIC_POSITION_MODE;
+                out_somanet_[joint_idx]->VelocityOffset = 0;
+                out_somanet_[joint_idx]->Controlword = NORMAL_OPERATION_BRAKES_OFF;
               }
             } else if (control_level_[joint_idx] == control_level_t::QUICK_STOP)
             {
               // Turn the brake on
-              out_somanet_1_[joint_idx]->OpMode = PROFILE_TORQUE_MODE;
-              out_somanet_1_[joint_idx]->TorqueOffset = 0;
-              out_somanet_1_[joint_idx]->Controlword = NORMAL_OPERATION_BRAKES_ON;
+              out_somanet_[joint_idx]->OpMode = PROFILE_TORQUE_MODE;
+              out_somanet_[joint_idx]->TorqueOffset = 0;
+              out_somanet_[joint_idx]->Controlword = NORMAL_OPERATION_BRAKES_ON;
             } else if (control_level_[joint_idx] == control_level_t::UNDEFINED) {
-              out_somanet_1_[joint_idx]->OpMode = PROFILE_TORQUE_MODE;
-              out_somanet_1_[joint_idx]->TorqueOffset = 0;
-              out_somanet_1_[joint_idx]->Controlword = NORMAL_OPERATION_BRAKES_OFF;
+              // Turn the brake on
+              out_somanet_[joint_idx]->OpMode = PROFILE_TORQUE_MODE;
+              out_somanet_[joint_idx]->TorqueOffset = 0;
+              out_somanet_[joint_idx]->Controlword = NORMAL_OPERATION_BRAKES_ON;
+              RCLCPP_ERROR(getLogger(), "UNDEFINED mode should never be reached");
             }
           }
         }
@@ -590,13 +616,13 @@ void SynapticonSystemInterface::somanetCyclicLoop(
         // printf("Processdata cycle %4d , WKC %d ,", i, wkc);
         // printf(" Statusword: %X ,", in_somanet_1->Statusword);
         // printf(" Op Mode Display: %d ,", in_somanet_1->OpModeDisplay);
-        // printf(" ActualPos: %" PRId32 " ,\n", in_somanet_1_[0]->PositionValue);
+        // printf(" ActualPos: %" PRId32 " ,\n", in_somanet_[0]->PositionValue);
         // printf(" DemandPos: %" PRId32 " ,",
-        // in_somanet_1_[0]->PositionDemandInternalValue); printf(" ActualVel:
-        // %" PRId32 " ,", in_somanet_1_[0]->VelocityValue);
-        // printf(" DemandVel: %" PRId32 " ,", in_somanet_1_[0]->VelocityDemandValue);
-        //printf("ActualTorque: %" PRId32 " ,", in_somanet_1_[0]->TorqueValue);
-        // printf(" DemandTorque: %" PRId32 " ,", in_somanet_1_[0]->TorqueDemand);
+        // in_somanet_[0]->PositionDemandInternalValue); printf(" ActualVel:
+        // %" PRId32 " ,", in_somanet_[0]->VelocityValue);
+        // printf(" DemandVel: %" PRId32 " ,", in_somanet_[0]->VelocityDemandValue);
+        //printf("ActualTorque: %" PRId32 " ,", in_somanet_[0]->TorqueValue);
+        // printf(" DemandTorque: %" PRId32 " ,", in_somanet_[0]->TorqueDemand);
         // printf("\n");
 
         // printf(" T:%" PRId64 "\r", ec_DCtime);

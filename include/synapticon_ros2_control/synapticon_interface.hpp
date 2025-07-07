@@ -35,6 +35,7 @@
 #include <rclcpp_lifecycle/state.hpp>
 
 #include "ethercat.h"
+#include "synapticon_ros2_control/unit_conversions.hpp"
 
 namespace synapticon_ros2_control {
 
@@ -108,7 +109,7 @@ public:
   /**
    * \return logger of the SystemInterface.
    */
-  rclcpp::Logger get_logger() const { return *logger_; }
+  rclcpp::Logger getLogger() const { return *logger_; }
 
   /**
    * @brief Error checking. Typically runs in a separate thread.
@@ -130,6 +131,9 @@ private:
 
   // Objects for logging
   std::shared_ptr<rclcpp::Logger> logger_;
+
+  std::deque<std::atomic<double>> mechanical_reductions_;
+  std::deque<std::atomic<uint32_t>> encoder_resolutions_;
 
   // Store the commands for the simulated robot
   std::vector<double> hw_commands_positions_;
@@ -162,11 +166,9 @@ private:
   OSAL_THREAD_HANDLE ecat_error_thread_;
   char io_map_[4096];
 
-  std::vector<InSomanet50t *> in_somanet_1_;
-  std::mutex in_somanet_mtx_;
-  std::vector<OutSomanet50t *> out_somanet_1_;
-
-  std::vector<uint32_t> encoder_resolutions_;
+  std::vector<InSomanet50t *> in_somanet_;
+  std::mutex hw_state_mtx_;
+  std::vector<OutSomanet50t *> out_somanet_;
 
   // For coordination between threads
   volatile std::atomic<int> wkc_;
