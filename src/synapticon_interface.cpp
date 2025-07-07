@@ -121,7 +121,12 @@ OSAL_THREAD_FUNC ecatCheckWrapper(void *ptr) {
 }
 
 /**
- * @brief Wait for initial ecat communication to be established
+ * @brief Wait for initial EtherCAT communication to be established
+ *
+ * This function ensures that process data communication is working properly
+ * by repeatedly sending and receiving process data until successful communication
+ * is established. It blocks until the working counter (WKC) indicates successful
+ * communication.
  */
 void wait_for_good_process_data() {
   // Ensure process data communication is working
@@ -136,6 +141,17 @@ void wait_for_good_process_data() {
   }
 }
 
+/**
+ * @brief Check if the emergency stop is engaged
+ *
+ * This function checks the emergency stop status by first verifying process data
+ * communication and then reading the emergency stop status from the EtherCAT slave.
+ * If communication fails or the emergency stop is engaged, it returns true to
+ * force an emergency stop condition.
+ *
+ * @param expected_wkc The expected working counter value for proper communication
+ * @return true if emergency stop is engaged or communication failed, false otherwise
+ */
 bool e_stop_engaged(int expected_wkc) {
   // First ensure process data communication is working
   ec_send_processdata();
