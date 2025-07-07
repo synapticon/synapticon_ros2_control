@@ -156,11 +156,6 @@ private:
    */
   void somanetCyclicLoop(std::atomic<bool> &in_normal_op_mode);
 
-  /**
-   * @brief Use an ethercat SDO read to check if the emergency stop is engaged
-   */
-  bool eStopEngaged();
-
   std::optional<std::thread> somanet_control_thread_;
 
   size_t num_joints_;

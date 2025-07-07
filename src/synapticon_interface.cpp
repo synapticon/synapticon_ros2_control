@@ -135,6 +135,32 @@ void wait_for_good_process_data() {
     osal_usleep(100000);
   }
 }
+
+bool e_stop_engaged(int expected_wkc) {
+  // First ensure process data communication is working
+  ec_send_processdata();
+  int wkc = ec_receive_processdata(EC_TIMEOUTRET);
+
+  if (wkc < expected_wkc) {
+      RCLCPP_ERROR(rclcpp::get_logger("synapticon_interface"), "Process data communication failed");
+      return true; // Force e-stop on communication failure
+  }
+
+  uint16_t slave_number = 1;
+  uint16_t index = 0x6621;
+  uint8_t subindex = 0x01;
+  bool operate_all_subindices = FALSE;
+  bool value_holder;
+  int object_size = sizeof(value_holder);
+
+  int result = ec_SDOread(slave_number, index, subindex, operate_all_subindices, &object_size, &value_holder, EC_TIMEOUTRXM);
+
+  if (result <= 0) {
+      RCLCPP_ERROR(rclcpp::get_logger("ethercat_interface"), "Failed to read emergency stop status from slave %d", slave_number);
+      return true; // Force e-stop on read failure
+  }
+  return value_holder;
+}
 } // namespace
 
 hardware_interface::CallbackReturn SynapticonSystemInterface::on_init(
@@ -678,7 +704,7 @@ void SynapticonSystemInterface::somanetCyclicLoop(
     std::atomic<bool> &in_normal_op_mode) {
   std::vector<bool> first_iteration(num_joints_ , true);
 
-  while (rclcpp::ok() && !eStopEngaged()) {
+  while (rclcpp::ok() && !e_stop_engaged(expected_wkc_.load())) {
 
     {
       std::lock_guard<std::mutex> lock(hw_state_mtx_);
@@ -977,32 +1003,6 @@ void SynapticonSystemInterface::somanetCyclicLoop(
   ec_close();
   // Exit the thread
   return;
-}
-
-bool SynapticonSystemInterface::eStopEngaged() {
-    // First ensure process data communication is working
-    ec_send_processdata();
-    int wkc = ec_receive_processdata(EC_TIMEOUTRET);
-
-    if (wkc < expected_wkc_) {
-        RCLCPP_ERROR(getLogger(), "Process data communication failed");
-        return true; // Force e-stop on communication failure
-    }
-
-    uint16_t slave_number = 1;
-    uint16_t index = 0x6621;
-    uint8_t subindex = 0x01;
-    bool operate_all_subindices = FALSE;
-    bool value_holder;
-    int object_size = sizeof(value_holder);
-
-    int result = ec_SDOread(slave_number, index, subindex, operate_all_subindices, &object_size, &value_holder, EC_TIMEOUTRXM);
-
-    if (result <= 0) {
-        RCLCPP_ERROR(getLogger(), "Failed to read emergency stop status from slave %d", slave_number);
-        return true; // Force e-stop on read failure
-    }
-    return value_holder;
 }
 
 } // namespace synapticon_ros2_control
