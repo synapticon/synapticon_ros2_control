@@ -865,7 +865,7 @@ void SynapticonSystemInterface::somanetCyclicLoop(
                 if (need_more_spring_adjust)
                 {
                   allow_mode_change_ = false;
-                  out_somanet_[joint_idx]->TargetTorque = SPRING_ADJUST_MAX_TORQUE;
+                  out_somanet_[joint_idx]->TargetTorque = 1500;
                   out_somanet_[joint_idx]->OpMode = PROFILE_TORQUE_MODE;
                   out_somanet_[joint_idx]->TorqueOffset = 0;
                   out_somanet_[joint_idx]->Controlword = NORMAL_OPERATION_BRAKES_OFF;
