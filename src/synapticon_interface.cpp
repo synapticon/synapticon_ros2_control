@@ -604,9 +604,11 @@ void SynapticonSystemInterface::somanetCyclicLoop(
               out_somanet_[joint_idx]->TorqueOffset = 0;
               out_somanet_[joint_idx]->Controlword = NORMAL_OPERATION_BRAKES_ON;
             } else if (control_level_[joint_idx] == control_level_t::UNDEFINED) {
+              // Turn the brake on
               out_somanet_[joint_idx]->OpMode = PROFILE_TORQUE_MODE;
               out_somanet_[joint_idx]->TorqueOffset = 0;
-              out_somanet_[joint_idx]->Controlword = NORMAL_OPERATION_BRAKES_OFF;
+              out_somanet_[joint_idx]->Controlword = NORMAL_OPERATION_BRAKES_ON;
+              RCLCPP_ERROR(getLogger(), "UNDEFINED mode should never be reached");
             }
           }
         }
