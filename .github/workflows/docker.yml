@@ -4,14 +4,16 @@ on:
   # schedule:
   #   - cron: "0 1 * * *"
   push:
+    branches: [ main ]
   pull_request:
+    branches: [ main ]
   workflow_dispatch:
 
 jobs:
   docker:
     strategy:
       matrix:
-          ROS_DISTRO: [jazzy, rolling]
+        ROS_DISTRO: [jazzy, rolling]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
