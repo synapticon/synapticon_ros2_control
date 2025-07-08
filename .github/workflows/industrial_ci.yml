@@ -1,6 +1,11 @@
-name: CI
+name: Industrial CI
 
-on: [push, pull_request, workflow_dispatch]
+on:
+  push:
+    branches: [ humble ]
+  pull_request:
+    branches: [ humble ]
+  workflow_dispatch:
 
 jobs:
   industrial_ci:
