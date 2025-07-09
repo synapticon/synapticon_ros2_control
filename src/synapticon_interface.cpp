@@ -815,11 +815,9 @@ void SynapticonSystemInterface::somanetCyclicLoop(
                 if (std::abs(normalized_dial) < WRIST_ROLL_DEADBAND) {
                   normalized_dial = 0;
                 }
-                double velocity = normalized_dial * MYSTERY_VELOCITY_MULTIPLIER * mechanical_reductions_.at(joint_idx).load() * MAX_WRIST_ROLL_VELOCITY;
-
-                out_somanet_[joint_idx]->TargetVelocity = velocity;
-                out_somanet_[joint_idx]->OpMode = CYCLIC_VELOCITY_MODE;
-                out_somanet_[joint_idx]->VelocityOffset = 0;
+                out_somanet_[joint_idx]->TargetTorque = static_cast<int16_t>(std::round(normalized_dial * 500.0));
+                out_somanet_[joint_idx]->OpMode = PROFILE_TORQUE_MODE;
+                out_somanet_[joint_idx]->TorqueOffset = 0;
                 out_somanet_[joint_idx]->Controlword = NORMAL_OPERATION_BRAKES_OFF;
               } else {
                 if (!std::isnan(threadsafe_commands_efforts_[joint_idx])) {
