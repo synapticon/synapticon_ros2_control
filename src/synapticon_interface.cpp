@@ -52,11 +52,11 @@ constexpr int32_t ANALOG_INPUT_MIDPOINT = 32768;
 constexpr int32_t WRIST_DIAL_MIN = 19000;
 constexpr int32_t WRIST_DIAL_MAX = 46000;
 constexpr double MAX_WRIST_PITCH_VELOCITY = 0.3;
-constexpr double MAX_WRIST_ROLL_VELOCITY = 0.15;
+constexpr double MAX_WRIST_ROLL_VELOCITY = 0.26;
 // TODO: what's with the bullshit multiplier?
 constexpr double MYSTERY_VELOCITY_MULTIPLIER = 10000;
 constexpr double WRIST_PITCH_DEADBAND = 0.05;
-constexpr double WRIST_ROLL_DEADBAND = 0.05;
+constexpr double WRIST_ROLL_DEADBAND = 0.1;
 // Motion threshold of the inertial actuator
 constexpr double DYNAMIC_COMP_MOTION_THRESHOLD = 0.04;  // rad
 constexpr double SPRING_ADJUST_MAX_TORQUE = 2500.0;  // per mill of rated torque
@@ -815,9 +815,10 @@ void SynapticonSystemInterface::somanetCyclicLoop(
                 if (std::abs(normalized_dial) < WRIST_ROLL_DEADBAND) {
                   normalized_dial = 0;
                 }
-                out_somanet_[joint_idx]->TargetTorque = static_cast<int16_t>(std::round(normalized_dial * 500.0));
-                out_somanet_[joint_idx]->OpMode = PROFILE_TORQUE_MODE;
-                out_somanet_[joint_idx]->TorqueOffset = 0;
+                double velocity = normalized_dial * MYSTERY_VELOCITY_MULTIPLIER * mechanical_reductions_.at(joint_idx).load() * MAX_WRIST_ROLL_VELOCITY;
+                out_somanet_[joint_idx]->TargetVelocity = velocity;
+                out_somanet_[joint_idx]->OpMode = CYCLIC_VELOCITY_MODE;
+                out_somanet_[joint_idx]->VelocityOffset = 0;
                 out_somanet_[joint_idx]->Controlword = NORMAL_OPERATION_BRAKES_OFF;
               } else {
                 if (!std::isnan(threadsafe_commands_efforts_[joint_idx])) {
