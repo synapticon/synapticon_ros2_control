@@ -44,6 +44,7 @@ constexpr size_t WRIST_PITCH_IDX = 5;
 constexpr size_t WRIST_ROLL_IDX = 6;
 // TODO: update this if the wrist or EE is added
 constexpr double SPRING_POSITION_WITHOUT_PAYLOAD = 31000;
+constexpr double MIN_ALLOWABLE_SPRING_POSITION = 18000;
 // TODO: update this if the max payload changes
 constexpr double SPRING_POSITION_MAX_PAYLOAD = 45000;
 // Expected midpoint of the 16-bit analog inputs
@@ -581,7 +582,7 @@ SynapticonSystemInterface::write(const rclcpp::Time & /*time*/,
     }
     if (!std::isnan(hw_commands_spring_adjust_[i]))
     {
-      hw_commands_spring_adjust_[i] = std::clamp(hw_commands_spring_adjust_[i], SPRING_POSITION_WITHOUT_PAYLOAD, SPRING_POSITION_MAX_PAYLOAD);
+      hw_commands_spring_adjust_[i] = std::clamp(hw_commands_spring_adjust_[i], MIN_ALLOWABLE_SPRING_POSITION, SPRING_POSITION_MAX_PAYLOAD);
       threadsafe_commands_spring_adjust_[i] = hw_commands_spring_adjust_[i];
     }
     // No need to do anything for compensate_for_added/removed_load, these algorithms are automated
