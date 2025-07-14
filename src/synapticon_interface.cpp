@@ -60,6 +60,7 @@ constexpr double WRIST_ROLL_DEADBAND = 0.1;
 // Motion threshold of the inertial actuator
 constexpr double DYNAMIC_COMP_MOTION_THRESHOLD = 0.04;  // rad
 constexpr double SPRING_ADJUST_MAX_TORQUE = 2500.0;  // per mill of rated torque
+constexpr double SPRING_ADJUST_MIN_TORQUE = 900.0;  // per mill of rated torque
 
 int32_t read_sdo_value(uint16_t slave_idx, uint16_t index, uint8_t subindex) {
     int32_t value_holder;
@@ -69,50 +70,9 @@ int32_t read_sdo_value(uint16_t slave_idx, uint16_t index, uint8_t subindex) {
     return value_holder;
 }
 
-// TODO: this function seems to be called repeatedly when I don't expect it
-/* brief Use a PD controller to move the spring adjust actuator to given potentiometer position */
-double spring_adjust_torque_pd(
-  double target_position,
-  int32_t current_spring_pot_position,
-  SpringAdjustState& state,
-  bool& allow_mode_change) {
-
-  double K_P = 1.0;
-  double K_D = 0.5;
-  double error = target_position - static_cast<double>(current_spring_pot_position);
-  std::chrono::steady_clock::time_point time_now = std::chrono::steady_clock::now();
-  std::chrono::duration<double> time_elapsed = time_now - state.time_prev_;
-  double error_dt = 0;
-  if (state.error_prev_) {
-      error_dt = (error - *state.error_prev_) / time_elapsed.count();
-  }
-  state.error_prev_ = error;
-  state.time_prev_ = time_now;
-  double actuator_torque = K_P * error + K_D * error_dt;
-
-  // A ceiling at X% of rated torque
-  // With a floor of Y% torque (below that, the motor doesn't move)
-  // We overdrive the motor, higher than rated torque, since it's a quick motion
-  if (actuator_torque > 0) {
-      // Per mill of rated torque
-      actuator_torque = std::clamp(actuator_torque, 900.0, SPRING_ADJUST_MAX_TORQUE);
-  } else {
-      actuator_torque = std::clamp(actuator_torque, -SPRING_ADJUST_MAX_TORQUE, -900.0);
-  }
-
-  // Only set allow_mode_change to true when we're very close to target and stable
-  // This should be a one-time transition, not continuous updates
-  if (std::abs(error) < 500 && error_dt <= 1) {
-      // We can safely set the target torque to zero b/c this actuator is not backdrivable
-      actuator_torque = 0;
-      // Only set allow_mode_change to true if it was previously false (one-time transition)
-      if (!allow_mode_change) {
-          allow_mode_change = true;
-      }
-  }
-  // Don't set allow_mode_change to false here - it should be set when entering the mode
-
-  return actuator_torque;
+void reset_spring_adjust_state(SpringAdjustState& state) {
+  state.time_prev_ = std::chrono::steady_clock::now();
+  state.error_prev_ = std::nullopt;
 }
 
 // This is related to making a member function static for osal_thread_create
@@ -178,7 +138,101 @@ bool e_stop_engaged(int expected_wkc) {
   }
   return value_holder;
 }
+
 } // namespace
+
+// TODO: this function seems to be called repeatedly when I don't expect it
+/* brief Use a PD controller to move the spring adjust actuator to given potentiometer position */
+double spring_adjust_by_linear_pot(
+  double target_position,
+  int32_t current_spring_pot_position,
+  SpringAdjustState& state,
+  bool& allow_mode_change) {
+
+  double K_P = 1.0;
+  double K_D = 0.5;
+  double error = target_position - static_cast<double>(current_spring_pot_position);
+  std::chrono::steady_clock::time_point time_now = std::chrono::steady_clock::now();
+  std::chrono::duration<double> time_elapsed = time_now - state.time_prev_;
+  double error_dt = 0;
+  if (state.error_prev_) {
+      error_dt = (error - *state.error_prev_) / time_elapsed.count();
+  }
+  state.error_prev_ = error;
+  state.time_prev_ = time_now;
+  double actuator_torque = K_P * error + K_D * error_dt;
+
+  // A ceiling at X% of rated torque
+  // With a floor of Y% torque (below that, the motor doesn't move)
+  // We overdrive the motor, higher than rated torque, since it's a quick motion
+  if (actuator_torque > 0) {
+      // Per mill of rated torque
+      actuator_torque = std::clamp(actuator_torque, SPRING_ADJUST_MIN_TORQUE, SPRING_ADJUST_MAX_TORQUE);
+  } else {
+      actuator_torque = std::clamp(actuator_torque, -SPRING_ADJUST_MAX_TORQUE, -SPRING_ADJUST_MIN_TORQUE);
+  }
+
+  // Only set allow_mode_change to true when we're very close to target and stable
+  // This should be a one-time transition, not continuous updates
+  if (std::abs(error) < 500 && error_dt <= 1) {
+      // We can safely set the target torque to zero b/c this actuator is not backdrivable
+      actuator_torque = 0;
+      // Only set allow_mode_change to true if it was previously false (one-time transition)
+      if (!allow_mode_change) {
+          allow_mode_change = true;
+      }
+  }
+  // Don't set allow_mode_change to false here - it should be set when entering the mode
+
+  return actuator_torque;
+}
+
+/* brief Use a PD controller to move the spring adjust actuator until inertial actuator reaches target position */
+double spring_adjust_by_inertial_actuator_position(
+  double target_inertial_act_position_rad,
+  double current_inertial_act_position_rad,
+  SpringAdjustState& state,
+  bool& allow_mode_change) {
+
+  // Error is expected to be approximately 0-2 degrees (0-0.04 rad)
+  // So for a change of 0.04 rad, spring adjust actuator torque should change by (SPRING_ADJUST_MAX_TORQUE - SPRING_ADJUST_MIN_TORQUE)
+  double K_P = (SPRING_ADJUST_MAX_TORQUE - SPRING_ADJUST_MIN_TORQUE) / 0.04;
+  double K_D = K_P / 10.0;
+  double error = target_inertial_act_position_rad - current_inertial_act_position_rad;
+  std::chrono::steady_clock::time_point time_now = std::chrono::steady_clock::now();
+  std::chrono::duration<double> time_elapsed = time_now - state.time_prev_;
+  double error_dt = 0;
+  if (state.error_prev_ && time_elapsed.count() > 1e-6) {
+    error_dt = (error - *state.error_prev_) / time_elapsed.count();
+  }
+  state.error_prev_ = error;
+  state.time_prev_ = time_now;
+  double actuator_torque = SPRING_ADJUST_MIN_TORQUE + K_P * error + K_D * error_dt;
+
+  // A ceiling at X% of rated torque
+  // With a floor of Y% torque (below that, the motor doesn't move)
+  // We overdrive the motor, higher than rated torque, since it's a quick motion
+  if (actuator_torque > 0) {
+      // Per mill of rated torque
+      actuator_torque = std::clamp(actuator_torque, SPRING_ADJUST_MIN_TORQUE, SPRING_ADJUST_MAX_TORQUE);
+  } else {
+      actuator_torque = std::clamp(actuator_torque, -SPRING_ADJUST_MAX_TORQUE, -SPRING_ADJUST_MIN_TORQUE);
+  }
+
+  // Only set allow_mode_change to true when we're very close to target and stable
+  // This should be a one-time transition, not continuous updates
+  if (std::abs(error) < 0.01 && error_dt <= 0.01) {
+      // We can safely set the target torque to zero b/c this actuator is not backdrivable
+      actuator_torque = 0;
+      // Only set allow_mode_change to true if it was previously false (one-time transition)
+      if (!allow_mode_change) {
+          allow_mode_change = true;
+      }
+  }
+  // Don't set allow_mode_change to false here - it should be set when entering the mode
+
+  return actuator_torque;
+}
 
 hardware_interface::CallbackReturn SynapticonSystemInterface::on_init(
     const hardware_interface::HardwareInfo &info) {
@@ -400,8 +454,7 @@ SynapticonSystemInterface::prepare_command_mode_switch(
     return hardware_interface::return_type::ERROR;
   }
 
-  // This should be cleared unless in COMPENSATE_FOR_ADDED_LOAD mode
-  initial_inertial_actuator_position_ = std::nullopt;
+  reset_spring_adjust_state(spring_adjust_state_);
 
   // Prepare for new command modes
   std::vector<control_level_t> new_modes = {};
@@ -422,8 +475,6 @@ SynapticonSystemInterface::prepare_command_mode_switch(
         // Spring adjust puts all joints in QUICK_STOP mode except the spring adjust joint
         if (i == SPRING_ADJUST_IDX) {
           new_modes.push_back(control_level_t::SPRING_ADJUST);
-          spring_adjust_state_.time_prev_ = std::chrono::steady_clock::now();
-          spring_adjust_state_.error_prev_ = std::nullopt;
         } else {
           new_modes.push_back(control_level_t::QUICK_STOP);
         }
@@ -437,7 +488,7 @@ SynapticonSystemInterface::prepare_command_mode_switch(
       } else if (key == info_.joints[i].name + "/compensate_for_added_load") {
         {
           std::lock_guard<std::mutex> lock(hw_state_mtx_);
-          initial_inertial_actuator_position_ = hw_states_positions_[INERTIAL_ACTUATOR_IDX];
+          initial_inertial_act_position_rad_ = hw_states_positions_[INERTIAL_ACTUATOR_IDX];
         }
         // compensate_for_added_load puts all joints in QUICK_STOP mode except those in the elevation link
         if ((i == SPRING_ADJUST_IDX) || (i == INERTIAL_ACTUATOR_IDX)) {
@@ -728,13 +779,6 @@ void SynapticonSystemInterface::somanetCyclicLoop(
       ec_send_processdata();
       wkc_ = ec_receive_processdata(EC_TIMEOUTRET);
 
-      // This is for COMPENSATE_FOR_ADDED_LOAD mode
-      bool need_more_spring_adjust = false;
-      if (initial_inertial_actuator_position_) {
-        double current_position_rad = input_ticks_to_output_shaft_rad(in_somanet_[INERTIAL_ACTUATOR_IDX]->PositionValue, mechanical_reductions_.at(INERTIAL_ACTUATOR_IDX).load(), encoder_resolutions_[INERTIAL_ACTUATOR_IDX].load());
-        need_more_spring_adjust = std::abs(current_position_rad - initial_inertial_actuator_position_.value()) < DYNAMIC_COMP_MOTION_THRESHOLD;
-      }
-
       if (wkc_ >= expected_wkc_) {
         for (size_t joint_idx = 0; joint_idx < num_joints_; ++joint_idx) {
           if (first_iteration.at(joint_idx)) {
@@ -871,7 +915,7 @@ void SynapticonSystemInterface::somanetCyclicLoop(
 
                 // Create a local boolean variable since atomics can't be passed by reference
                 bool allow_mode_change = allow_mode_change_.load();
-                double actuator_torque = spring_adjust_torque_pd(
+                double actuator_torque = spring_adjust_by_linear_pot(
                   threadsafe_commands_spring_adjust_[joint_idx],
                   spring_pot_position,
                   spring_adjust_state_,
@@ -890,12 +934,12 @@ void SynapticonSystemInterface::somanetCyclicLoop(
               }
             } else if (control_level_[joint_idx] == control_level_t::COMPENSATE_FOR_REMOVED_LOAD)
             {
-              // Spring adjust joint: proportional control based on analog input 2 potentiometer
+              // Spring adjust joint: proportional control based on analog input potentiometer
               if (joint_idx == SPRING_ADJUST_IDX) {
 
                 // Create a local boolean variable since atomics can't be passed by reference
                 bool allow_mode_change = allow_mode_change_.load();
-                double actuator_torque = spring_adjust_torque_pd(
+                double actuator_torque = spring_adjust_by_linear_pot(
                   SPRING_POSITION_WITHOUT_PAYLOAD,
                   spring_pot_position,
                   spring_adjust_state_,
@@ -917,45 +961,32 @@ void SynapticonSystemInterface::somanetCyclicLoop(
               // All actuators except those in the elevation link have been put in brake mode
               // The trident brake should be released
               // TODO: put all actuators except those in the elevation link in impedance mode so they can allow arcing motion
-              // Record the starting position of the inertial actuator
-              // Begin moving the spring adjust joint (velocity mode)
-              // Monitor for the inertial actuator position to change more than X rad
-              // Then stop the spring adjust motion
-              // TODO: if spring adjust hits a position limit, stop and go to QUICK_STOP mode
+              // Apply a torque to spring adjust actuator using PD control
 
               if (joint_idx == SPRING_ADJUST_IDX) {
-                if (need_more_spring_adjust)
-                {
-                  allow_mode_change_ = false;
-                  out_somanet_[joint_idx]->TargetTorque = 1500;
-                  out_somanet_[joint_idx]->OpMode = PROFILE_TORQUE_MODE;
-                  out_somanet_[joint_idx]->TorqueOffset = 0;
-                  out_somanet_[joint_idx]->Controlword = NORMAL_OPERATION_BRAKES_OFF;
-                }
-                // else, stop the spring adjust motion
-                // It's not backdrivable
-                else
-                {
-                  allow_mode_change_ = true;
-                  out_somanet_[joint_idx]->TargetTorque = 0;
-                  out_somanet_[joint_idx]->OpMode = PROFILE_TORQUE_MODE;
-                  out_somanet_[joint_idx]->TorqueOffset = 0;
-                  out_somanet_[joint_idx]->Controlword = NORMAL_OPERATION_BRAKES_OFF;
-                }
+                double current_inertial_position_rad = input_ticks_to_output_shaft_rad(in_somanet_[INERTIAL_ACTUATOR_IDX]->PositionValue, mechanical_reductions_.at(INERTIAL_ACTUATOR_IDX).load(), encoder_resolutions_[INERTIAL_ACTUATOR_IDX].load());
+
+                // Create a local boolean variable since atomics can't be passed by reference
+                bool allow_mode_change = allow_mode_change_.load();
+                double actuator_torque = spring_adjust_by_inertial_actuator_position(
+                  initial_inertial_act_position_rad_ + DYNAMIC_COMP_MOTION_THRESHOLD,
+                  current_inertial_position_rad,
+                  spring_adjust_state_,
+                  allow_mode_change  // Pass the local variable instead of the atomic member
+                );
+                // Update the atomic member with the new value
+                allow_mode_change_.store(allow_mode_change);
+
+                out_somanet_[joint_idx]->TargetTorque = actuator_torque;
+                out_somanet_[joint_idx]->OpMode = PROFILE_TORQUE_MODE;
+                out_somanet_[joint_idx]->TorqueOffset = 0;
+                out_somanet_[joint_idx]->Controlword = NORMAL_OPERATION_BRAKES_OFF;
               }
               // Inertial actuator joint should be free to move so we can detect when motion is complete
               else if (joint_idx == INERTIAL_ACTUATOR_IDX) {
-                if (need_more_spring_adjust) {
-                  out_somanet_[joint_idx]->TargetTorque = 0;
-                  out_somanet_[joint_idx]->OpMode = PROFILE_TORQUE_MODE;
-                  out_somanet_[joint_idx]->Controlword = NORMAL_OPERATION_BRAKES_OFF;
-                }
-                else {
-                  out_somanet_[joint_idx]->OpMode = CYCLIC_VELOCITY_MODE;
-                  out_somanet_[joint_idx]->TargetVelocity = 0;
-                  out_somanet_[joint_idx]->VelocityOffset = 0;
-                  out_somanet_[joint_idx]->Controlword = NORMAL_OPERATION_BRAKES_OFF;
-                }
+                out_somanet_[joint_idx]->TargetTorque = 0;
+                out_somanet_[joint_idx]->OpMode = PROFILE_TORQUE_MODE;
+                out_somanet_[joint_idx]->Controlword = NORMAL_OPERATION_BRAKES_OFF;
               }
               else {
                 RCLCPP_ERROR(getLogger(), "Should never get here since the other joints are in QUICK_STOP mode");

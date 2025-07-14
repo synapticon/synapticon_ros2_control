@@ -44,7 +44,25 @@ struct SpringAdjustState {
     std::optional<double> error_prev_;
 };
 
-namespace {
+/**
+ * @brief Computes control output for spring adjust joint using inertial actuator position feedback
+ *
+ * @param target_inertial_act_position_rad [in] The desired inertial actuator position in radians.
+ * @param current_inertial_act_position_rad [in] The current inertial actuator position in radians.
+ * @param state [in/out] A SpringAdjustState struct containing:
+ *                      - time_prev_: Previous timestamp for computing time derivatives
+ *                      - error_prev_: Previous error value for computing error derivatives
+ * @param allow_mode_change [in/out] Boolean flag that gets set to true when the target position is reached
+ *                                  and stable (error < 0.01 rad and error_dt <= 0.01).
+ *                                  Allows us to leave this control mode.
+ * @return double The computed actuator torque in per-mill of rated torque. The output is clamped.
+ */
+double spring_adjust_by_inertial_actuator_position(
+  double target_inertial_act_position_rad,
+  double current_inertial_act_position_rad,
+  SpringAdjustState& state,
+  bool& allow_mode_change);
+
 /**
  * @brief Computes control output for spring adjust joint using a custom PID implementation
  *
@@ -63,12 +81,11 @@ namespace {
  *       the built-in Synapticon PID control, this joint requires custom control logic to handle
  *       the potentiometer-based position sensing.
  */
-double spring_adjust_torque_pd(
+double spring_adjust_by_linear_pot(
   double target_position,
   int32_t current_spring_pot_position,
   SpringAdjustState& state,
   bool& allow_mode_change);
-} // namespace
 
 #pragma pack(1)
 // Somanet structs
@@ -222,7 +239,7 @@ private:
   SpringAdjustState spring_adjust_state_;
 
   // This variable is used during dynamic spring compensation
-  std::optional<double> initial_inertial_actuator_position_;
+  double initial_inertial_act_position_rad_;
 };
 
 } // namespace synapticon_ros2_control

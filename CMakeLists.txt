@@ -126,6 +126,17 @@ if(BUILD_TESTING)
   target_link_libraries(test_unit_conversions synapticon_ros2_control)
   ament_target_dependencies(test_unit_conversions
     ${THIS_PACKAGE_INCLUDE_DEPENDS})
+
+  # Spring adjustment
+  ament_add_gtest_executable(test_spring_adjust_pd_controllers 
+    test/test_spring_adjust_pd_controllers.cpp
+    src/synapticon_interface.cpp)
+  target_include_directories(test_spring_adjust_pd_controllers PUBLIC
+    $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/include>
+  )
+  target_link_libraries(test_spring_adjust_pd_controllers synapticon_ros2_control)
+  ament_target_dependencies(test_spring_adjust_pd_controllers
+    ${THIS_PACKAGE_INCLUDE_DEPENDS})
 endif()
 
 ament_package()
