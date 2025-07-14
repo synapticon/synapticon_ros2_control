@@ -61,6 +61,8 @@ constexpr double WRIST_ROLL_DEADBAND = 0.1;
 // Motion threshold of the inertial actuator
 constexpr double DYNAMIC_COMP_MOTION_THRESHOLD = 0.04;  // rad
 constexpr double SPRING_ADJUST_MIN_TORQUE = 700.0;  // per mill of rated torque
+// Holding torque for the wrist during QUICK_STOP mode
+constexpr double WRIST_PITCH_HOLD_TORQUE = 400.0;  // per mill of rated torque
 
 int32_t read_sdo_value(uint16_t slave_idx, uint16_t index, uint8_t subindex) {
     int32_t value_holder;
@@ -899,6 +901,12 @@ void SynapticonSystemInterface::somanetCyclicLoop(
             {
               // Turn the brake on
               out_somanet_[joint_idx]->OpMode = PROFILE_TORQUE_MODE;
+              if (joint_idx == WRIST_PITCH_IDX) {
+                out_somanet_[joint_idx]->TargetTorque = WRIST_PITCH_HOLD_TORQUE;  // per-mill of rated torque
+              }
+              else {
+                out_somanet_[joint_idx]->TargetTorque = 0;
+              }
               out_somanet_[joint_idx]->TorqueOffset = 0;
               out_somanet_[joint_idx]->Controlword = NORMAL_OPERATION_BRAKES_ON;
             } else if (control_level_[joint_idx] == control_level_t::SPRING_ADJUST)
