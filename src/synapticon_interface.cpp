@@ -38,6 +38,7 @@ unsigned int NORMAL_OPERATION_BRAKES_OFF = 0b00001111;
 unsigned int NORMAL_OPERATION_BRAKES_ON = 0b00001011;
 constexpr char EXPECTED_SLAVE_NAME[] = "SOMANET";
 constexpr std::array<double, 7> TORQUE_FRICTION_OFFSET = {0, 0, 0, 0, 0, 0, 0}; // per mill
+constexpr size_t YAW_2_IDX = 1;
 constexpr size_t SPRING_ADJUST_IDX = 2;
 constexpr size_t INERTIAL_ACTUATOR_IDX = 3;
 constexpr size_t WRIST_PITCH_IDX = 5;
@@ -492,7 +493,7 @@ SynapticonSystemInterface::prepare_command_mode_switch(
           initial_inertial_act_position_rad_ = hw_states_positions_[INERTIAL_ACTUATOR_IDX];
         }
         // compensate_for_added_load puts all joints in QUICK_STOP mode except those in the elevation link
-        if ((i == SPRING_ADJUST_IDX) || (i == INERTIAL_ACTUATOR_IDX)) {
+        if ((i == SPRING_ADJUST_IDX) || (i == INERTIAL_ACTUATOR_IDX) || (i == YAW_2_IDX)) {
           new_modes.push_back(control_level_t::COMPENSATE_FOR_ADDED_LOAD);
         } else {
           new_modes.push_back(control_level_t::QUICK_STOP);
@@ -985,6 +986,13 @@ void SynapticonSystemInterface::somanetCyclicLoop(
               }
               // Inertial actuator joint should be free to move so we can detect when motion is complete
               else if (joint_idx == INERTIAL_ACTUATOR_IDX) {
+                out_somanet_[joint_idx]->TargetTorque = 0;
+                out_somanet_[joint_idx]->OpMode = PROFILE_TORQUE_MODE;
+                out_somanet_[joint_idx]->Controlword = NORMAL_OPERATION_BRAKES_OFF;
+              }
+              // Yaw2 joint should be free to move to allow some compliance, i.e.
+              // in case the end effector is pushed into the wall
+              else if (joint_idx == YAW_2_IDX) {
                 out_somanet_[joint_idx]->TargetTorque = 0;
                 out_somanet_[joint_idx]->OpMode = PROFILE_TORQUE_MODE;
                 out_somanet_[joint_idx]->Controlword = NORMAL_OPERATION_BRAKES_OFF;
