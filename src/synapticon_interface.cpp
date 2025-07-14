@@ -37,7 +37,7 @@ unsigned int NORMAL_OPERATION_BRAKES_OFF = 0b00001111;
 // Bit 2 (0-indexed) goes to 0 to turn on Quick Stop
 unsigned int NORMAL_OPERATION_BRAKES_ON = 0b00001011;
 constexpr char EXPECTED_SLAVE_NAME[] = "SOMANET";
-constexpr std::array<double, 7> TORQUE_FRICTION_OFFSET = {0, 0, 0, 0, 10, 0, 0}; // per mill
+constexpr std::array<double, 7> TORQUE_FRICTION_OFFSET = {0, 0, 0, 0, 0, 0, 0}; // per mill
 constexpr size_t SPRING_ADJUST_IDX = 2;
 constexpr size_t INERTIAL_ACTUATOR_IDX = 3;
 constexpr size_t WRIST_PITCH_IDX = 5;
@@ -59,8 +59,7 @@ constexpr double WRIST_PITCH_DEADBAND = 0.05;
 constexpr double WRIST_ROLL_DEADBAND = 0.1;
 // Motion threshold of the inertial actuator
 constexpr double DYNAMIC_COMP_MOTION_THRESHOLD = 0.04;  // rad
-constexpr double SPRING_ADJUST_MAX_TORQUE = 2500.0;  // per mill of rated torque
-constexpr double SPRING_ADJUST_MIN_TORQUE = 900.0;  // per mill of rated torque
+constexpr double SPRING_ADJUST_MIN_TORQUE = 700.0;  // per mill of rated torque
 
 int32_t read_sdo_value(uint16_t slave_idx, uint16_t index, uint8_t subindex) {
     int32_t value_holder;
@@ -165,11 +164,12 @@ double spring_adjust_by_linear_pot(
   // A ceiling at X% of rated torque
   // With a floor of Y% torque (below that, the motor doesn't move)
   // We overdrive the motor, higher than rated torque, since it's a quick motion
+  constexpr double spring_adjust_max_torque = 2500.0;  // per mill of rated torque
   if (actuator_torque > 0) {
       // Per mill of rated torque
-      actuator_torque = std::clamp(actuator_torque, SPRING_ADJUST_MIN_TORQUE, SPRING_ADJUST_MAX_TORQUE);
+      actuator_torque = std::clamp(actuator_torque, SPRING_ADJUST_MIN_TORQUE, spring_adjust_max_torque);
   } else {
-      actuator_torque = std::clamp(actuator_torque, -SPRING_ADJUST_MAX_TORQUE, -SPRING_ADJUST_MIN_TORQUE);
+      actuator_torque = std::clamp(actuator_torque, -spring_adjust_max_torque, -SPRING_ADJUST_MIN_TORQUE);
   }
 
   // Only set allow_mode_change to true when we're very close to target and stable
@@ -195,8 +195,9 @@ double spring_adjust_by_inertial_actuator_position(
   bool& allow_mode_change) {
 
   // Error is expected to be approximately 0-2 degrees (0-0.04 rad)
-  // So for a change of 0.04 rad, spring adjust actuator torque should change by (SPRING_ADJUST_MAX_TORQUE - SPRING_ADJUST_MIN_TORQUE)
-  double K_P = (SPRING_ADJUST_MAX_TORQUE - SPRING_ADJUST_MIN_TORQUE) / 0.04;
+  constexpr double comp_max_torque = 1800;
+  // So for a change of 0.04 rad, spring adjust actuator torque should change by (comp_max_torque - SPRING_ADJUST_MIN_TORQUE)
+  double K_P = 0.6 * (comp_max_torque - SPRING_ADJUST_MIN_TORQUE) / 0.04;
   double K_D = K_P / 10.0;
   double error = target_inertial_act_position_rad - current_inertial_act_position_rad;
   std::chrono::steady_clock::time_point time_now = std::chrono::steady_clock::now();
@@ -214,14 +215,14 @@ double spring_adjust_by_inertial_actuator_position(
   // We overdrive the motor, higher than rated torque, since it's a quick motion
   if (actuator_torque > 0) {
       // Per mill of rated torque
-      actuator_torque = std::clamp(actuator_torque, SPRING_ADJUST_MIN_TORQUE, SPRING_ADJUST_MAX_TORQUE);
+      actuator_torque = std::clamp(actuator_torque, SPRING_ADJUST_MIN_TORQUE, comp_max_torque);
   } else {
-      actuator_torque = std::clamp(actuator_torque, -SPRING_ADJUST_MAX_TORQUE, -SPRING_ADJUST_MIN_TORQUE);
+      actuator_torque = std::clamp(actuator_torque, -comp_max_torque, -SPRING_ADJUST_MIN_TORQUE);
   }
 
   // Only set allow_mode_change to true when we're very close to target and stable
   // This should be a one-time transition, not continuous updates
-  if (std::abs(error) < 0.01 && error_dt <= 0.01) {
+  if (std::abs(error) < 0.01/* && error_dt <= 0.01*/) {
       // We can safely set the target torque to zero b/c this actuator is not backdrivable
       actuator_torque = 0;
       // Only set allow_mode_change to true if it was previously false (one-time transition)
