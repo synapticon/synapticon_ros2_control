@@ -79,7 +79,7 @@ void reset_spring_adjust_state(SpringAdjustState& state) {
 }
 
 // This is related to making a member function static for osal_thread_create
-OSAL_THREAD_FUNC ecatCheckWrapper(void *ptr) {
+OSAL_THREAD_FUNC ecat_check_wrapper(void *ptr) {
     SynapticonSystemInterface* interface = static_cast<SynapticonSystemInterface*>(ptr);
     return interface->ecatCheck(ptr);
 }
@@ -352,7 +352,7 @@ hardware_interface::CallbackReturn SynapticonSystemInterface::on_init(
 
   // A thread to handle ethercat errors
   osal_thread_create(&ecat_error_thread_, 128000,
-                     (void*)&ecatCheckWrapper,
+                     (void*)&ecat_check_wrapper,
                      this);
 
   // Ethercat initialization
