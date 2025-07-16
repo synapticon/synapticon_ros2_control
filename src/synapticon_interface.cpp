@@ -221,7 +221,9 @@ double spring_adjust_by_inertial_actuator_position(
       // Per mill of rated torque
       actuator_torque = std::clamp(actuator_torque, SPRING_ADJUST_MIN_TORQUE, comp_max_torque);
   } else {
-      actuator_torque = std::clamp(actuator_torque, -comp_max_torque, -SPRING_ADJUST_MIN_TORQUE);
+      // Don't adjust down
+      // actuator_torque = std::clamp(actuator_torque, -comp_max_torque, -SPRING_ADJUST_MIN_TORQUE);
+      actuator_torque = 0;
   }
 
   // Only set allow_mode_change to true when we're very close to target and stable
@@ -484,6 +486,7 @@ SynapticonSystemInterface::prepare_command_mode_switch(
           new_modes.push_back(control_level_t::QUICK_STOP);
         }
       } else if (key == info_.joints[i].name + "/compensate_for_removed_load") {
+        allow_mode_change_ = false;
         // compensate_for_removed_load puts all joints in QUICK_STOP mode except the spring adjust joint
         if (i == SPRING_ADJUST_IDX) {
           new_modes.push_back(control_level_t::COMPENSATE_FOR_REMOVED_LOAD);
@@ -491,6 +494,7 @@ SynapticonSystemInterface::prepare_command_mode_switch(
           new_modes.push_back(control_level_t::QUICK_STOP);
         }
       } else if (key == info_.joints[i].name + "/compensate_for_added_load") {
+        allow_mode_change_ = false;
         {
           std::lock_guard<std::mutex> lock(hw_state_mtx_);
           initial_inertial_act_position_rad_ = hw_states_positions_[INERTIAL_ACTUATOR_IDX];
