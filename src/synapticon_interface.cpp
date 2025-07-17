@@ -168,7 +168,7 @@ double spring_adjust_by_linear_pot(
   // A ceiling at X% of rated torque
   // With a floor of Y% torque (below that, the motor doesn't move)
   // We overdrive the motor, higher than rated torque, since it's a quick motion
-  constexpr double spring_adjust_max_torque = 2500.0;  // per mill of rated torque
+  constexpr double spring_adjust_max_torque = 3000.0;  // per mill of rated torque
   if (actuator_torque > 0) {
       // Per mill of rated torque
       actuator_torque = std::clamp(actuator_torque, SPRING_ADJUST_MIN_TORQUE, spring_adjust_max_torque);
@@ -199,10 +199,10 @@ double spring_adjust_by_inertial_actuator_position(
   bool& allow_mode_change) {
 
   // Error is expected to be approximately 0-2 degrees (0-0.04 rad)
-  constexpr double comp_max_torque = 1800;
+  constexpr double comp_max_torque = 3000;
   // So for a change of 0.04 rad, spring adjust actuator torque should change by (comp_max_torque - SPRING_ADJUST_MIN_TORQUE)
   double K_P = 0.5 * (comp_max_torque - SPRING_ADJUST_MIN_TORQUE) / 0.04;
-  double K_D = 3.0 * K_P;
+  double K_D = 5.0 * K_P;
   double error = target_inertial_act_position_rad - current_inertial_act_position_rad;
   std::chrono::steady_clock::time_point time_now = std::chrono::steady_clock::now();
   std::chrono::duration<double> time_elapsed = time_now - state.time_prev_;
