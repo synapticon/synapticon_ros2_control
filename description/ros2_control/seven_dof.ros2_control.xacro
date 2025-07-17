@@ -3,24 +3,24 @@
 
   <xacro:macro name="seven_dof_ros2_control" params="name
     prefix eth_device
-    joint1_mechanical_reduction joint2_mechanical_reduction joint3_mechanical_reduction joint4_mechanical_reduction
-    joint5_mechanical_reduction joint6_mechanical_reduction joint7_mechanical_reduction">
+    yaw1_mechanical_reduction yaw2_mechanical_reduction elev1_j1_mechanical_reduction elev1_j2_mechanical_reduction
+    wrist_yaw_mechanical_reduction wrist_pitch_mechanical_reduction wrist_roll_mechanical_reduction">
 
     <ros2_control name="${name}" type="system">
       <hardware>
         <plugin>synapticon_ros2_control/SynapticonSystemInterface</plugin>
 
         <param name="eth_device">${eth_device}</param>
-        <param name="joint1_mechanical_reduction">${joint1_mechanical_reduction}</param>
-        <param name="joint2_mechanical_reduction">${joint2_mechanical_reduction}</param>
-        <param name="joint3_mechanical_reduction">${joint3_mechanical_reduction}</param>
-        <param name="joint4_mechanical_reduction">${joint4_mechanical_reduction}</param>
-        <param name="joint5_mechanical_reduction">${joint5_mechanical_reduction}</param>
-        <param name="joint6_mechanical_reduction">${joint6_mechanical_reduction}</param>
-        <param name="joint7_mechanical_reduction">${joint7_mechanical_reduction}</param>
+        <param name="yaw1_mechanical_reduction">${yaw1_mechanical_reduction}</param>
+        <param name="yaw2_mechanical_reduction">${yaw2_mechanical_reduction}</param>
+        <param name="elev1_j1_mechanical_reduction">${elev1_j1_mechanical_reduction}</param>
+        <param name="elev1_j2_mechanical_reduction">${elev1_j2_mechanical_reduction}</param>
+        <param name="wrist_yaw_mechanical_reduction">${wrist_yaw_mechanical_reduction}</param>
+        <param name="wrist_pitch_mechanical_reduction">${wrist_pitch_mechanical_reduction}</param>
+        <param name="wrist_roll_mechanical_reduction">${wrist_roll_mechanical_reduction}</param>
       </hardware>
 
-      <joint name="${prefix}joint1">
+      <joint name="${prefix}yaw1">
         <command_interface name="position"/>
         <command_interface name="velocity"/>
         <command_interface name="hand_guided"/>
@@ -34,7 +34,7 @@
         <state_interface name="hand_guided"/>
       </joint>
 
-      <joint name="${prefix}joint2">
+      <joint name="${prefix}yaw2">
         <command_interface name="position"/>
         <command_interface name="velocity"/>
         <command_interface name="hand_guided"/>
@@ -48,7 +48,7 @@
         <state_interface name="hand_guided"/>
       </joint>
 
-      <joint name="${prefix}joint3">
+      <joint name="${prefix}elev1_j1">
         <command_interface name="position"/>
         <command_interface name="velocity"/>
         <command_interface name="hand_guided"/>
@@ -62,7 +62,7 @@
         <state_interface name="hand_guided"/>
       </joint>
 
-      <joint name="${prefix}joint4">
+      <joint name="${prefix}elev1_j2">
         <command_interface name="position"/>
         <command_interface name="velocity"/>
         <command_interface name="hand_guided"/>
@@ -76,7 +76,7 @@
         <state_interface name="hand_guided"/>
       </joint>
 
-      <joint name="${prefix}joint5">
+      <joint name="${prefix}wrist_yaw">
         <command_interface name="position"/>
         <command_interface name="velocity"/>
         <command_interface name="hand_guided"/>
@@ -90,7 +90,7 @@
         <state_interface name="hand_guided"/>
       </joint>
 
-      <joint name="${prefix}joint6">
+      <joint name="${prefix}wrist_pitch">
         <command_interface name="position"/>
         <command_interface name="velocity"/>
         <command_interface name="hand_guided"/>
@@ -104,7 +104,7 @@
         <state_interface name="hand_guided"/>
       </joint>
 
-      <joint name="${prefix}joint7">
+      <joint name="${prefix}wrist_roll">
         <command_interface name="position"/>
         <command_interface name="velocity"/>
         <command_interface name="hand_guided"/>

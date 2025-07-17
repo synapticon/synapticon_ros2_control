@@ -2,13 +2,13 @@
 <robot xmlns:xacro="http://www.ros.org/wiki/xacro" name="seven_dof">
   <xacro:arg name="prefix" default="" />
   <xacro:arg name="eth_device" default="" />
-  <xacro:arg name="joint1_mechanical_reduction" default="169.85" />
-  <xacro:arg name="joint2_mechanical_reduction" default="169.85" />
-  <xacro:arg name="joint3_mechanical_reduction" default="1.0" />
-  <xacro:arg name="joint4_mechanical_reduction" default="169.85" />
-  <xacro:arg name="joint5_mechanical_reduction" default="169.85" />
-  <xacro:arg name="joint6_mechanical_reduction" default="169.85" />
-  <xacro:arg name="joint7_mechanical_reduction" default="169.85" />
+  <xacro:arg name="yaw1_mechanical_reduction" default="169.85" />
+  <xacro:arg name="yaw2_mechanical_reduction" default="169.85" />
+  <xacro:arg name="elev1_j1_mechanical_reduction" default="1.0" />
+  <xacro:arg name="elev1_j2_mechanical_reduction" default="169.85" />
+  <xacro:arg name="wrist_yaw_mechanical_reduction" default="169.85" />
+  <xacro:arg name="wrist_pitch_mechanical_reduction" default="169.85" />
+  <xacro:arg name="wrist_roll_mechanical_reduction" default="169.85" />
 
   <xacro:include filename="$(find synapticon_ros2_control)/urdf/seven_dof_macro.urdf.xacro" />
 
@@ -23,12 +23,12 @@
   <xacro:seven_dof_ros2_control name="SevenDofRos2Control"
     prefix="$(arg prefix)"
     eth_device="$(arg eth_device)"
-    joint1_mechanical_reduction="$(arg joint1_mechanical_reduction)"
-    joint2_mechanical_reduction="$(arg joint2_mechanical_reduction)"
-    joint3_mechanical_reduction="$(arg joint3_mechanical_reduction)"
-    joint4_mechanical_reduction="$(arg joint4_mechanical_reduction)"
-    joint5_mechanical_reduction="$(arg joint5_mechanical_reduction)"
-    joint6_mechanical_reduction="$(arg joint6_mechanical_reduction)"
-    joint7_mechanical_reduction="$(arg joint7_mechanical_reduction)"/>
+    yaw1_mechanical_reduction="$(arg yaw1_mechanical_reduction)"
+    yaw2_mechanical_reduction="$(arg yaw2_mechanical_reduction)"
+    elev1_j1_mechanical_reduction="$(arg elev1_j1_mechanical_reduction)"
+    elev1_j2_mechanical_reduction="$(arg elev1_j2_mechanical_reduction)"
+    wrist_yaw_mechanical_reduction="$(arg wrist_yaw_mechanical_reduction)"
+    wrist_pitch_mechanical_reduction="$(arg wrist_pitch_mechanical_reduction)"
+    wrist_roll_mechanical_reduction="$(arg wrist_roll_mechanical_reduction)"/>
 
 </robot>

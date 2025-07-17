@@ -5,93 +5,107 @@ controller_manager:
     joint_state_broadcaster:
       type: joint_state_broadcaster/JointStateBroadcaster
 
+    hand_guided_controller:
+      type: forward_command_controller/ForwardCommandController
+
+    forward_velocity_controller:
+      type: forward_command_controller/ForwardCommandController
+
+    forward_position_controller:
+      type: forward_command_controller/ForwardCommandController
+
+    quick_stop_controller:
+      type: forward_command_controller/ForwardCommandController
+
+    spring_adjust_controller:
+      type: forward_command_controller/ForwardCommandController
+
+    compensate_for_removed_load:
+      type: forward_command_controller/ForwardCommandController
+
+    compensate_for_added_load:
+      type: forward_command_controller/ForwardCommandController
+
 hand_guided_controller:
   ros__parameters:
-    type: forward_command_controller/ForwardCommandController
     joints:
-      - joint1
-      - joint2
-      - joint3
-      - joint4
-      - joint5
-      - joint6
-      - joint7
+      - yaw1
+      - yaw2
+      - elev1_j1
+      - elev1_j2
+      - wrist_yaw
+      - wrist_pitch
+      - wrist_roll
     interface_name: hand_guided
 
 forward_velocity_controller:
   ros__parameters:
-    type: forward_command_controller/ForwardCommandController
     joints:
-      - joint1
-      - joint2
-      - joint3
-      - joint4
-      - joint5
-      - joint6
-      - joint7
+      - yaw1
+      - yaw2
+      - elev1_j1
+      - elev1_j2
+      - wrist_yaw
+      - wrist_pitch
+      - wrist_roll
     interface_name: velocity
 
 forward_position_controller:
   ros__parameters:
-    type: forward_command_controller/ForwardCommandController
     joints:
-      - joint1
-      - joint2
-      - joint3
-      - joint4
-      - joint5
-      - joint6
-      - joint7
+      - yaw1
+      - yaw2
+      - elev1_j1
+      - elev1_j2
+      - wrist_yaw
+      - wrist_pitch
+      - wrist_roll
     interface_name: position
 
 quick_stop_controller:
   ros__parameters:
-    type: forward_command_controller/ForwardCommandController
     joints:
-      - joint1
-      - joint2
-      - joint3
-      - joint4
-      - joint5
-      - joint6
-      - joint7
+      - yaw1
+      - yaw2
+      - elev1_j1
+      - elev1_j2
+      - wrist_yaw
+      - wrist_pitch
+      - wrist_roll
     interface_name: quick_stop
 
 spring_adjust_controller:
   ros__parameters:
-    type: forward_command_controller/ForwardCommandController
     joints:
-      - joint1
-      - joint2
-      - joint3
-      - joint4
-      - joint5
-      - joint6
-      - joint7
+      - yaw1
+      - yaw2
+      - elev1_j1
+      - elev1_j2
+      - wrist_yaw
+      - wrist_pitch
+      - wrist_roll
     interface_name: spring_adjust
 
 compensate_for_removed_load:
   ros__parameters:
-    type: forward_command_controller/ForwardCommandController
     joints:
-      - joint1
-      - joint2
-      - joint3
-      - joint4
-      - joint5
-      - joint6
-      - joint7
+      - yaw1
+      - yaw2
+      - elev1_j1
+      - elev1_j2
+      - wrist_yaw
+      - wrist_pitch
+      - wrist_roll
     interface_name: compensate_for_removed_load
 
 compensate_for_added_load:
   ros__parameters:
-    type: forward_command_controller/ForwardCommandController
     joints:
-      - joint1
-      - joint2
-      - joint3
-      - joint4
-      - joint5
-      - joint6
-      - joint7
+      - yaw1
+      - yaw2
+      - elev1_j1
+      - elev1_j2
+      - wrist_yaw
+      - wrist_pitch
+      - wrist_roll
     interface_name: compensate_for_added_load
