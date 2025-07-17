@@ -228,7 +228,7 @@ double spring_adjust_by_inertial_actuator_position(
 
   // Only set allow_mode_change to true when we're very close to target and stable
   // This should be a one-time transition, not continuous updates
-  if (std::abs(error) < 0.01/* && error_dt <= 0.01*/) {
+  if ((std::abs(error)) < 0.01 || (actuator_torque == 0) /* && error_dt <= 0.01*/) {
       // We can safely set the target torque to zero b/c this actuator is not backdrivable
       actuator_torque = 0;
       // Only set allow_mode_change to true if it was previously false (one-time transition)
