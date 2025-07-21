@@ -789,6 +789,9 @@ void SynapticonSystemInterface::somanetCyclicLoop(
       wkc_ = ec_receive_processdata(EC_TIMEOUTRET);
 
       if (wkc_ >= expected_wkc_) {
+
+        int32_t spring_pot_position = read_sdo_value(SPRING_ADJUST_IDX + 1, 0x2402, 0x00);
+
         for (size_t joint_idx = 0; joint_idx < num_joints_; ++joint_idx) {
           if (first_iteration.at(joint_idx)) {
             // Default to PROFILE_TORQUE_MODE
@@ -838,8 +841,6 @@ void SynapticonSystemInterface::somanetCyclicLoop(
           else if ((in_somanet_[joint_idx]->Statusword &
                     0b0000000001101111) == 0b0000000000100111) {
             in_normal_op_mode = true;
-
-            int32_t spring_pot_position = read_sdo_value(SPRING_ADJUST_IDX + 1, 0x2402, 0x00);
 
             if (control_level_[joint_idx] == control_level_t::HAND_GUIDED) {
               // Wrist pitch and wrist roll velocity are controlled by dials
