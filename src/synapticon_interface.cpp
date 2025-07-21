@@ -613,6 +613,49 @@ SynapticonSystemInterface::read(const rclcpp::Time & /*time*/,
     hw_states_efforts_[i] = mechanical_reductions_.at(i).load() * in_somanet_[i]->TorqueValue;
   }
 
+  // We do this here in read() to avoid interrupting the realtime control loop
+  // Initialize to a high value, meaning the user is not engaging function enable
+  static bool function_enable_prev = true;
+  // If function enable was just engaged
+  if (!function_enable_ && (function_enable_ != function_enable_prev)) {
+    std::cerr << "Going hand-guided" << std::endl;
+    std::vector<std::string> start_interfaces{"yaw1/hand_guided",
+                                              "yaw2/hand_guided",
+                                              "elev1_j1/hand_guided",
+                                              "elev1_j2/hand_guided",
+                                              "wrist_yaw/hand_guided",
+                                              "wrist_pitch/hand_guided",
+                                              "wrist_roll/hand_guided"};
+    std::vector<std::string> stop_interfaces{"yaw1/quick_stop",
+                                             "yaw2/quick_stop",
+                                             "elev1_j1/quick_stop",
+                                             "elev1_j2/quick_stop",
+                                             "wrist_yaw/quick_stop",
+                                             "wrist_pitch/quick_stop",
+                                             "wrist_roll/quick_stop"};
+    prepare_command_mode_switch(start_interfaces, stop_interfaces);
+  }
+  // If function enable is disengaged
+  else if (function_enable_ && (function_enable_ != function_enable_prev)) {
+    std::cerr << "Going quick stop" << std::endl;
+    std::vector<std::string> stop_interfaces{"yaw1/hand_guided",
+      "yaw2/hand_guided",
+      "elev1_j1/hand_guided",
+      "elev1_j2/hand_guided",
+      "wrist_yaw/hand_guided",
+      "wrist_pitch/hand_guided",
+      "wrist_roll/hand_guided"};
+std::vector<std::string> start_interfaces{"yaw1/quick_stop",
+     "yaw2/quick_stop",
+     "elev1_j1/quick_stop",
+     "elev1_j2/quick_stop",
+     "wrist_yaw/quick_stop",
+     "wrist_pitch/quick_stop",
+     "wrist_roll/quick_stop"};
+    prepare_command_mode_switch(start_interfaces, stop_interfaces);
+  }
+  function_enable_prev = function_enable_;
+
   return hardware_interface::return_type::OK;
 }
 
@@ -791,6 +834,9 @@ void SynapticonSystemInterface::somanetCyclicLoop(
       if (wkc_ >= expected_wkc_) {
 
         int32_t spring_pot_position = read_sdo_value(SPRING_ADJUST_IDX + 1, 0x2402, 0x00);
+
+        int32_t wr_roll_digital_inputs = read_sdo_value(WRIST_ROLL_IDX + 1, 0x60FD, 0x00);
+        function_enable_ = (wr_roll_digital_inputs & (1 << 16)) >> 16;
 
         for (size_t joint_idx = 0; joint_idx < num_joints_; ++joint_idx) {
           if (first_iteration.at(joint_idx)) {

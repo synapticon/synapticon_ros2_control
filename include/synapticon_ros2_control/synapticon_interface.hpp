@@ -240,6 +240,10 @@ private:
 
   // This variable is used during dynamic spring compensation
   double initial_inertial_act_position_rad_;
+
+  // A flag signaling when function enable is engaged, between threads
+  // Initialize to a high value, meaning the user is not engaging function enable
+  std::atomic<bool> function_enable_ = true;
 };
 
 } // namespace synapticon_ros2_control
