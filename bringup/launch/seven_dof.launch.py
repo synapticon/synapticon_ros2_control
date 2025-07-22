@@ -96,7 +96,6 @@ def generate_launch_description():
             "forward_velocity_controller",
             "forward_position_controller",
             "quick_stop_controller",
-            "spring_adjust_controller",
             "compensate_for_removed_load",
             "compensate_for_added_load",
             "--param-file",

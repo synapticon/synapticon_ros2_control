@@ -25,7 +25,6 @@
         <command_interface name="velocity"/>
         <command_interface name="hand_guided"/>
         <command_interface name="quick_stop"/>
-        <command_interface name="spring_adjust"/>
         <command_interface name="compensate_for_removed_load"/>
         <command_interface name="compensate_for_added_load"/>
         <state_interface name="position"/>
@@ -39,7 +38,6 @@
         <command_interface name="velocity"/>
         <command_interface name="hand_guided"/>
         <command_interface name="quick_stop"/>
-        <command_interface name="spring_adjust"/>
         <command_interface name="compensate_for_removed_load"/>
         <command_interface name="compensate_for_added_load"/>
         <state_interface name="position"/>
@@ -53,7 +51,6 @@
         <command_interface name="velocity"/>
         <command_interface name="hand_guided"/>
         <command_interface name="quick_stop"/>
-        <command_interface name="spring_adjust"/>
         <command_interface name="compensate_for_removed_load"/>
         <command_interface name="compensate_for_added_load"/>
         <state_interface name="position"/>
@@ -67,7 +64,6 @@
         <command_interface name="velocity"/>
         <command_interface name="hand_guided"/>
         <command_interface name="quick_stop"/>
-        <command_interface name="spring_adjust"/>
         <command_interface name="compensate_for_removed_load"/>
         <command_interface name="compensate_for_added_load"/>
         <state_interface name="position"/>
@@ -81,7 +77,6 @@
         <command_interface name="velocity"/>
         <command_interface name="hand_guided"/>
         <command_interface name="quick_stop"/>
-        <command_interface name="spring_adjust"/>
         <command_interface name="compensate_for_removed_load"/>
         <command_interface name="compensate_for_added_load"/>
         <state_interface name="position"/>
@@ -95,7 +90,6 @@
         <command_interface name="velocity"/>
         <command_interface name="hand_guided"/>
         <command_interface name="quick_stop"/>
-        <command_interface name="spring_adjust"/>
         <command_interface name="compensate_for_removed_load"/>
         <command_interface name="compensate_for_added_load"/>
         <state_interface name="position"/>
@@ -109,7 +103,6 @@
         <command_interface name="velocity"/>
         <command_interface name="hand_guided"/>
         <command_interface name="quick_stop"/>
-        <command_interface name="spring_adjust"/>
         <command_interface name="compensate_for_removed_load"/>
         <command_interface name="compensate_for_added_load"/>
         <state_interface name="position"/>

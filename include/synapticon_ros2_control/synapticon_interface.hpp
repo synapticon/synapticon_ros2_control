@@ -214,12 +214,10 @@ private:
     VELOCITY = 2,
     POSITION = 3,
     QUICK_STOP = 4,
-    // To manually specify spring adjust position, use this control mode
-    SPRING_ADJUST = 5,
     // If a load was just removed, use this control mode
-    COMPENSATE_FOR_REMOVED_LOAD = 6,
+    COMPENSATE_FOR_REMOVED_LOAD = 5,
     // If a load was just added, use this control mode
-    COMPENSATE_FOR_ADDED_LOAD = 7,
+    COMPENSATE_FOR_ADDED_LOAD = 6,
   };
 
   // Active control mode for each actuator

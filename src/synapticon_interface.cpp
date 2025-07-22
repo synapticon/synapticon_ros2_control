@@ -484,13 +484,6 @@ SynapticonSystemInterface::prepare_command_mode_switch(
         new_modes.push_back(control_level_t::POSITION);
       } else if (key == info_.joints[i].name + "/quick_stop") {
         new_modes.push_back(control_level_t::QUICK_STOP);
-      } else if (key == info_.joints[i].name + "/spring_adjust") {
-        // Spring adjust puts all joints in QUICK_STOP mode except the spring adjust joint
-        if (i == SPRING_ADJUST_IDX) {
-          new_modes.push_back(control_level_t::SPRING_ADJUST);
-        } else {
-          new_modes.push_back(control_level_t::QUICK_STOP);
-        }
       } else if (key == info_.joints[i].name + "/compensate_for_removed_load") {
         allow_mode_change_ = false;
         // compensate_for_removed_load puts all joints in QUICK_STOP mode except the spring adjust joint
@@ -950,43 +943,16 @@ void SynapticonSystemInterface::somanetCyclicLoop(
               }
               out_somanet_[joint_idx]->TorqueOffset = 0;
               out_somanet_[joint_idx]->Controlword = NORMAL_OPERATION_BRAKES_ON;
-            } else if (control_level_[joint_idx] == control_level_t::SPRING_ADJUST)
-            {
-              // Spring adjust joint: proportional control based on analog input 2 potentiometer
-              if (joint_idx == SPRING_ADJUST_IDX) {
-                // Ensure a valid command
-                if (std::isnan(threadsafe_commands_spring_adjust_[joint_idx])) {
-                  out_somanet_[joint_idx]->TargetTorque = 0;
-                  out_somanet_[joint_idx]->OpMode = PROFILE_TORQUE_MODE;
-                  out_somanet_[joint_idx]->TorqueOffset = 0;
-                  // This is safe since the joint is non-backdrivable
-                  out_somanet_[joint_idx]->Controlword = NORMAL_OPERATION_BRAKES_OFF;
-                  continue;
-                }
-
-                // Create a local boolean variable since atomics can't be passed by reference
-                bool allow_mode_change = allow_mode_change_.load();
-                double actuator_torque = spring_adjust_by_linear_pot(
-                  threadsafe_commands_spring_adjust_[joint_idx],
-                  spring_pot_position,
-                  spring_adjust_state_,
-                  allow_mode_change  // Pass the local variable instead of the atomic member
-                );
-                // Update the atomic member with the new value
-                allow_mode_change_.store(allow_mode_change);
-
-                out_somanet_[joint_idx]->TargetTorque = actuator_torque;
-                out_somanet_[joint_idx]->OpMode = PROFILE_TORQUE_MODE;
-                out_somanet_[joint_idx]->TorqueOffset = 0;
-                out_somanet_[joint_idx]->Controlword = NORMAL_OPERATION_BRAKES_OFF;
-              }
-              else {
-                RCLCPP_ERROR(getLogger(), "Should never get here since the other joints are in QUICK_STOP mode");
-              }
             } else if (control_level_[joint_idx] == control_level_t::COMPENSATE_FOR_REMOVED_LOAD)
             {
               // Spring adjust joint: proportional control based on analog input potentiometer
               if (joint_idx == SPRING_ADJUST_IDX) {
+                // Track that we apply brakes once per cycle, otherwise they click repeatedly
+                static bool brakes_on = false;
+                if (!allow_mode_change_) {
+                  // If comp is not done yet, flag that we need to apply brakes
+                  brakes_on = false;
+                }
 
                 // Create a local boolean variable since atomics can't be passed by reference
                 bool allow_mode_change = allow_mode_change_.load();
@@ -999,10 +965,22 @@ void SynapticonSystemInterface::somanetCyclicLoop(
                 // Update the atomic member with the new value
                 allow_mode_change_.store(allow_mode_change);
 
-                out_somanet_[joint_idx]->TargetTorque = actuator_torque;
-                out_somanet_[joint_idx]->OpMode = PROFILE_TORQUE_MODE;
-                out_somanet_[joint_idx]->TorqueOffset = 0;
-                out_somanet_[joint_idx]->Controlword = NORMAL_OPERATION_BRAKES_OFF;
+                if (!allow_mode_change_) {
+                  out_somanet_[joint_idx]->TargetTorque = actuator_torque;
+                  out_somanet_[joint_idx]->OpMode = PROFILE_TORQUE_MODE;
+                  out_somanet_[joint_idx]->TorqueOffset = 0;
+                  out_somanet_[joint_idx]->Controlword = NORMAL_OPERATION_BRAKES_OFF;
+                }
+                // If done, put the brakes on once only
+                else {
+                  if (!brakes_on) {
+                    out_somanet_[joint_idx]->OpMode = PROFILE_TORQUE_MODE;
+                    out_somanet_[joint_idx]->TargetTorque = 0;
+                    out_somanet_[joint_idx]->TorqueOffset = 0;
+                    out_somanet_[joint_idx]->Controlword = NORMAL_OPERATION_BRAKES_ON;
+                    brakes_on = true;
+                  }
+                }
               }
               else {
                 RCLCPP_ERROR(getLogger(), "Should never get here since the other joints are in QUICK_STOP mode");
@@ -1017,6 +995,13 @@ void SynapticonSystemInterface::somanetCyclicLoop(
               if (joint_idx == SPRING_ADJUST_IDX) {
                 double current_inertial_position_rad = input_ticks_to_output_shaft_rad(in_somanet_[INERTIAL_ACTUATOR_IDX]->PositionValue, mechanical_reductions_.at(INERTIAL_ACTUATOR_IDX).load(), encoder_resolutions_[INERTIAL_ACTUATOR_IDX].load());
 
+                // Track that we apply brakes once per cycle, otherwise they click repeatedly
+                static bool brakes_on = false;
+                if (!allow_mode_change_) {
+                  // If comp is not done yet, flag that we need to apply brakes
+                  brakes_on = false;
+                }
+
                 // Create a local boolean variable since atomics can't be passed by reference
                 bool allow_mode_change = allow_mode_change_.load();
                 double actuator_torque = spring_adjust_by_inertial_actuator_position(
@@ -1028,23 +1013,57 @@ void SynapticonSystemInterface::somanetCyclicLoop(
                 // Update the atomic member with the new value
                 allow_mode_change_.store(allow_mode_change);
 
-                out_somanet_[joint_idx]->TargetTorque = actuator_torque;
-                out_somanet_[joint_idx]->OpMode = PROFILE_TORQUE_MODE;
-                out_somanet_[joint_idx]->TorqueOffset = 0;
-                out_somanet_[joint_idx]->Controlword = NORMAL_OPERATION_BRAKES_OFF;
+                if (!allow_mode_change_) {
+                  out_somanet_[joint_idx]->TargetTorque = actuator_torque;
+                  out_somanet_[joint_idx]->OpMode = PROFILE_TORQUE_MODE;
+                  out_somanet_[joint_idx]->TorqueOffset = 0;
+                  out_somanet_[joint_idx]->Controlword = NORMAL_OPERATION_BRAKES_OFF;
+                }
+                // If done, put the brakes on once only
+                else {
+                  if (!brakes_on) {
+                    out_somanet_[joint_idx]->OpMode = PROFILE_TORQUE_MODE;
+                    out_somanet_[joint_idx]->TargetTorque = 0;
+                    out_somanet_[joint_idx]->TorqueOffset = 0;
+                    out_somanet_[joint_idx]->Controlword = NORMAL_OPERATION_BRAKES_ON;
+                    brakes_on = true;
+                  }
+                }
               }
               // Inertial actuator joint should be free to move so we can detect when motion is complete
               else if (joint_idx == INERTIAL_ACTUATOR_IDX) {
-                out_somanet_[joint_idx]->TargetTorque = 0;
-                out_somanet_[joint_idx]->OpMode = PROFILE_TORQUE_MODE;
-                out_somanet_[joint_idx]->Controlword = NORMAL_OPERATION_BRAKES_OFF;
+                if (!allow_mode_change_) {
+                  out_somanet_[joint_idx]->TargetTorque = 0;
+                  out_somanet_[joint_idx]->OpMode = PROFILE_TORQUE_MODE;
+                  out_somanet_[joint_idx]->Controlword = NORMAL_OPERATION_BRAKES_OFF;
+                }
+                // We don't need to bother with brakes for this joint since it's not backdrivable
               }
               // Yaw joints should be free to move to allow some compliance, i.e.
               // in case the end effector is pushed into the wall
               else if ((joint_idx == YAW_1_IDX) || (joint_idx == YAW_2_IDX)) {
-                out_somanet_[joint_idx]->TargetTorque = 0;
-                out_somanet_[joint_idx]->OpMode = PROFILE_TORQUE_MODE;
-                out_somanet_[joint_idx]->Controlword = NORMAL_OPERATION_BRAKES_OFF;
+                // Track that we apply brakes once per cycle, otherwise they click repeatedly
+                static bool brakes_on = false;
+                if (!allow_mode_change_) {
+                  // If comp is not done yet, flag that we need to apply brakes
+                  brakes_on = false;
+                }
+
+                if (!allow_mode_change_) {
+                  out_somanet_[joint_idx]->TargetTorque = 0;
+                  out_somanet_[joint_idx]->OpMode = PROFILE_TORQUE_MODE;
+                  out_somanet_[joint_idx]->Controlword = NORMAL_OPERATION_BRAKES_OFF;
+                }
+                // If done, put the brakes on once only
+                else {
+                  if (!brakes_on) {
+                    out_somanet_[joint_idx]->OpMode = PROFILE_TORQUE_MODE;
+                    out_somanet_[joint_idx]->TargetTorque = 0;
+                    out_somanet_[joint_idx]->TorqueOffset = 0;
+                    out_somanet_[joint_idx]->Controlword = NORMAL_OPERATION_BRAKES_ON;
+                    brakes_on = true;
+                  }
+                }
               }
               else {
                 RCLCPP_ERROR(getLogger(), "Should never get here since the other joints are in QUICK_STOP mode");
