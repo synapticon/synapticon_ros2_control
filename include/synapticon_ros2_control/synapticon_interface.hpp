@@ -186,6 +186,8 @@ private:
   std::vector<double> hw_commands_positions_;
   std::vector<double> hw_commands_velocities_;
   std::vector<double> hw_commands_efforts_;
+  // As of now, we don't send commands to this GPIO. This is just a placeholder for compilation
+  std::vector<double> hw_commands_wr_roll_function_enable_;
   // hw_commands_quick_stop_ is never actually used, just a placeholder for compilation
   std::vector<double> hw_commands_quick_stop_;
   // hw_commands_spring_adjust_ is potentiometer ticks.
@@ -197,6 +199,8 @@ private:
   std::vector<double> hw_states_velocities_;
   std::vector<double> hw_states_accelerations_;
   std::vector<double> hw_states_efforts_;
+  // For now, there's only one GPIO input for function enable
+  std::vector<double> hw_wr_roll_function_enable_in_;
   // Threadsafe deques to share commands with somanet control loop thread
   std::deque<std::atomic<double>> threadsafe_commands_efforts_;
   std::deque<std::atomic<double>> threadsafe_commands_velocities_;
@@ -240,10 +244,6 @@ private:
 
   // This variable is used during dynamic spring compensation
   double initial_inertial_act_position_rad_;
-
-  // A flag signaling when function enable is engaged, between threads
-  // Initialize to a high value, meaning the user is not engaging function enable
-  std::atomic<bool> function_enable_ = true;
 };
 
 } // namespace synapticon_ros2_control

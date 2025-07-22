@@ -117,6 +117,11 @@
         <state_interface name="acceleration"/>
         <state_interface name="hand_guided"/>
       </joint>
+
+      <gpio name="wr_roll_function_enable">
+        <state_interface name="wr_roll_function_enable.1"/>
+        <command_interface name="wr_roll_function_enable.1"/>
+      </gpio>
     </ros2_control>
 
   </xacro:macro>

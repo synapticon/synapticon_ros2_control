@@ -144,7 +144,6 @@ bool e_stop_engaged(int expected_wkc) {
 
 } // namespace
 
-// TODO: this function seems to be called repeatedly when I don't expect it
 /* brief Use a PD controller to move the spring adjust actuator to given potentiometer position */
 double spring_adjust_by_linear_pot(
   double target_position,
@@ -259,11 +258,13 @@ hardware_interface::CallbackReturn SynapticonSystemInterface::on_init(
                                   std::numeric_limits<double>::quiet_NaN());
   hw_states_efforts_.resize(num_joints_,
                             std::numeric_limits<double>::quiet_NaN());
+  hw_wr_roll_function_enable_in_.resize(1, std::numeric_limits<double>::quiet_NaN());
   hw_commands_positions_.resize(num_joints_,
                                 std::numeric_limits<double>::quiet_NaN());
   hw_commands_velocities_.resize(num_joints_, 0);
   hw_commands_efforts_.resize(num_joints_,
                               std::numeric_limits<double>::quiet_NaN());
+  hw_commands_wr_roll_function_enable_.resize(1, std::numeric_limits<double>::quiet_NaN());
   hw_commands_quick_stop_.resize(num_joints_,
                               std::numeric_limits<double>::quiet_NaN());
   hw_commands_spring_adjust_.resize(num_joints_,
@@ -293,6 +294,11 @@ hardware_interface::CallbackReturn SynapticonSystemInterface::on_init(
   threadsafe_commands_spring_adjust_.resize(num_joints_);
   for (auto &spring_adjust : threadsafe_commands_spring_adjust_) {
     spring_adjust.store(std::numeric_limits<double>::quiet_NaN());
+  }
+
+  for (size_t i = 0; i < 1; ++i) {
+    hw_wr_roll_function_enable_in_[0] = std::numeric_limits<double>::quiet_NaN();
+    hw_commands_wr_roll_function_enable_[0] = std::numeric_limits<double>::quiet_NaN();
   }
 
   for (const hardware_interface::ComponentInfo &joint : info_.joints) {
@@ -575,6 +581,11 @@ hardware_interface::CallbackReturn SynapticonSystemInterface::on_activate(
         std::numeric_limits<double>::quiet_NaN();
   }
 
+  for (size_t i = 0; i < 1; ++i) {
+    hw_wr_roll_function_enable_in_[i] = std::numeric_limits<double>::quiet_NaN();
+    hw_commands_wr_roll_function_enable_[i] = std::numeric_limits<double>::quiet_NaN();
+  }
+
   return hardware_interface::CallbackReturn::SUCCESS;
 }
 
@@ -598,6 +609,11 @@ hardware_interface::CallbackReturn SynapticonSystemInterface::on_deactivate(
         std::numeric_limits<double>::quiet_NaN();
   }
 
+  for (size_t i = 0; i < 1; ++i) {
+    hw_wr_roll_function_enable_in_[0] = std::numeric_limits<double>::quiet_NaN();
+    hw_commands_wr_roll_function_enable_[0] = std::numeric_limits<double>::quiet_NaN();
+  }
+
   return hardware_interface::CallbackReturn::SUCCESS;
 }
 
@@ -612,49 +628,6 @@ SynapticonSystemInterface::read(const rclcpp::Time & /*time*/,
     hw_states_positions_[i] = input_ticks_to_output_shaft_rad(in_somanet_[i]->PositionValue, mechanical_reductions_.at(i).load(), encoder_resolutions_[i].load());
     hw_states_efforts_[i] = mechanical_reductions_.at(i).load() * in_somanet_[i]->TorqueValue;
   }
-
-  // We do this here in read() to avoid interrupting the realtime control loop
-  // Initialize to a high value, meaning the user is not engaging function enable
-  static bool function_enable_prev = true;
-  // If function enable was just engaged
-  if (!function_enable_ && (function_enable_ != function_enable_prev)) {
-    std::cerr << "Going hand-guided" << std::endl;
-    std::vector<std::string> start_interfaces{"yaw1/hand_guided",
-                                              "yaw2/hand_guided",
-                                              "elev1_j1/hand_guided",
-                                              "elev1_j2/hand_guided",
-                                              "wrist_yaw/hand_guided",
-                                              "wrist_pitch/hand_guided",
-                                              "wrist_roll/hand_guided"};
-    std::vector<std::string> stop_interfaces{"yaw1/quick_stop",
-                                             "yaw2/quick_stop",
-                                             "elev1_j1/quick_stop",
-                                             "elev1_j2/quick_stop",
-                                             "wrist_yaw/quick_stop",
-                                             "wrist_pitch/quick_stop",
-                                             "wrist_roll/quick_stop"};
-    prepare_command_mode_switch(start_interfaces, stop_interfaces);
-  }
-  // If function enable is disengaged
-  else if (function_enable_ && (function_enable_ != function_enable_prev)) {
-    std::cerr << "Going quick stop" << std::endl;
-    std::vector<std::string> stop_interfaces{"yaw1/hand_guided",
-      "yaw2/hand_guided",
-      "elev1_j1/hand_guided",
-      "elev1_j2/hand_guided",
-      "wrist_yaw/hand_guided",
-      "wrist_pitch/hand_guided",
-      "wrist_roll/hand_guided"};
-std::vector<std::string> start_interfaces{"yaw1/quick_stop",
-     "yaw2/quick_stop",
-     "elev1_j1/quick_stop",
-     "elev1_j2/quick_stop",
-     "wrist_yaw/quick_stop",
-     "wrist_pitch/quick_stop",
-     "wrist_roll/quick_stop"};
-    prepare_command_mode_switch(start_interfaces, stop_interfaces);
-  }
-  function_enable_prev = function_enable_;
 
   return hardware_interface::return_type::OK;
 }
@@ -697,7 +670,7 @@ SynapticonSystemInterface::write(const rclcpp::Time & /*time*/,
 std::vector<hardware_interface::StateInterface>
 SynapticonSystemInterface::export_state_interfaces() {
   std::vector<hardware_interface::StateInterface> state_interfaces;
-  for (std::size_t i = 0; i < num_joints_; i++) {
+  for (std::size_t i = 0; i < num_joints_; ++i) {
     state_interfaces.emplace_back(hardware_interface::StateInterface(
         info_.joints[i].name, hardware_interface::HW_IF_POSITION,
         &hw_states_positions_[i]));
@@ -710,6 +683,15 @@ SynapticonSystemInterface::export_state_interfaces() {
     state_interfaces.emplace_back(hardware_interface::StateInterface(
         info_.joints[i].name, "hand_guided",
         &hw_states_efforts_[i]));
+  }
+  size_t ct = 0;
+  for (size_t i = 0; i < info_.gpios.size(); ++i)
+  {
+    for (auto& state_if : info_.gpios.at(i).state_interfaces)
+    {
+      state_interfaces.emplace_back(hardware_interface::StateInterface(
+        info_.gpios.at(i).name, state_if.name, &hw_wr_roll_function_enable_in_[ct++]));
+    }
   }
   return state_interfaces;
 }
@@ -739,6 +721,14 @@ SynapticonSystemInterface::export_command_interfaces() {
     command_interfaces.emplace_back(hardware_interface::CommandInterface(
         info_.joints[i].name, "compensate_for_added_load",
         &hw_commands_compensate_for_added_load_[i]));
+  }
+  size_t ct = 0;
+  for (size_t i = 0; i < 1; ++i) {
+    for (auto& command_if : info_.gpios.at(i).command_interfaces)
+    {
+      command_interfaces.emplace_back(hardware_interface::CommandInterface(
+        info_.gpios.at(i).name, command_if.name, &hw_commands_wr_roll_function_enable_[ct++]));
+    }
   }
   return command_interfaces;
 }
@@ -834,9 +824,8 @@ void SynapticonSystemInterface::somanetCyclicLoop(
       if (wkc_ >= expected_wkc_) {
 
         int32_t spring_pot_position = read_sdo_value(SPRING_ADJUST_IDX + 1, 0x2402, 0x00);
-
         int32_t wr_roll_digital_inputs = read_sdo_value(WRIST_ROLL_IDX + 1, 0x60FD, 0x00);
-        function_enable_ = (wr_roll_digital_inputs & (1 << 16)) >> 16;
+        hw_wr_roll_function_enable_in_[0] = (wr_roll_digital_inputs & (1 << 16)) >> 16;
 
         for (size_t joint_idx = 0; joint_idx < num_joints_; ++joint_idx) {
           if (first_iteration.at(joint_idx)) {

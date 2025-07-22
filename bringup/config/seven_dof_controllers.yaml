@@ -26,6 +26,9 @@ controller_manager:
     compensate_for_added_load:
       type: forward_command_controller/ForwardCommandController
 
+    gpio_controller:
+      type: gpio_controllers/GpioCommandController
+
 hand_guided_controller:
   ros__parameters:
     joints:
@@ -109,3 +112,12 @@ compensate_for_added_load:
       - wrist_pitch
       - wrist_roll
     interface_name: compensate_for_added_load
+
+gpio_controller:
+  ros__parameters:
+    gpios:
+      - wr_roll_function_enable
+    command_interfaces:
+      wr_roll_function_enable:
+        - interfaces:
+          - wr_roll_function_enable.1
