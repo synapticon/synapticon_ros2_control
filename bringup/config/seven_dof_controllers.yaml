@@ -116,8 +116,16 @@ compensate_for_added_load:
 gpio_controller:
   ros__parameters:
     gpios:
-      - wr_roll_function_enable
+      - function_enable
+      - comp_button
+      - decomp_button
     command_interfaces:
-      wr_roll_function_enable:
+      function_enable:
         - interfaces:
-          - wr_roll_function_enable.1
+          - function_enable
+      comp_button:
+        - interfaces:
+          - comp_button
+      decomp_button:
+        - interfaces:
+          - decomp_button

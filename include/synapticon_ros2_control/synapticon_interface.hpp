@@ -186,8 +186,10 @@ private:
   std::vector<double> hw_commands_positions_;
   std::vector<double> hw_commands_velocities_;
   std::vector<double> hw_commands_efforts_;
-  // As of now, we don't send commands to this GPIO. This is just a placeholder for compilation
-  std::vector<double> hw_commands_wr_roll_function_enable_;
+  // As of now, we don't send commands to GPIOs. These are just placeholders for compilation
+  std::vector<double> hw_commands_function_enable_;
+  std::vector<double> hw_commands_comp_button_;
+  std::vector<double> hw_commands_decomp_button_;
   // hw_commands_quick_stop_ is never actually used, just a placeholder for compilation
   std::vector<double> hw_commands_quick_stop_;
   // hw_commands_spring_adjust_ is potentiometer ticks.
@@ -199,8 +201,9 @@ private:
   std::vector<double> hw_states_velocities_;
   std::vector<double> hw_states_accelerations_;
   std::vector<double> hw_states_efforts_;
-  // For now, there's only one GPIO input for function enable
-  std::vector<double> hw_wr_roll_function_enable_in_;
+  std::vector<double> hw_function_enable_;
+  std::vector<double> hw_comp_button_;
+  std::vector<double> hw_decomp_button_;
   // Threadsafe deques to share commands with somanet control loop thread
   std::deque<std::atomic<double>> threadsafe_commands_efforts_;
   std::deque<std::atomic<double>> threadsafe_commands_velocities_;

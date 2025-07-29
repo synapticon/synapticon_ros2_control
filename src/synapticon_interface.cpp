@@ -258,13 +258,17 @@ hardware_interface::CallbackReturn SynapticonSystemInterface::on_init(
                                   std::numeric_limits<double>::quiet_NaN());
   hw_states_efforts_.resize(num_joints_,
                             std::numeric_limits<double>::quiet_NaN());
-  hw_wr_roll_function_enable_in_.resize(1, std::numeric_limits<double>::quiet_NaN());
+  hw_function_enable_.resize(1, std::numeric_limits<double>::quiet_NaN());
+  hw_comp_button_.resize(1, std::numeric_limits<double>::quiet_NaN());
+  hw_decomp_button_.resize(1, std::numeric_limits<double>::quiet_NaN());
   hw_commands_positions_.resize(num_joints_,
                                 std::numeric_limits<double>::quiet_NaN());
   hw_commands_velocities_.resize(num_joints_, 0);
   hw_commands_efforts_.resize(num_joints_,
                               std::numeric_limits<double>::quiet_NaN());
-  hw_commands_wr_roll_function_enable_.resize(1, std::numeric_limits<double>::quiet_NaN());
+  hw_commands_function_enable_.resize(1, std::numeric_limits<double>::quiet_NaN());
+  hw_commands_comp_button_.resize(1, std::numeric_limits<double>::quiet_NaN());
+  hw_commands_decomp_button_.resize(1, std::numeric_limits<double>::quiet_NaN());
   hw_commands_quick_stop_.resize(num_joints_,
                               std::numeric_limits<double>::quiet_NaN());
   hw_commands_spring_adjust_.resize(num_joints_,
@@ -297,8 +301,12 @@ hardware_interface::CallbackReturn SynapticonSystemInterface::on_init(
   }
 
   for (size_t i = 0; i < 1; ++i) {
-    hw_wr_roll_function_enable_in_[0] = std::numeric_limits<double>::quiet_NaN();
-    hw_commands_wr_roll_function_enable_[0] = std::numeric_limits<double>::quiet_NaN();
+    hw_function_enable_[0] = std::numeric_limits<double>::quiet_NaN();
+    hw_commands_function_enable_[0] = std::numeric_limits<double>::quiet_NaN();
+    hw_comp_button_[0] = std::numeric_limits<double>::quiet_NaN();
+    hw_commands_comp_button_[0] = std::numeric_limits<double>::quiet_NaN();
+    hw_decomp_button_[0] = std::numeric_limits<double>::quiet_NaN();
+    hw_commands_decomp_button_[0] = std::numeric_limits<double>::quiet_NaN();
   }
 
   for (const hardware_interface::ComponentInfo &joint : info_.joints) {
@@ -575,8 +583,12 @@ hardware_interface::CallbackReturn SynapticonSystemInterface::on_activate(
   }
 
   for (size_t i = 0; i < 1; ++i) {
-    hw_wr_roll_function_enable_in_[i] = std::numeric_limits<double>::quiet_NaN();
-    hw_commands_wr_roll_function_enable_[i] = std::numeric_limits<double>::quiet_NaN();
+    hw_function_enable_[i] = std::numeric_limits<double>::quiet_NaN();
+    hw_comp_button_[i] = std::numeric_limits<double>::quiet_NaN();
+    hw_decomp_button_[i] = std::numeric_limits<double>::quiet_NaN();
+    hw_commands_function_enable_[i] = std::numeric_limits<double>::quiet_NaN();
+    hw_commands_comp_button_[i] = std::numeric_limits<double>::quiet_NaN();
+    hw_commands_decomp_button_[i] = std::numeric_limits<double>::quiet_NaN();
   }
 
   return hardware_interface::CallbackReturn::SUCCESS;
@@ -603,8 +615,12 @@ hardware_interface::CallbackReturn SynapticonSystemInterface::on_deactivate(
   }
 
   for (size_t i = 0; i < 1; ++i) {
-    hw_wr_roll_function_enable_in_[0] = std::numeric_limits<double>::quiet_NaN();
-    hw_commands_wr_roll_function_enable_[0] = std::numeric_limits<double>::quiet_NaN();
+    hw_function_enable_[0] = std::numeric_limits<double>::quiet_NaN();
+    hw_commands_function_enable_[0] = std::numeric_limits<double>::quiet_NaN();
+    hw_comp_button_[0] = std::numeric_limits<double>::quiet_NaN();
+    hw_decomp_button_[0] = std::numeric_limits<double>::quiet_NaN();
+    hw_commands_comp_button_[0] = std::numeric_limits<double>::quiet_NaN();
+    hw_commands_decomp_button_[0] = std::numeric_limits<double>::quiet_NaN();
   }
 
   return hardware_interface::CallbackReturn::SUCCESS;
@@ -677,13 +693,29 @@ SynapticonSystemInterface::export_state_interfaces() {
         info_.joints[i].name, "hand_guided",
         &hw_states_efforts_[i]));
   }
-  size_t ct = 0;
   for (size_t i = 0; i < info_.gpios.size(); ++i)
   {
     for (auto& state_if : info_.gpios.at(i).state_interfaces)
     {
-      state_interfaces.emplace_back(hardware_interface::StateInterface(
-        info_.gpios.at(i).name, state_if.name, &hw_wr_roll_function_enable_in_[ct++]));
+      if (state_if.name == "function_enable")
+      {
+        state_interfaces.emplace_back(hardware_interface::StateInterface(
+          info_.gpios.at(i).name, state_if.name, &hw_function_enable_[0]));
+      }
+      else if (state_if.name == "comp_button")
+      {
+        state_interfaces.emplace_back(hardware_interface::StateInterface(
+          info_.gpios.at(i).name, state_if.name, &hw_comp_button_[0]));
+      }
+      else if (state_if.name == "decomp_button")
+      {
+        state_interfaces.emplace_back(hardware_interface::StateInterface(
+          info_.gpios.at(i).name, state_if.name, &hw_decomp_button_[0]));
+      }
+      else {
+        RCLCPP_FATAL(getLogger(), "Unknown GPIO state interface: %s", state_if.name.c_str());
+        return {};
+      }
     }
   }
   return state_interfaces;
@@ -715,12 +747,28 @@ SynapticonSystemInterface::export_command_interfaces() {
         info_.joints[i].name, "compensate_for_added_load",
         &hw_commands_compensate_for_added_load_[i]));
   }
-  size_t ct = 0;
-  for (size_t i = 0; i < 1; ++i) {
+  for (size_t i = 0; i < info_.gpios.size(); ++i) {
     for (auto& command_if : info_.gpios.at(i).command_interfaces)
     {
-      command_interfaces.emplace_back(hardware_interface::CommandInterface(
-        info_.gpios.at(i).name, command_if.name, &hw_commands_wr_roll_function_enable_[ct++]));
+      if (command_if.name == "function_enable")
+      {
+        command_interfaces.emplace_back(hardware_interface::CommandInterface(
+          info_.gpios.at(i).name, command_if.name, &hw_commands_function_enable_[0]));
+      }
+      else if (command_if.name == "comp_button")
+      {
+        command_interfaces.emplace_back(hardware_interface::CommandInterface(
+          info_.gpios.at(i).name, command_if.name, &hw_commands_comp_button_[0]));
+      }
+      else if (command_if.name == "decomp_button")
+      {
+        command_interfaces.emplace_back(hardware_interface::CommandInterface(
+          info_.gpios.at(i).name, command_if.name, &hw_commands_decomp_button_[0]));
+      }
+      else {
+        RCLCPP_FATAL(getLogger(), "Unknown GPIO command interface: %s", command_if.name.c_str());
+        return {};
+      }
     }
   }
   return command_interfaces;
@@ -817,8 +865,10 @@ void SynapticonSystemInterface::somanetCyclicLoop(
       if (wkc_ >= expected_wkc_) {
 
         int32_t spring_pot_position = read_sdo_value(SPRING_ADJUST_IDX + 1, 0x2402, 0x00);
-        int32_t wr_roll_digital_inputs = read_sdo_value(WRIST_ROLL_IDX + 1, 0x60FD, 0x00);
-        hw_wr_roll_function_enable_in_[0] = (wr_roll_digital_inputs & (1 << 16)) >> 16;
+        int32_t wr_roll_gpio = read_sdo_value(WRIST_ROLL_IDX + 1, 0x60FD, 0x00);
+        hw_function_enable_[0] = (wr_roll_gpio & (1 << 16)) >> 16;
+        hw_comp_button_[0] = (wr_roll_gpio & (1 << 17)) >> 17;
+        hw_decomp_button_[0] = (wr_roll_gpio & (1 << 18)) >> 18;
 
         for (size_t joint_idx = 0; joint_idx < num_joints_; ++joint_idx) {
           if (first_iteration.at(joint_idx)) {

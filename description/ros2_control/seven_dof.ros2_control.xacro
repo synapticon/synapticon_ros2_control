@@ -111,9 +111,19 @@
         <state_interface name="hand_guided"/>
       </joint>
 
-      <gpio name="wr_roll_function_enable">
-        <state_interface name="wr_roll_function_enable.1"/>
-        <command_interface name="wr_roll_function_enable.1"/>
+      <gpio name="function_enable">
+        <state_interface name="function_enable"/>
+        <command_interface name="function_enable"/>
+      </gpio>
+
+      <gpio name="comp_button">
+        <state_interface name="comp_button"/>
+        <command_interface name="comp_button"/>
+      </gpio>
+
+      <gpio name="decomp_button">
+        <state_interface name="decomp_button"/>
+        <command_interface name="decomp_button"/>
       </gpio>
     </ros2_control>
 
