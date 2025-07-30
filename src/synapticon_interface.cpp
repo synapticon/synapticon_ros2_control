@@ -60,7 +60,7 @@ constexpr double MYSTERY_VELOCITY_MULTIPLIER = 10000;
 constexpr double WRIST_PITCH_DEADBAND = 0.05;
 constexpr double WRIST_ROLL_DEADBAND = 0.1;
 // Motion threshold of the inertial actuator
-constexpr double DYNAMIC_COMP_MOTION_THRESHOLD = 0.04;  // rad
+constexpr double DYNAMIC_COMP_MOTION_THRESHOLD = 0.12;  // rad
 constexpr double SPRING_ADJUST_MIN_TORQUE = 700.0;  // per mill of rated torque
 // Holding torque for the wrist during QUICK_STOP mode
 constexpr double WRIST_PITCH_HOLD_TORQUE = 400.0;  // per mill of rated torque
@@ -200,7 +200,7 @@ double spring_adjust_by_inertial_actuator_position(
   // Error is expected to be approximately 0-2 degrees (0-0.04 rad)
   constexpr double comp_max_torque = 3000;
   // So for a change of 0.04 rad, spring adjust actuator torque should change by (comp_max_torque - SPRING_ADJUST_MIN_TORQUE)
-  double K_P = 0.5 * (comp_max_torque - SPRING_ADJUST_MIN_TORQUE) / 0.04;
+  double K_P = 0.9 * (comp_max_torque - SPRING_ADJUST_MIN_TORQUE) / 0.04;
   double K_D = 5.0 * K_P;
   double error = target_inertial_act_position_rad - current_inertial_act_position_rad;
   std::chrono::steady_clock::time_point time_now = std::chrono::steady_clock::now();
