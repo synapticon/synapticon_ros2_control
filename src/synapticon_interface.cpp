@@ -37,7 +37,8 @@ unsigned int NORMAL_OPERATION_BRAKES_OFF = 0b00001111;
 // Bit 2 (0-indexed) goes to 0 to turn on Quick Stop
 unsigned int NORMAL_OPERATION_BRAKES_ON = 0b00001011;
 constexpr char EXPECTED_SLAVE_NAME[] = "SOMANET";
-constexpr std::array<double, 7> TORQUE_FRICTION_OFFSET = {0, 0, 0, 0, 0, 0, 0}; // per mill
+constexpr std::array<int16_t, 7> TORQUE_FRICTION_OFFSET = {0, 0, 0, 0, 0, 0, 0}; // per mill
+constexpr int16_t TORQUE_DAMPING_OFFSET = 80; // per mill
 constexpr size_t YAW_1_IDX = 0;
 constexpr size_t YAW_2_IDX = 1;
 constexpr size_t SPRING_ADJUST_IDX = 2;
@@ -247,6 +248,26 @@ hardware_interface::CallbackReturn SynapticonSystemInterface::on_init(
     return hardware_interface::CallbackReturn::ERROR;
   }
   logger_ = std::make_shared<rclcpp::Logger>(rclcpp::get_logger("synapticon_interface"));
+
+  // Subscribe to damping messages in a separate thread
+  node_ = std::make_shared<rclcpp::Node>("synapticon_interface_damping_sub");
+  std::string damping_topic = "/monitor_1_envelope_proximity_damping";
+  while (rclcpp::ok()) {
+    auto topic_names_and_types = node_->get_topic_names_and_types();
+    if (topic_names_and_types.find(damping_topic) != topic_names_and_types.end()) {
+      break;
+    }
+    auto clk = node_->get_clock();
+    RCLCPP_INFO_THROTTLE(node_->get_logger(), *clk, 3000, "Waiting for damping topic to be published");
+    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+  }
+  damping_sub_ = node_->create_subscription<std_msgs::msg::Bool>(
+    damping_topic, 1, std::bind(&SynapticonSystemInterface::dampingCallback, this, std::placeholders::_1));
+  damping_sub_executor_ = std::make_shared<rclcpp::executors::SingleThreadedExecutor>();
+  damping_sub_executor_->add_node(node_);
+  damping_spin_thread_ = std::thread([this]() {
+    damping_sub_executor_->spin();
+  });
 
   num_joints_ = info_.joints.size();
 
@@ -784,6 +805,11 @@ SynapticonSystemInterface::~SynapticonSystemInterface() {
 
   // Close the ethercat connection
   ec_close();
+
+  damping_sub_executor_->cancel();
+  if (damping_spin_thread_.joinable()) {
+    damping_spin_thread_.join();
+  }
 }
 
 OSAL_THREAD_FUNC SynapticonSystemInterface::ecatCheck(void * /*ptr*/) {
@@ -963,6 +989,15 @@ void SynapticonSystemInterface::somanetCyclicLoop(
                     out_somanet_[joint_idx]->TorqueOffset = TORQUE_FRICTION_OFFSET.at(joint_idx);
                   } else {
                     out_somanet_[joint_idx]->TorqueOffset = -TORQUE_FRICTION_OFFSET.at(joint_idx);
+                  }
+                  // Add a rumble to warn the user about envelope violation
+                  if (apply_damping_ && (joint_idx == YAW_1_IDX)) {
+                    // Calculate sine wave with magnitude TORQUE_DAMPING_OFFSET
+                    static auto damping_start_time = std::chrono::steady_clock::now();
+                    auto current_time = std::chrono::steady_clock::now();
+                    auto elapsed = std::chrono::duration<double>(current_time - damping_start_time);
+                    double sine_wave = TORQUE_DAMPING_OFFSET * std::sin(2.0 * M_PI * 60.0 * elapsed.count());
+                    out_somanet_[joint_idx]->TorqueOffset += static_cast<int16_t>(sine_wave);
                   }
                   out_somanet_[joint_idx]->Controlword = NORMAL_OPERATION_BRAKES_OFF;
                 }
@@ -1149,6 +1184,12 @@ void SynapticonSystemInterface::somanetCyclicLoop(
   return;
 }
 
+void SynapticonSystemInterface::dampingCallback(const std_msgs::msg::Bool& msg)
+{
+  // A 1 in the message means everything is fine
+  // A 0 in the message means we should apply damping
+  apply_damping_ = !msg.data;
+}
 } // namespace synapticon_ros2_control
 
 #include "pluginlib/class_list_macros.hpp"

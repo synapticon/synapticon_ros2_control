@@ -29,10 +29,12 @@
 #include <hardware_interface/hardware_info.hpp>
 #include <hardware_interface/system_interface.hpp>
 #include <hardware_interface/types/hardware_interface_return_values.hpp>
-#include <rclcpp/logger.hpp>
-#include <rclcpp/macros.hpp>
 #include <rclcpp_lifecycle/node_interfaces/lifecycle_node_interface.hpp>
 #include <rclcpp_lifecycle/state.hpp>
+#include <rclcpp/logger.hpp>
+#include <rclcpp/macros.hpp>
+#include <rclcpp/rclcpp.hpp>
+#include <std_msgs/msg/bool.hpp>
 
 #include "ethercat.h"
 #include "synapticon_ros2_control/unit_conversions.hpp"
@@ -245,6 +247,14 @@ private:
 
   // This variable is used during dynamic spring compensation
   double initial_inertial_act_position_rad_;
+
+  // Listen for damping messages
+  rclcpp::Node::SharedPtr node_;
+  rclcpp::Subscription<std_msgs::msg::Bool>::SharedPtr damping_sub_;
+  std::shared_ptr<rclcpp::executors::SingleThreadedExecutor> damping_sub_executor_;
+  std::thread damping_spin_thread_;
+  std::atomic<bool> apply_damping_ = false;
+  void dampingCallback(const std_msgs::msg::Bool& msg);
 };
 
 } // namespace synapticon_ros2_control
