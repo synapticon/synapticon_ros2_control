@@ -38,7 +38,7 @@ unsigned int NORMAL_OPERATION_BRAKES_OFF = 0b00001111;
 unsigned int NORMAL_OPERATION_BRAKES_ON = 0b00001011;
 constexpr char EXPECTED_SLAVE_NAME[] = "SOMANET";
 constexpr std::array<int16_t, 7> TORQUE_FRICTION_OFFSET = {0, 0, 0, 0, 0, 0, 0}; // per mill
-constexpr int16_t TORQUE_DAMPING_OFFSET = 120; // per mill
+constexpr int16_t ENV_VIOLATION_RUMBLE_TORQUE = 180; // per mill
 constexpr size_t YAW_1_IDX = 0;
 constexpr size_t YAW_2_IDX = 1;
 constexpr size_t SPRING_ADJUST_IDX = 2;
@@ -992,11 +992,11 @@ void SynapticonSystemInterface::somanetCyclicLoop(
                   }
                   // Add a rumble to warn the user about envelope violation
                   if (apply_damping_ && (joint_idx == YAW_1_IDX)) {
-                    // Calculate sine wave with magnitude TORQUE_DAMPING_OFFSET
+                    // Calculate sine wave with magnitude ENV_VIOLATION_RUMBLE_TORQUE
                     static auto damping_start_time = std::chrono::steady_clock::now();
                     auto current_time = std::chrono::steady_clock::now();
                     auto elapsed = std::chrono::duration<double>(current_time - damping_start_time);
-                    double sine_wave = TORQUE_DAMPING_OFFSET * std::sin(2.0 * M_PI * 60.0 * elapsed.count());
+                    double sine_wave = ENV_VIOLATION_RUMBLE_TORQUE * std::sin(2.0 * M_PI * 60.0 * elapsed.count());
                     out_somanet_[joint_idx]->TorqueOffset += static_cast<int16_t>(sine_wave);
                   }
                   out_somanet_[joint_idx]->Controlword = NORMAL_OPERATION_BRAKES_OFF;
