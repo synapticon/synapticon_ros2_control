@@ -43,8 +43,8 @@ constexpr size_t YAW_1_IDX = 0;
 constexpr size_t YAW_2_IDX = 1;
 constexpr size_t SPRING_ADJUST_IDX = 2;
 constexpr size_t INERTIAL_ACTUATOR_IDX = 3;
-constexpr size_t WRIST_PITCH_IDX = 5;
-constexpr size_t WRIST_ROLL_IDX = 6;
+constexpr size_t WRIST_PITCH_IDX = 4;
+constexpr size_t WRIST_ROLL_IDX = 5;
 // TODO: update this if the wrist or EE is added
 constexpr double SPRING_POSITION_WITHOUT_PAYLOAD = 31000;
 constexpr double MIN_ALLOWABLE_SPRING_POSITION = 18000;
@@ -893,8 +893,8 @@ void SynapticonSystemInterface::somanetCyclicLoop(
         int32_t spring_pot_position = read_sdo_value(SPRING_ADJUST_IDX + 1, 0x2402, 0x00);
         int32_t wr_roll_gpio = read_sdo_value(WRIST_ROLL_IDX + 1, 0x60FD, 0x00);
         hw_function_enable_[0] = (wr_roll_gpio & (1 << 16)) >> 16;
-        hw_comp_button_[0] = (wr_roll_gpio & (1 << 17)) >> 17;
         hw_decomp_button_[0] = (wr_roll_gpio & (1 << 18)) >> 18;
+        hw_comp_button_[0] = (wr_roll_gpio & (1 << 19)) >> 19;
 
         for (size_t joint_idx = 0; joint_idx < num_joints_; ++joint_idx) {
           if (first_iteration.at(joint_idx)) {
