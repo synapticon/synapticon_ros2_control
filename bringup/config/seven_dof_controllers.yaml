@@ -36,9 +36,9 @@ hand_guided_controller:
       - yaw2
       - elev1_j1
       - elev1_j2
-      - wrist_yaw
       - wrist_pitch
       - wrist_roll
+      - wrist_yaw
     interface_name: hand_guided
 
 forward_velocity_controller:
@@ -48,9 +48,9 @@ forward_velocity_controller:
       - yaw2
       - elev1_j1
       - elev1_j2
-      - wrist_yaw
       - wrist_pitch
       - wrist_roll
+      - wrist_yaw
     interface_name: velocity
 
 forward_position_controller:
@@ -60,9 +60,9 @@ forward_position_controller:
       - yaw2
       - elev1_j1
       - elev1_j2
-      - wrist_yaw
       - wrist_pitch
       - wrist_roll
+      - wrist_yaw
     interface_name: position
 
 quick_stop_controller:
@@ -72,9 +72,9 @@ quick_stop_controller:
       - yaw2
       - elev1_j1
       - elev1_j2
-      - wrist_yaw
       - wrist_pitch
       - wrist_roll
+      - wrist_yaw
     interface_name: quick_stop
 
 spring_adjust_controller:
@@ -84,9 +84,9 @@ spring_adjust_controller:
       - yaw2
       - elev1_j1
       - elev1_j2
-      - wrist_yaw
       - wrist_pitch
       - wrist_roll
+      - wrist_yaw
     interface_name: spring_adjust
 
 compensate_for_removed_load:
@@ -96,9 +96,9 @@ compensate_for_removed_load:
       - yaw2
       - elev1_j1
       - elev1_j2
-      - wrist_yaw
       - wrist_pitch
       - wrist_roll
+      - wrist_yaw
     interface_name: compensate_for_removed_load
 
 compensate_for_added_load:
@@ -108,9 +108,9 @@ compensate_for_added_load:
       - yaw2
       - elev1_j1
       - elev1_j2
-      - wrist_yaw
       - wrist_pitch
       - wrist_roll
+      - wrist_yaw
     interface_name: compensate_for_added_load
 
 gpio_controller:

@@ -72,19 +72,6 @@
         <state_interface name="hand_guided"/>
       </joint>
 
-      <joint name="${prefix}wrist_yaw">
-        <command_interface name="position"/>
-        <command_interface name="velocity"/>
-        <command_interface name="hand_guided"/>
-        <command_interface name="quick_stop"/>
-        <command_interface name="compensate_for_removed_load"/>
-        <command_interface name="compensate_for_added_load"/>
-        <state_interface name="position"/>
-        <state_interface name="velocity"/>
-        <state_interface name="acceleration"/>
-        <state_interface name="hand_guided"/>
-      </joint>
-
       <joint name="${prefix}wrist_pitch">
         <command_interface name="position"/>
         <command_interface name="velocity"/>
@@ -99,6 +86,19 @@
       </joint>
 
       <joint name="${prefix}wrist_roll">
+        <command_interface name="position"/>
+        <command_interface name="velocity"/>
+        <command_interface name="hand_guided"/>
+        <command_interface name="quick_stop"/>
+        <command_interface name="compensate_for_removed_load"/>
+        <command_interface name="compensate_for_added_load"/>
+        <state_interface name="position"/>
+        <state_interface name="velocity"/>
+        <state_interface name="acceleration"/>
+        <state_interface name="hand_guided"/>
+      </joint>
+
+      <joint name="${prefix}wrist_yaw">
         <command_interface name="position"/>
         <command_interface name="velocity"/>
         <command_interface name="hand_guided"/>

@@ -980,29 +980,39 @@ void SynapticonSystemInterface::somanetCyclicLoop(
                 out_somanet_[joint_idx]->VelocityOffset = 0;
                 out_somanet_[joint_idx]->Controlword = NORMAL_OPERATION_BRAKES_OFF;
               } else {
-                if (!std::isnan(threadsafe_commands_efforts_[joint_idx])) {
-                  out_somanet_[joint_idx]->TargetTorque =
-                      threadsafe_commands_efforts_[joint_idx];
-                  out_somanet_[joint_idx]->OpMode = PROFILE_TORQUE_MODE;
-                  // small offset to account for friction
-                  if (in_somanet_[joint_idx]->VelocityValue > 0) {
-                    out_somanet_[joint_idx]->TorqueOffset = TORQUE_FRICTION_OFFSET.at(joint_idx);
-                  } else {
-                    out_somanet_[joint_idx]->TorqueOffset = -TORQUE_FRICTION_OFFSET.at(joint_idx);
+                // Always set zero torque and release brakes for non-dial joints in hand-guided mode
+                out_somanet_[joint_idx]->TargetTorque = 0;
+                out_somanet_[joint_idx]->OpMode = PROFILE_TORQUE_MODE;
+                // small offset to account for friction
+                if (in_somanet_[joint_idx]->VelocityValue > 0) {
+                  out_somanet_[joint_idx]->TorqueOffset = TORQUE_FRICTION_OFFSET.at(joint_idx);
+                } else {
+                  out_somanet_[joint_idx]->TorqueOffset = -TORQUE_FRICTION_OFFSET.at(joint_idx);
+                }
+                // Add a rumble to warn the user about envelope violation
+                if (apply_damping_ && (joint_idx == YAW_1_IDX)) {
+                  // Calculate sine wave with magnitude ENV_VIOLATION_RUMBLE_TORQUE
+                  static auto damping_start_time = std::chrono::steady_clock::now();
+                  auto current_time = std::chrono::steady_clock::now();
+                  auto elapsed = std::chrono::duration<double>(current_time - damping_start_time);
+                  double sine_wave = ENV_VIOLATION_RUMBLE_TORQUE * std::sin(2.0 * M_PI * 60.0 * elapsed.count());
+                  out_somanet_[joint_idx]->TorqueOffset += static_cast<int16_t>(sine_wave);
+                }
+                out_somanet_[joint_idx]->Controlword = NORMAL_OPERATION_BRAKES_OFF;
+                
+                // Debug logging for wrist_yaw joint
+                if (joint_idx == 6) { // wrist_yaw
+                  static int debug_counter = 0;
+                  if (debug_counter++ % 100 == 0) { // Log every 100 iterations to avoid spam
+                    RCLCPP_INFO(getLogger(), "WRIST_YAW DEBUG - TargetTorque: %d, TorqueOffset: %d, TorqueDemand: %d, VelocityValue: %d", 
+                               out_somanet_[joint_idx]->TargetTorque,
+                               out_somanet_[joint_idx]->TorqueOffset,
+                               in_somanet_[joint_idx]->TorqueDemand,
+                               in_somanet_[joint_idx]->VelocityValue);
                   }
-                  // Add a rumble to warn the user about envelope violation
-                  if (apply_damping_ && (joint_idx == YAW_1_IDX)) {
-                    // Calculate sine wave with magnitude ENV_VIOLATION_RUMBLE_TORQUE
-                    static auto damping_start_time = std::chrono::steady_clock::now();
-                    auto current_time = std::chrono::steady_clock::now();
-                    auto elapsed = std::chrono::duration<double>(current_time - damping_start_time);
-                    double sine_wave = ENV_VIOLATION_RUMBLE_TORQUE * std::sin(2.0 * M_PI * 60.0 * elapsed.count());
-                    out_somanet_[joint_idx]->TorqueOffset += static_cast<int16_t>(sine_wave);
-                  }
-                  out_somanet_[joint_idx]->Controlword = NORMAL_OPERATION_BRAKES_OFF;
                 }
               }
-            }
+            } // hand-guided
             // Velocity
             else if (control_level_[joint_idx] == control_level_t::VELOCITY) {
               if (!std::isnan(threadsafe_commands_velocities_[joint_idx])) {
