@@ -16,10 +16,18 @@ def generate_launch_description():
         ]
     )
 
+    joint_limits = PathJoinSubstitution(
+        [
+            FindPackageShare("robin_moveit_config"),
+            "config",
+            "joint_limits.yaml",
+        ]
+    )
+
     control_node = Node(
         package="controller_manager",
         executable="ros2_control_node",
-        parameters=[robot_controllers],
+        parameters=[robot_controllers, {"aladdin.joint_limits_file": joint_limits}],
         remappings=[
             ("~/robot_description", "/robot_description"),
         ],
