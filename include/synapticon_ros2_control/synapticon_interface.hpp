@@ -255,6 +255,10 @@ private:
   std::thread damping_spin_thread_;
   std::atomic<bool> apply_damping_ = false;
   void dampingCallback(const std_msgs::msg::Bool& msg);
+
+  // If we start up in a compensated state, require that the next control mode is decomp
+  // Initialize to true to be on the safe side
+  std::atomic<bool> require_decomp_ = true;
 };
 
 } // namespace synapticon_ros2_control

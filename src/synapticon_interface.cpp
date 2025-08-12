@@ -496,6 +496,18 @@ SynapticonSystemInterface::prepare_command_mode_switch(
     return hardware_interface::return_type::ERROR;
   }
 
+  // If we start up in a compensated state, require that the next control mode is decomp
+  for (const std::string& key : start_interfaces) {
+    for (std::size_t i = 0; i < info_.joints.size(); i++) {
+      if (key != info_.joints[i].name + "/" + "compensate_for_removed_load") {
+        if (require_decomp_) {
+          RCLCPP_ERROR(getLogger(), "The spring was compensated at startup. You must decomp before switching to any other control mode.");
+          return hardware_interface::return_type::ERROR;
+        }
+      }
+    }
+  }
+
   reset_spring_adjust_state(spring_adjust_state_);
 
   // Prepare for new command modes
@@ -881,6 +893,7 @@ void SynapticonSystemInterface::somanetCyclicLoop(
     std::atomic<bool> &in_normal_op_mode) {
   std::vector<bool> first_iteration(num_joints_ , true);
 
+  bool need_startup_decomp_check = true;
   while (rclcpp::ok() && !e_stop_engaged(expected_wkc_.load())) {
 
     {
@@ -891,6 +904,18 @@ void SynapticonSystemInterface::somanetCyclicLoop(
       if (wkc_ >= expected_wkc_) {
 
         int32_t spring_pot_position = read_sdo_value(SPRING_ADJUST_IDX + 1, 0x2402, 0x00);
+
+        // If we start up in a compensated state, require that the next control mode is decomp
+        if (need_startup_decomp_check && abs(spring_pot_position - SPRING_POSITION_WITHOUT_PAYLOAD) > 200) {
+          require_decomp_ = true;
+          need_startup_decomp_check = false;
+        }
+        else if (need_startup_decomp_check)
+        {
+          require_decomp_ = false;
+          need_startup_decomp_check = false;
+        }
+
         int32_t wr_roll_gpio = read_sdo_value(WRIST_ROLL_IDX + 1, 0x60FD, 0x00);
         hw_function_enable_[0] = (wr_roll_gpio & (1 << 16)) >> 16;
         hw_decomp_button_[0] = (wr_roll_gpio & (1 << 18)) >> 18;
