@@ -81,7 +81,7 @@ public:
   ~SynapticonSystemInterface();
 
   hardware_interface::CallbackReturn
-  on_init(const hardware_interface::HardwareInfo &info) override;
+  on_init(const hardware_interface::HardwareComponentInterfaceParams &params) override;
 
   hardware_interface::return_type prepare_command_mode_switch(
       const std::vector<std::string> &start_interfaces,
