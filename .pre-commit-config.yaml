@@ -24,6 +24,7 @@ repos:
       - id: check-symlinks
       - id: check-toml
       - id: check-yaml
+        exclude: ^(rosdoc2\.yaml|.*/rosdoc2\.yaml)$
       - id: debug-statements
       - id: destroyed-symlinks
       - id: detect-private-key
