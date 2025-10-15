@@ -63,7 +63,7 @@
     <child link="${prefix}link2"/>
     <origin xyz="0 1.1 0" rpy="0 0 0"/>
   </joint>
-  
+
   <!-- Fixed Link -->
   <link name="${prefix}link2">
       <visual>
@@ -78,7 +78,7 @@
           <mesh filename="package://synapticon_ros2_control/meshes/motor.stl" scale="0.005 0.005 0.005"/>
         </geometry>
       </collision>
-   </link>  
+   </link>
 
   <joint name="${prefix}joint2" type="continuous">
     <parent link="${prefix}link2"/>
@@ -108,4 +108,3 @@
   </xacro:macro>
 
 </robot>
-

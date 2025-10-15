@@ -108,13 +108,13 @@ ament_export_dependencies(${THIS_PACKAGE_INCLUDE_DEPENDS})
 if(BUILD_TESTING)
   find_package(ament_cmake_gtest REQUIRED)
   find_package(ros_testing REQUIRED)
-  
+
   # Test that controller_manager launching succeeds
-  ament_add_gtest_executable(test_controller_manager_integration 
+  ament_add_gtest_executable(test_controller_manager_integration
     test/test_controller_manager_integration.cpp)
   ament_target_dependencies(test_controller_manager_integration
     ${THIS_PACKAGE_INCLUDE_DEPENDS})
-  add_ros_test(test/launch/simple_test_with_virtual_eth.launch.py 
+  add_ros_test(test/launch/simple_test_with_virtual_eth.launch.py
     TIMEOUT 30 ARGS "test_binary_dir:=${CMAKE_CURRENT_BINARY_DIR}")
 endif()
 

@@ -11,6 +11,7 @@ from launch.substitutions import (
 from launch_ros.actions import Node
 from launch_ros.substitutions import FindPackageShare
 
+
 def generate_launch_description():
     # Declare launch arguments, including one for the ethernet device name
     declared_arguments = []
