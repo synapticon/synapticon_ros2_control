@@ -1,5 +1,10 @@
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument, ExecuteProcess, IncludeLaunchDescription, RegisterEventHandler
+from launch.actions import (
+    DeclareLaunchArgument,
+    ExecuteProcess,
+    IncludeLaunchDescription,
+    RegisterEventHandler,
+)
 from launch.event_handlers import OnProcessExit
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import (
@@ -16,11 +21,13 @@ def generate_test_description():
     declared_arguments.append(
         DeclareLaunchArgument(
             "setup_script",
-            default_value=PathJoinSubstitution([
-                FindPackageShare("synapticon_ros2_control"),
-                "scripts",
-                "setup_test_environment.sh"
-            ]),
+            default_value=PathJoinSubstitution(
+                [
+                    FindPackageShare("synapticon_ros2_control"),
+                    "scripts",
+                    "setup_test_environment.sh",
+                ]
+            ),
             description="Path to the setup script for creating virtual ethernet interface",
         )
     )
@@ -37,13 +44,17 @@ def generate_test_description():
 
     # Include the elevated permissions 1 DOF launch file
     elevated_permissions_launch = IncludeLaunchDescription(
-        PythonLaunchDescriptionSource([
-            PathJoinSubstitution([
-                FindPackageShare("synapticon_ros2_control"),
-                "launch",
-                "elevated_permissions_1_dof.launch.py"
-            ])
-        ])
+        PythonLaunchDescriptionSource(
+            [
+                PathJoinSubstitution(
+                    [
+                        FindPackageShare("synapticon_ros2_control"),
+                        "launch",
+                        "elevated_permissions_1_dof.launch.py",
+                    ]
+                )
+            ]
+        )
     )
 
     # Delay the elevated permissions launch after setup script completion
@@ -64,4 +75,4 @@ def generate_test_description():
         launch_testing.actions.ReadyToTest(),
     ]
 
-    return LaunchDescription(declared_arguments + nodes) 
+    return LaunchDescription(declared_arguments + nodes)

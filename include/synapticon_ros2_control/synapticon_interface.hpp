@@ -36,11 +36,13 @@
 
 #include "ethercat.h"
 
-namespace synapticon_ros2_control {
+namespace synapticon_ros2_control
+{
 
 #pragma pack(1)
 // Somanet structs
-typedef struct {
+typedef struct
+{
   uint16_t Statusword;
   int8_t OpModeDisplay;
   int32_t PositionValue;
@@ -59,7 +61,8 @@ typedef struct {
   int16_t TorqueDemand;
 } InSomanet50t;
 
-typedef struct {
+typedef struct
+{
   uint16_t Controlword;
   int8_t OpMode;
   int16_t TargetTorque;
@@ -74,46 +77,43 @@ typedef struct {
 } OutSomanet50t;
 #pragma pack()
 
-class SynapticonSystemInterface : public hardware_interface::SystemInterface {
+class SynapticonSystemInterface : public hardware_interface::SystemInterface
+{
 public:
   RCLCPP_SHARED_PTR_DEFINITIONS(SynapticonSystemInterface)
 
   ~SynapticonSystemInterface();
 
   hardware_interface::CallbackReturn
-  on_init(const hardware_interface::HardwareComponentInterfaceParams &params) override;
+  on_init(const hardware_interface::HardwareComponentInterfaceParams& params) override;
 
-  hardware_interface::return_type prepare_command_mode_switch(
-      const std::vector<std::string> &start_interfaces,
-      const std::vector<std::string> &stop_interfaces) override;
+  hardware_interface::return_type prepare_command_mode_switch(const std::vector<std::string>& start_interfaces,
+                                                              const std::vector<std::string>& stop_interfaces) override;
 
-  hardware_interface::CallbackReturn
-  on_activate(const rclcpp_lifecycle::State &previous_state) override;
+  hardware_interface::CallbackReturn on_activate(const rclcpp_lifecycle::State& previous_state) override;
 
-  hardware_interface::CallbackReturn
-  on_deactivate(const rclcpp_lifecycle::State &previous_state) override;
+  hardware_interface::CallbackReturn on_deactivate(const rclcpp_lifecycle::State& previous_state) override;
 
-  hardware_interface::return_type read(const rclcpp::Time &time,
-                                       const rclcpp::Duration &period) override;
+  hardware_interface::return_type read(const rclcpp::Time& time, const rclcpp::Duration& period) override;
 
-  hardware_interface::return_type
-  write(const rclcpp::Time &time, const rclcpp::Duration &period) override;
+  hardware_interface::return_type write(const rclcpp::Time& time, const rclcpp::Duration& period) override;
 
-  std::vector<hardware_interface::StateInterface>
-  export_state_interfaces() override;
+  std::vector<hardware_interface::StateInterface> export_state_interfaces() override;
 
-  std::vector<hardware_interface::CommandInterface>
-  export_command_interfaces() override;
+  std::vector<hardware_interface::CommandInterface> export_command_interfaces() override;
 
   /**
    * \return logger of the SystemInterface.
    */
-  rclcpp::Logger get_logger() const { return *logger_; }
+  rclcpp::Logger get_logger() const
+  {
+    return *logger_;
+  }
 
   /**
    * @brief Error checking. Typically runs in a separate thread.
    */
-  OSAL_THREAD_FUNC ecatCheck(void *ptr);
+  OSAL_THREAD_FUNC ecatCheck(void* ptr);
 
 private:
   /**
@@ -122,7 +122,7 @@ private:
    * @param in_normal_op_mode_ A flag to the main thread that the Somanet state
    * machine is ready
    */
-  void somanetCyclicLoop(std::atomic<bool> &in_normal_op_mode_);
+  void somanetCyclicLoop(std::atomic<bool>& in_normal_op_mode_);
 
   std::optional<std::thread> somanet_control_thread_;
 
@@ -149,9 +149,10 @@ private:
   std::deque<std::atomic<double>> threadsafe_commands_positions_;
 
   // Enum defining current control level
-  enum control_level_t : std::uint8_t {
+  enum control_level_t : std::uint8_t
+  {
     UNDEFINED = 0,
-    EFFORT = 1, // aka torque
+    EFFORT = 1,  // aka torque
     VELOCITY = 2,
     POSITION = 3,
     QUICK_STOP = 4,
@@ -164,9 +165,9 @@ private:
   OSAL_THREAD_HANDLE ecat_error_thread_;
   char io_map_[4096];
 
-  std::vector<InSomanet50t *> in_somanet_1_;
+  std::vector<InSomanet50t*> in_somanet_1_;
   std::mutex in_somanet_mtx_;
-  std::vector<OutSomanet50t *> out_somanet_1_;
+  std::vector<OutSomanet50t*> out_somanet_1_;
 
   std::vector<uint32_t> encoder_resolutions_;
 
@@ -177,4 +178,4 @@ private:
   std::atomic<bool> in_normal_op_mode_ = false;
 };
 
-} // namespace synapticon_ros2_control
+}  // namespace synapticon_ros2_control

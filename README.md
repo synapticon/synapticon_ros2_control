@@ -34,7 +34,7 @@ The intention of this document is to provide instructions on how to quickly begi
 
 The following subsections briefly demonstrate hardware and software required for using Synapticon devices with this package.
 
-### 2.1. Hardware 
+### 2.1. Hardware
 
 In the figure below, a block diagram of the wiring used in this setup is provided. Drives can be used once the parameters are configured with [OBLAC tools](https://www.synapticon.com/en/products/oblac-drives). Detailed instructions and wiring diagrams for all the devices are available on the [Synapticon Web site](https://www.synapticon.com/en/support/dokumentation) documentation. The package allows daisy chaining of all the Synapticon drives in any order as indicated in the image below.
 
@@ -138,8 +138,8 @@ source /home/USER/ros2_ws/install/setup.bash
 If required, add the ROS repository (this occurs only once):
 
 ```bash
-sudo apt install software-properties-common 
-sudo add-apt-repository universe 
+sudo apt install software-properties-common
+sudo add-apt-repository universe
 sudo apt update
 ```
 Install the Synapticon package (replace ROS_DISTRO with the ROS distribution you want - humble, jazzy or rolling):
@@ -151,7 +151,7 @@ sudo apt install ros-ROS_DISTRO-synapticon-ros2-control
 Make sure rosdep is initialized and updated:
 
 ```bash
-sudo rosdep init 
+sudo rosdep init
 rosdep update
 ```
 
@@ -164,7 +164,7 @@ The package will get installed to `/opt/ros/ROS_DISTRO/share/synapticon_ros2_con
 
 **VERIFICATION**
 
-The ethernet device name, to which the drive is connected, is required. This could be checked with the `ifconfig` command. Ethernet adapters usually start with `en`. To check if the master could be run and if the slaves are found, execute the following  in the terminal (replace `YOUR_ETHERNET_INTERFACE` with the one found with `ifconfig`). 
+The ethernet device name, to which the drive is connected, is required. This could be checked with the `ifconfig` command. Ethernet adapters usually start with `en`. To check if the master could be run and if the slaves are found, execute the following  in the terminal (replace `YOUR_ETHERNET_INTERFACE` with the one found with `ifconfig`).
 If you installed from source:
 ```bash
 sudo /home/$USER/ros2_ws/install/synapticon_ros2_control/bin/torque_control_executable YOUR_ETHERNET_INTERFACE
@@ -183,7 +183,7 @@ source /home/YOUR_USER/.bashrc
 ```
 - Terminal 1:
 
-If you are running the demo with one motor: 
+If you are running the demo with one motor:
 ```bash
 ros2 launch synapticon_ros2_control elevated_permissions_1_dof.launch.py
 ```
@@ -193,7 +193,7 @@ ros2 launch synapticon_ros2_control elevated_permissions_2_dof.launch.py
 ```
 - Terminal 2:
 
-If you are running the demo with one motor: 
+If you are running the demo with one motor:
 ```bash
 ros2 launch synapticon_ros2_control single_dof.launch.py eth_device:=YOUR_ETHERNET_DEVICE
 ```
@@ -201,11 +201,11 @@ If you are running the demo with two motors:
 ```bash
 ros2 launch synapticon_ros2_control two_dof.launch.py eth_device:=YOUR_ETHERNET_DEVICE
 ```
-- Terminal 3 - to show the running controllers 
+- Terminal 3 - to show the running controllers
 ```bash
 ros2 control list_controllers
 ```
-(Information does not automatically refresh - it can be refreshed each M seconds 
+(Information does not automatically refresh - it can be refreshed each M seconds
 using `watch -n M ros2 control list_controllers`)
 - Running motors with different controllers:
 
@@ -231,7 +231,7 @@ ros2 service call /controller_manager/switch_controller controller_manager_msgs/
 ```
 - CSP (Cyclic Sync Position) mode:
 
-Terminal 4 to turn on the controller :	
+Terminal 4 to turn on the controller :
 ```bash
 ros2 service call /controller_manager/switch_controller controller_manager_msgs/srv/SwitchController "{activate_controllers: ['forward_position_controller'], deactivate_controllers: [quick_stop_controller]}"
 ```
@@ -249,22 +249,22 @@ Stopping it: CTRL+C on Terminal 5 and in Terminal 4:
 ```bash
 ros2 service call /controller_manager/switch_controller controller_manager_msgs/srv/SwitchController "{activate_controllers: ['quick_stop_controller'], deactivate_controllers: ['forward_position_controller']}"
 ```
-	
+
 - CST (Cyclic Sync Torque) mode:
 
 Terminal 4 to turn on the controller :
 ```bash
-ros2 service call /controller_manager/switch_controller controller_manager_msgs/srv/SwitchController "{activate_controllers: ['forward_torque_controller'], deactivate_controllers: [quick_stop_controller]}"	
+ros2 service call /controller_manager/switch_controller controller_manager_msgs/srv/SwitchController "{activate_controllers: ['forward_torque_controller'], deactivate_controllers: [quick_stop_controller]}"
 ```
 Terminal 5 to create a publisher (value is in per mille of torque):
 
 If you are running the demo with one motor, send a command in per-mille of rated torque. Gearing is not accounted for.
 ```bash
-ros2 topic pub /forward_torque_controller/commands std_msgs/msg/Float64MultiArray data:\ [10]	
+ros2 topic pub /forward_torque_controller/commands std_msgs/msg/Float64MultiArray data:\ [10]
 ```
 If you are running the demo with two motors:
 ```bash
-ros2 topic pub /forward_torque_controller/commands std_msgs/msg/Float64MultiArray data:\ [10, 10]	
+ros2 topic pub /forward_torque_controller/commands std_msgs/msg/Float64MultiArray data:\ [10, 10]
 ```
 Stopping it: CTRL+C on Terminal 5 and in Terminal 4:
 ```bash
@@ -365,7 +365,7 @@ For the first execution of the program, we build container named `ros2_container
 ```bash
 docker run -it -v /var/run/dbus/system_bus_socket:/var/run/dbus/system_bus_socket -v /tmp/.X11-unix:/tmp/.X11-unix --ipc=host -e DISPLAY=$DISPLAY  --network=host --env QT_X11_NO_MITSHM=1 --privileged --name ros2_container ghcr.io/synapticon/synapticon_ros2_control:ROS_DISTRO
 ```
-Now, the container is running. For all other occurrences, start the container using: 
+Now, the container is running. For all other occurrences, start the container using:
 ```bash
 docker start ros2_container
 ```
@@ -405,11 +405,11 @@ If you are running the demo with two motors:
 ```bash
 ros2 launch synapticon_ros2_control two_dof.launch.py eth_device:=YOUR_ETHERNET_DEVICE
 ```
-- Terminal 3 - to show the running controllers: 
+- Terminal 3 - to show the running controllers:
 ```bash
 ros2 control list_controllers
 ```
-(Information does not automatically refresh - it can be refreshed each M seconds 
+(Information does not automatically refresh - it can be refreshed each M seconds
 using `watch -n M ros2 control list_controllers`)
 
 - Running motors with different controllers:
@@ -434,7 +434,7 @@ ros2 service call /controller_manager/switch_controller controller_manager_msgs/
 ```
 - CSP (Cyclic Sync Position) mode:
 
-Terminal 4 to turn on the controller :	
+Terminal 4 to turn on the controller :
 ```bash
 ros2 service call /controller_manager/switch_controller controller_manager_msgs/srv/SwitchController "{activate_controllers: ['forward_position_controller'], deactivate_controllers: [quick_stop_controller]}"
 ```
@@ -451,21 +451,21 @@ Stopping it: CTRL+C on Terminal 5 and in Terminal 4:
 ```bash
 ros2 service call /controller_manager/switch_controller controller_manager_msgs/srv/SwitchController "{activate_controllers: ['quick_stop_controller'], deactivate_controllers: ['forward_position_controller']}"
 ```
-	
+
 - CST (Cyclic Sync Torque) mode:
 
 Terminal 4 to turn on the controller:
 ```bash
-ros2 service call /controller_manager/switch_controller controller_manager_msgs/srv/SwitchController "{activate_controllers: ['forward_torque_controller'], deactivate_controllers: [quick_stop_controller]}"	
+ros2 service call /controller_manager/switch_controller controller_manager_msgs/srv/SwitchController "{activate_controllers: ['forward_torque_controller'], deactivate_controllers: [quick_stop_controller]}"
 ```
 Terminal 5 to create a publisher:
 If you are running the demo with one motor, send a command in per-mille of rated torque. Gearing is not accounted for.
 ```bash
-ros2 topic pub /forward_torque_controller/commands std_msgs/msg/Float64MultiArray data:\ [10]	
+ros2 topic pub /forward_torque_controller/commands std_msgs/msg/Float64MultiArray data:\ [10]
 ```
 If you are running the demo with two motors:
 ```bash
-ros2 topic pub /forward_torque_controller/commands std_msgs/msg/Float64MultiArray data:\ [10, 10]	
+ros2 topic pub /forward_torque_controller/commands std_msgs/msg/Float64MultiArray data:\ [10, 10]
 ```
 Stopping it: CTRL+C on Terminal 5 and in Terminal 4:
 ```bash
