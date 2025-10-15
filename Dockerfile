@@ -22,4 +22,3 @@ RUN source /opt/ros/${ROS_DISTRO}/setup.bash && colcon build --symlink-install -
 #RUN echo "source /opt/ros/${ROS_DISTRO}/setup.bash" >> ~/.bashrc
 RUN echo "source /synapticon_ros2_control_ws/install/setup.bash" >> ~/.bashrc
 ENTRYPOINT ["/bin/bash"]
-
