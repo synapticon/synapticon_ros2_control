@@ -70,7 +70,9 @@ def generate_test_description():
     # The test executable to run (located in the build directory, passed via test_binary_dir)
     test_controller_manager_integration = ExecuteProcess(
         cmd=[
-            PathJoinSubstitution([test_binary_dir, "test_controller_manager_integration"])
+            PathJoinSubstitution(
+                [test_binary_dir, "test_controller_manager_integration"]
+            )
         ],
         output="both",
     )
