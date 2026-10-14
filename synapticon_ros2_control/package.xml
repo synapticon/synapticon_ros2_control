@@ -1,0 +1,22 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>synapticon_ros2_control</name>
+  <version>0.3.0</version>
+  <description>Metapackage for the ros2_control integration of Synapticon SOMANET drives</description>
+  <maintainer email="jennifer.buehler@b-robotized.com">Jennifer Buehler</maintainer>
+  <maintainer email="timotej.gaspar@b-robotized.com">Timotej Gaspar</maintainer>
+  <license>MIT</license>
+  <url type="website">https://www.synapticon.com/en/products/ros2-integration-von-synapticon</url>
+  <url type="repository">https://github.com/synapticon/synapticon_ros2_control</url>
+  <url type="bugtracker">https://github.com/synapticon/synapticon_ros2_control/issues</url>
+  <author email="andyzelenak@elevaterobotics.ai">Elevate Robotics</author>
+  <author>Synapticon GmbH</author>
+
+  <buildtool_depend>ament_cmake</buildtool_depend>
+
+  <export>
+    <build_type>ament_cmake</build_type>
+    <rosdoc2>rosdoc2.yaml</rosdoc2>
+  </export>
+</package>
