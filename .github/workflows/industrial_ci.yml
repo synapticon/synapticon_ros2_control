@@ -2,9 +2,9 @@ name: Industrial CI
 
 on:
   push:
-    branches: [ jazzy ]
+    branches: [ main ]
+  # No branch filter: it matches the target branch, and PRs may target other PR branches.
   pull_request:
-    branches: [ jazzy ]
   workflow_dispatch:
 
 jobs:
