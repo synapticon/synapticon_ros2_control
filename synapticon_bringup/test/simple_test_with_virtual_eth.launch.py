@@ -26,8 +26,8 @@ def generate_test_description():
             "setup_script",
             default_value=PathJoinSubstitution(
                 [
-                    FindPackageShare("synapticon_ros2_control"),
-                    "scripts",
+                    FindPackageShare("synapticon_bringup"),
+                    "test",
                     "setup_test_environment.sh",
                 ]
             ),
@@ -57,7 +57,7 @@ def generate_test_description():
             [
                 PathJoinSubstitution(
                     [
-                        FindPackageShare("synapticon_ros2_control"),
+                        FindPackageShare("synapticon_bringup"),
                         "launch",
                         "elevated_permissions_2_dof.launch.py",
                     ]

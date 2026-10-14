@@ -4,9 +4,9 @@
   <xacro:arg name="eth_device" default="" />
   <xacro:arg name="joint1_mechanical_reduction" default="1.0" />
 
-  <xacro:include filename="$(find synapticon_ros2_control)/urdf/single_dof_macro.urdf.xacro" />
+  <xacro:include filename="$(find synapticon_description)/urdf/example_synapticon.macro.xacro" />
 
-  <xacro:include filename="$(find synapticon_ros2_control)/ros2_control/single_dof.ros2_control.xacro" />
+  <xacro:include filename="$(find synapticon_description)/ros2_control/single_dof.ros2_control.xacro" />
 
   <link name="world"/>
 

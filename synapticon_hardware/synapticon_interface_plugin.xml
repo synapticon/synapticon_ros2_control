@@ -1,4 +1,4 @@
-<library path="synapticon_ros2_control">
+<library path="synapticon_hardware">
   <class name="synapticon_ros2_control/SynapticonSystemInterface"
          type="synapticon_ros2_control::SynapticonSystemInterface"
          base_class_type="hardware_interface::SystemInterface">

@@ -16,9 +16,9 @@ from launch_ros.substitutions import FindPackageShare
 def generate_launch_description():
     robot_controllers = PathJoinSubstitution(
         [
-            FindPackageShare("synapticon_ros2_control"),
+            FindPackageShare("synapticon_bringup"),
             "config",
-            "two_dof_controllers.yaml",
+            "example_2dof_controllers.yaml",
         ]
     )
 

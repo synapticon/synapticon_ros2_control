@@ -41,7 +41,7 @@ def generate_launch_description():
             " ",
             PathJoinSubstitution(
                 [
-                    FindPackageShare("synapticon_ros2_control"),
+                    FindPackageShare("synapticon_description"),
                     "urdf",
                     "two_dof_in_world.urdf.xacro",
                 ]
@@ -55,13 +55,13 @@ def generate_launch_description():
     # Other configurations (controllers, rviz config, etc.)
     robot_controllers = PathJoinSubstitution(
         [
-            FindPackageShare("synapticon_ros2_control"),
+            FindPackageShare("synapticon_bringup"),
             "config",
-            "two_dof_controllers.yaml",
+            "example_2dof_controllers.yaml",
         ]
     )
     rviz_config_file = PathJoinSubstitution(
-        [FindPackageShare("synapticon_ros2_control"), "config", "two_dof.rviz"]
+        [FindPackageShare("synapticon_bringup"), "rviz", "two_dof.rviz"]
     )
 
     robot_state_pub_node = Node(

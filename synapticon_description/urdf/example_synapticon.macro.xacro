@@ -15,13 +15,13 @@
       <visual>
         <origin xyz="0 0 0" rpy="0 0 0"/>
         <geometry>
-          <mesh filename="package://synapticon_ros2_control/meshes/flywheel.stl" scale="0.005 0.005 0.005"/>
+          <mesh filename="package://synapticon_description/meshes/flywheel.stl" scale="0.005 0.005 0.005"/>
         </geometry>
       </visual>
       <collision>
         <origin xyz="0 0 0" rpy="0 0 0"/>
         <geometry>
-          <mesh filename="package://synapticon_ros2_control/meshes/flywheel.stl" scale="0.005 0.005 0.005"/>
+          <mesh filename="package://synapticon_description/meshes/flywheel.stl" scale="0.005 0.005 0.005"/>
         </geometry>
       </collision>
     </link>
@@ -41,13 +41,13 @@
       <visual>
         <origin xyz="0 0 0" rpy="0 0 0"/>
         <geometry>
-          <mesh filename="package://synapticon_ros2_control/meshes/motor.stl" scale="0.005 0.005 0.005"/>
+          <mesh filename="package://synapticon_description/meshes/motor.stl" scale="0.005 0.005 0.005"/>
         </geometry>
       </visual>
       <collision>
         <origin xyz="0 0 0" rpy="0 0 0"/>
         <geometry>
-          <mesh filename="package://synapticon_ros2_control/meshes/motor.stl" scale="0.005 0.005 0.005"/>
+          <mesh filename="package://synapticon_description/meshes/motor.stl" scale="0.005 0.005 0.005"/>
         </geometry>
       </collision>
     </link>

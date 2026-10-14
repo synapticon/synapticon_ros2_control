@@ -15,6 +15,11 @@
 
   <buildtool_depend>ament_cmake</buildtool_depend>
 
+  <exec_depend>soem_source</exec_depend>
+  <exec_depend>synapticon_bringup</exec_depend>
+  <exec_depend>synapticon_description</exec_depend>
+  <exec_depend>synapticon_hardware</exec_depend>
+
   <export>
     <build_type>ament_cmake</build_type>
     <rosdoc2>rosdoc2.yaml</rosdoc2>
