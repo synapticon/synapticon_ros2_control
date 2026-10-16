@@ -1,0 +1,16 @@
+<library path="synapticon_hardware">
+  <class name="mock"
+         type="synapticon_hardware::MockHal"
+         base_class_type="synapticon_hardware::SynapticonHalI">
+    <description>
+      No drives at all: every command comes back as the joint's state.
+    </description>
+  </class>
+  <class name="mock_cia402"
+         type="synapticon_hardware::MockCia402Hal"
+         base_class_type="synapticon_hardware::SynapticonHalI">
+    <description>
+      Simulated CiA 402 drives, with their state machine, a moving joint, quick stop ramps and following errors.
+    </description>
+  </class>
+</library>
