@@ -12,8 +12,9 @@ jobs:
     strategy:
       matrix:
         env:
-          - {ROS_DISTRO: jazzy, ROS_REPO: main}
+          - {ROS_DISTRO: jazzy, ROS_REPO: main, UPSTREAM_WORKSPACE: synapticon_ros2_control.repos}
     runs-on: ubuntu-latest
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
       - uses: 'ros-industrial/industrial_ci@master'
