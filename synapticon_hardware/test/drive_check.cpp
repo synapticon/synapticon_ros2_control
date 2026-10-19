@@ -1,316 +1,544 @@
-/** \file
- * \brief Example code for Simple Open EtherCAT master with Synapticon SOMANET
- * servo drive
- *
- * Usage : simple_test_50 [ifname1]
- * ifname is NIC interface, f.e. eth0
- *
- * This is a minimal test, programmed based on the simple_test of SOEM, driving
- * a motor with SOMANET (v4.2 firmware) in CSV mode at 100RPM.
- *
- * Du Jin 2023
- */
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025 Elevate Robotics Inc
+// Copyright (c) 2025-2026 Synapticon GmbH
+// Copyright (c) 2026 b-robotized GmbH
 
-#include <inttypes.h>
-#include <stdio.h>
-#include <string.h>
+/// @file
+/// @brief Basic checks of one SOMANET drive through a HAL, without ros2_control.
+///
+/// The HAL is loaded by its plugin name (--hal) and set up with the parameters a URDF would give it.
+/// - read: bring the bus up and print the drive state. Never energises.
+/// - timing: time every read() and write() call. Never energises.
+/// - hold: ENERGISES. Enable, hold the present position, disable.
+/// - move: ENERGISES AND MOVES. Enable, ramp the target back and forth between the start position and
+///   --travel-deg away, disable. Stops when the joint leaves that range.
+///
+/// hold and move run in CSP, or in impedance mode with --impedance. Ctrl-C stops any check cleanly.
 
-#include "ethercat.h"
+#include <algorithm>
+#include <atomic>
+#include <chrono>
+#include <cmath>
+#include <csignal>
+#include <cstdint>
+#include <cstring>
+#include <functional>
+#include <iomanip>
+#include <iostream>
+#include <limits>
+#include <map>
+#include <memory>
+#include <numeric>
+#include <optional>
+#include <string>
+#include <thread>
+#include <vector>
 
-#define EC_TIMEOUTMON 500
+#include <fcntl.h>
+#include <sched.h>
+#include <sys/mman.h>
+#include <unistd.h>
 
-char IOmap[4096];
-OSAL_THREAD_HANDLE thread1;
-int expectedWKC;
-boolean needlf;
-volatile int wkc;
-boolean inOP;
-uint8 currentgroup = 0;
+#include <ament_index_cpp/get_package_share_directory.hpp>
+#include <pluginlib/class_loader.hpp>
+#include <rclcpp/rclcpp.hpp>
 
-/* define pointer structure */
-#pragma pack(1)
-typedef struct
+#include "synapticon_hardware/hal_config.hpp"
+#include "synapticon_hardware/synapticon_hal.hpp"
+
+namespace
 {
-  uint16_t Statusword;
-  int8_t OpModeDisplay;
-  int32_t PositionValue;
-  int32_t VelocityValue;
-  int16_t TorqueValue;
-  uint16_t AnalogInput1;
-  uint16_t AnalogInput2;
-  uint16_t AnalogInput3;
-  uint16_t AnalogInput4;
-  uint32_t TuningStatus;
-  uint32_t DigitalInputs;
-  uint32_t UserMISO;
-  uint32_t Timestamp;
-  int32_t PositionDemandInternalValue;
-  int32_t VelocityDemandValue;
-  int16_t TorqueDemand;
-} in_somanet_50t;
+using Clock = std::chrono::steady_clock;
+using synapticon_hardware::DriveCommand;
+using synapticon_hardware::DriveState;
+using synapticon_hardware::SynapticonHalI;
 
-typedef struct
+constexpr double NaN = std::numeric_limits<double>::quiet_NaN();
+constexpr double TRAVEL_MARGIN = 0.3;  // [rad] beyond the travel range before the move check gives up
+constexpr double TARGET_SPEED = 1.0;   // [rad/s] of the move check's target ramp
+constexpr auto PRINT_PERIOD = std::chrono::milliseconds(500);
+constexpr double CYCLE_HZ = 500.0;                     // the control rate of the examples
+constexpr auto TURN_PERIOD = std::chrono::seconds(2);  // between the direction changes of the move check
+
+constexpr const char* USAGE = R"(
+Usage: drive_check <read|timing|hold|move> [--config <slave_config.yaml>] [options]
+
+  read     print the drive state twice a second, turn the joint by hand to watch it change
+  timing   measure how long read() and write() take
+  hold     ENERGISES: enable and hold the present position
+  move     ENERGISES AND MOVES: move back and forth by --travel-deg at 1 rad/s
+
+  --hal NAME         HAL plugin: ethercat_soem (default) or mock_cia402
+  --config PATH      the drive's slave_config (default: the bundled example, which fits one drive model only)
+  --network-interface IF   network interface of the drive, required by ethercat_soem
+  --ring-position N  place of the drive on the ring, counted from 0 (default 0)
+  --duration S       run time, 0 until Ctrl-C (default 10)
+  --travel-deg D     travel of the move check (default 30)
+  --max-torque NM    MaxJointTorque for the run (default: the drive's value)
+  --impedance        hold and move in impedance mode instead of CSP
+  --stiffness K      impedance stiffness [Nm/rad] (default: the drive's value)
+  --damping D        impedance damping [Nm s/rad] (default: the drive's value)
+  --rt               real-time scheduling, locked memory, no deep CPU idle states (needs root)
+  --rt-priority N    like --rt, at SCHED_FIFO priority N from 1 to 99. --rt alone uses 60, the priority of the
+                     example controller manager
+)";
+
+std::atomic<bool> g_stop{ false };
+
+/// Command line settings.
+struct Options
 {
-  uint16_t Controlword;
-  int8_t OpMode;
-  int16_t TargetTorque;
-  int32_t TargetPosition;
-  int32_t TargetVelocity;
-  int16_t TorqueOffset;
-  int32_t TuningCommand;
-  int32_t PhysicalOutputs;
-  int32_t BitMask;
-  int32_t UserMOSI;
-  int32_t VelocityOffset;
-} out_somanet_50t;
-#pragma pack()
+  std::string check;
+  std::string hal{ "ethercat_soem" };
+  std::string config;
+  std::string network_interface;
+  uint16_t ring_position{ 0 };
+  double duration{ 10.0 };
+  double travel_deg{ 30.0 };
+  double max_torque{ NaN };
+  double stiffness{ NaN };
+  double damping{ NaN };
+  bool impedance{ false };
+  bool rt{ false };
+  int rt_priority{ 60 };
+};
 
-void simpletest(const char* ifname)
+/// Parse the command line. Prints the usage and returns nothing on --help or when it is incomplete or wrong.
+std::optional<Options> parse_options(int argc, char** argv)
 {
-  int i, j, chk;
-  needlf = false;
-  inOP = false;
-
-  printf("Starting simple test\n");
-
-  // initialise SOEM, bind socket to ifname
-  if (ec_init(ifname))
+  Options o;
+  const auto u16 = [](const std::string& v) { return static_cast<uint16_t>(std::stoul(v, nullptr, 0)); };
+  const std::map<std::string, std::function<void(const std::string&)>> valued = {
+    { "--hal", [&](const std::string& v) { o.hal = v; } },
+    { "--config", [&](const std::string& v) { o.config = v; } },
+    { "--network-interface", [&](const std::string& v) { o.network_interface = v; } },
+    { "--ring-position", [&](const std::string& v) { o.ring_position = u16(v); } },
+    { "--duration", [&](const std::string& v) { o.duration = std::stod(v); } },
+    { "--travel-deg", [&](const std::string& v) { o.travel_deg = std::stod(v); } },
+    { "--max-torque", [&](const std::string& v) { o.max_torque = std::stod(v); } },
+    { "--stiffness", [&](const std::string& v) { o.stiffness = std::stod(v); } },
+    { "--damping", [&](const std::string& v) { o.damping = std::stod(v); } },
+    { "--rt-priority",
+      [&](const std::string& v) {
+        o.rt = true;
+        o.rt_priority = std::stoi(v);
+      } },
+  };
+  const std::map<std::string, std::function<void()>> flags = {
+    { "--impedance", [&] { o.impedance = true; } },
+    { "--rt", [&] { o.rt = true; } },
+  };
+  for (int i = 1; i < argc; ++i)
   {
-    printf("ec_init on %s succeeded.\n", ifname);
-    // find and auto-config slaves
-
-    if (ec_config_init(false) > 0)
+    const std::string arg = argv[i];
+    if (arg == "-h" || arg == "--help")
     {
-      printf("%d slaves found and configured.\n", ec_slavecount);
-
-      ec_config_map(&IOmap);
-
-      ec_configdc();
-
-      printf("Slaves mapped, state to SAFE_OP.\n");
-      // wait for all slaves to reach SAFE_OP state
-      ec_statecheck(0, EC_STATE_SAFE_OP, EC_TIMEOUTSTATE * 4);
-
-      printf("segments : %d : %d %d %d %d\n", ec_group[0].nsegments, ec_group[0].IOsegment[0], ec_group[0].IOsegment[1],
-             ec_group[0].IOsegment[2], ec_group[0].IOsegment[3]);
-
-      printf("Request operational state for all slaves\n");
-      expectedWKC = (ec_group[0].outputsWKC * 2) + ec_group[0].inputsWKC;
-      printf("Calculated workcounter %d\n", expectedWKC);
-      ec_slave[0].state = EC_STATE_OPERATIONAL;
-      // send one valid process data to make outputs in slaves happy
-      ec_send_processdata();
-      ec_receive_processdata(EC_TIMEOUTRET);
-      // request OP state for all slaves
-      ec_writestate(0);
-      chk = 200;
-      // wait for all slaves to reach OP state */
-      do
-      {
-        ec_send_processdata();
-        ec_receive_processdata(EC_TIMEOUTRET);
-        ec_statecheck(0, EC_STATE_OPERATIONAL, 50000);
-      } while (chk-- && (ec_slave[0].state != EC_STATE_OPERATIONAL));
-      if (ec_slave[0].state == EC_STATE_OPERATIONAL)
-      {
-        printf("Operational state reached for all slaves.\n");
-        inOP = true;
-
-        j = 0;
-        // create and connect struture pointers to I/O
-        in_somanet_50t* in_somanet_1;
-        in_somanet_1 = (in_somanet_50t*)ec_slave[0].inputs;
-        out_somanet_50t* out_somanet_1;
-        out_somanet_1 = (out_somanet_50t*)ec_slave[0].outputs;
-
-        // cyclic loop
-        for (i = 1; i <= 10000; i++)
-        {
-          ec_send_processdata();
-          wkc = ec_receive_processdata(EC_TIMEOUTRET);
-
-          if (wkc >= expectedWKC)
-          {
-            j++;
-            // Profile torque mode
-            if (j == 1)
-              out_somanet_1->OpMode = 4;
-
-            // Fault reset: Fault -> Switch on disabled, if the drive is in fault
-            // state
-            if ((in_somanet_1->Statusword & 0b0000000001001111) == 0b0000000000001000)
-              out_somanet_1->Controlword = 0b10000000;
-
-            // Shutdown: Switch on disabled -> Ready to switch on
-            else if ((in_somanet_1->Statusword & 0b0000000001001111) == 0b0000000001000000)
-              out_somanet_1->Controlword = 0b00000110;
-
-            // Switch on: Ready to switch on -> Switched on
-            else if ((in_somanet_1->Statusword & 0b0000000001101111) == 0b0000000000100001)
-              out_somanet_1->Controlword = 0b00000111;
-
-            // Enable operation: Switched on -> Operation enabled
-            else if ((in_somanet_1->Statusword & 0b0000000001101111) == 0b0000000000100011)
-              out_somanet_1->Controlword = 0b00001111;
-
-            // Sending torque command
-            else if ((in_somanet_1->Statusword & 0b0000000001101111) == 0b0000000000100111)
-              out_somanet_1->TargetTorque = 0;
-
-            // printf("Processdata cycle %4d , WKC %d ,", i, wkc);
-            // printf(" Statusword: %X ,", in_somanet_1->Statusword);
-            // printf(" Op Mode Display: %d ,", in_somanet_1->OpModeDisplay);
-            printf(" ActualPos: %" PRId32 " ,", in_somanet_1->PositionValue);
-            // printf(" ActualVel: %" PRId32 " ,", in_somanet_1->VelocityValue);
-            // printf(" DemandVel: %" PRId32 " ,",
-            // in_somanet_1->VelocityDemandValue);
-            // printf(" ActualTorque: %" PRId32 " ,",
-            // in_somanet_1->TorqueValue);
-            printf(" DemandTorque: %" PRId32 " ,", in_somanet_1->TorqueDemand);
-
-            printf(" T:%" PRId64 "\r", ec_DCtime);
-            needlf = true;
-          }
-          osal_usleep(5000);
-        }
-        inOP = false;
-      }
-      else
-      {
-        printf("Not all slaves reached operational state.\n");
-        ec_readstate();
-        for (i = 1; i <= ec_slavecount; i++)
-        {
-          if (ec_slave[i].state != EC_STATE_OPERATIONAL)
-          {
-            printf("Slave %d State=0x%2.2x StatusCode=0x%4.4x : %s\n", i, ec_slave[i].state, ec_slave[i].ALstatuscode,
-                   ec_ALstatuscode2string(ec_slave[i].ALstatuscode));
-          }
-        }
-      }
-      printf("\nRequest init state for all slaves\n");
-      ec_slave[0].state = EC_STATE_INIT;
-      // request INIT state for all slaves
-      ec_writestate(0);
+      std::cout << USAGE;
+      return std::nullopt;
+    }
+    if (const auto it = valued.find(arg); it != valued.end() && i + 1 < argc)
+    {
+      it->second(argv[++i]);
+    }
+    else if (const auto flag = flags.find(arg); flag != flags.end())
+    {
+      flag->second();
+    }
+    else if (o.check.empty() && arg.rfind("--", 0) != 0)
+    {
+      o.check = arg;
     }
     else
     {
-      printf("No slaves found!\n");
+      std::cerr << USAGE;
+      return std::nullopt;
     }
-    printf("End simple test, close socket\n");
-    // stop SOEM, close socket
-    ec_close();
   }
-  else
+  const std::vector<std::string> checks = { "read", "timing", "hold", "move" };
+  if (std::find(checks.begin(), checks.end(), o.check) == checks.end())
   {
-    printf("No socket connection on %s\nExcecute as root\n", ifname);
+    std::cerr << USAGE;
+    return std::nullopt;
   }
+  if (o.hal == "ethercat_soem" && o.network_interface.empty())
+  {
+    std::cerr << "The HAL ethercat_soem needs the network interface of the drive: --network-interface <interface>\n";
+    return std::nullopt;
+  }
+  if (o.rt_priority < 1 || o.rt_priority > 99)
+  {
+    std::cerr << "--rt-priority takes a SCHED_FIFO priority from 1 to 99.\n";
+    return std::nullopt;
+  }
+  if (o.config.empty())
+  {
+    o.config = ament_index_cpp::get_package_share_directory("synapticon_hardware") +
+               "/config/example_somanet_circulo_safe_motion.yaml";
+    std::cout << "No --config: using the bundled example slave_config " << o.config << "\n";
+  }
+  return o;
 }
 
-OSAL_THREAD_FUNC ecatcheck(void* ptr)
+/// Best effort real-time setup of this process for --rt, at SCHED_FIFO `priority`. Each step reports when it does not
+/// work. The CPU idle state limit lasts while its file stays open, so the descriptor is kept until the process ends.
+void request_real_time(int priority)
 {
-  int slave;
-  (void)ptr;  // unused
-
-  while (1)
-  {
-    if (inOP && ((wkc < expectedWKC) || ec_group[currentgroup].docheckstate))
+  const auto attempt = [](const char* what, bool done) {
+    if (!done)
     {
-      if (needlf)
-      {
-        needlf = false;
-        printf("\n");
-      }
-      // one ore more slaves are not responding
-      ec_group[currentgroup].docheckstate = false;
-      ec_readstate();
-      for (slave = 1; slave <= ec_slavecount; slave++)
-      {
-        if ((ec_slave[slave].group == currentgroup) && (ec_slave[slave].state != EC_STATE_OPERATIONAL))
-        {
-          ec_group[currentgroup].docheckstate = true;
-          if (ec_slave[slave].state == (EC_STATE_SAFE_OP + EC_STATE_ERROR))
-          {
-            printf("ERROR : slave %d is in SAFE_OP + ERROR, attempting ack.\n", slave);
-            ec_slave[slave].state = (EC_STATE_SAFE_OP + EC_STATE_ACK);
-            ec_writestate(slave);
-          }
-          else if (ec_slave[slave].state == EC_STATE_SAFE_OP)
-          {
-            printf("WARNING : slave %d is in SAFE_OP, change to OPERATIONAL.\n", slave);
-            ec_slave[slave].state = EC_STATE_OPERATIONAL;
-            ec_writestate(slave);
-          }
-          else if (ec_slave[slave].state > EC_STATE_NONE)
-          {
-            if (ec_reconfig_slave(slave, EC_TIMEOUTMON))
-            {
-              ec_slave[slave].islost = false;
-              printf("MESSAGE : slave %d reconfigured\n", slave);
-            }
-          }
-          else if (!ec_slave[slave].islost)
-          {
-            // re-check state
-            ec_statecheck(slave, EC_STATE_OPERATIONAL, EC_TIMEOUTRET);
-            if (ec_slave[slave].state == EC_STATE_NONE)
-            {
-              ec_slave[slave].islost = true;
-              printf("ERROR : slave %d lost\n", slave);
-            }
-          }
-        }
-        if (ec_slave[slave].islost)
-        {
-          if (ec_slave[slave].state == EC_STATE_NONE)
-          {
-            if (ec_recover_slave(slave, EC_TIMEOUTMON))
-            {
-              ec_slave[slave].islost = false;
-              printf("MESSAGE : slave %d recovered\n", slave);
-            }
-          }
-          else
-          {
-            ec_slave[slave].islost = false;
-            printf("MESSAGE : slave %d found\n", slave);
-          }
-        }
-      }
-      if (!ec_group[currentgroup].docheckstate)
-        printf("OK : all slaves resumed OPERATIONAL.\n");
+      std::cerr << "--rt: " << what << " not possible: " << std::strerror(errno) << "\n";
     }
-    osal_usleep(10000);
-  }
+  };
+  const sched_param scheduling{ .sched_priority = priority };
+  attempt("real-time scheduling (SCHED_FIFO)", sched_setscheduler(0, SCHED_FIFO, &scheduling) == 0);
+  attempt("locking the memory", mlockall(MCL_CURRENT | MCL_FUTURE) == 0);
+  static const int latency_file = ::open("/dev/cpu_dma_latency", O_WRONLY);
+  const int32_t no_wakeup_delay = 0;
+  attempt("limiting the CPU idle states",
+          latency_file >= 0 && ::write(latency_file, &no_wakeup_delay, sizeof(no_wakeup_delay)) ==
+                                   static_cast<ssize_t>(sizeof(no_wakeup_delay)));
 }
 
-int main(int argc, char* argv[])
+/// The HAL description of one drive from the command line: the parameters a URDF would give the HAL. Optional
+/// settings are left out when not given, so that the HAL's defaults apply.
+synapticon_hardware::HalConfig hal_config(const Options& o, int mode_of_operation)
 {
-  printf("SOEM (Simple Open EtherCAT Master)\nSimple test\n");
-
-  if (argc > 1)
+  synapticon_hardware::HalConfig config;
+  auto& hardware = config.hardware_parameters;
+  hardware["control_frequency"] = std::to_string(CYCLE_HZ);
+  if (!o.network_interface.empty())
   {
-    /* create thread to handle slave error handling in OP */
-    //      pthread_create( &thread1, NULL, (void *) &ecatcheck, (void*) &ctime);
-    osal_thread_create(&thread1, 128000, (void*)&ecatcheck, (void*)&ctime);
-    /* start cyclic part */
-    simpletest(argv[1]);
+    hardware["network_interface"] = o.network_interface;
   }
-  else
+  synapticon_hardware::JointSpec joint;
+  joint.name = "drive";
+  joint.parameters = { { "position", std::to_string(o.ring_position) },
+                       { "mode_of_operation", std::to_string(mode_of_operation) },
+                       { "slave_config", o.config } };
+  if (std::isfinite(o.max_torque))
   {
-    printf("TODO: Add instructions on how this executable should be used. Maybe add the following example\n");
-    printf("ros2 run synapticon_ros2_control torque_control_executable -- eno0\n");
-    ec_adaptert* adapter = NULL;
-    printf("\nAvailable adapters:\n");
-    adapter = ec_find_adapters();
-    while (adapter != NULL)
+    joint.parameters["max_joint_torque"] = std::to_string(o.max_torque);
+  }
+  config.joints.push_back(joint);
+  return config;
+}
+
+/// The HAL with one drive, its bus brought up and started. Stops and releases the bus on destruction.
+class Bus
+{
+public:
+  Bus() : loader_("synapticon_hardware", "synapticon_hardware::SynapticonHalI")
+  {
+  }
+
+  bool open(const Options& o, int mode_of_operation)
+  {
+    try
     {
-      printf("    - %s  (%s)\n", adapter->name, adapter->desc);
-      adapter = adapter->next;
+      hal_ = loader_.createSharedInstance(o.hal);
     }
-    ec_free_adapters(adapter);
+    catch (const pluginlib::PluginlibException& e)
+    {
+      std::cerr << "Cannot load the HAL '" << o.hal << "': " << e.what() << "\n";
+      return false;
+    }
+    if (!hal_->setup(hal_config(o, mode_of_operation)))
+    {
+      std::cerr << "setup() failed\n";
+      return false;
+    }
+    brought_up_ = hal_->connect();
+    started_ = brought_up_ && hal_->start();
+    if (!started_)
+    {
+      std::cerr << "The bus did not come up\n";
+    }
+    return started_;
   }
 
-  printf("End program\n");
-  return (0);
+  ~Bus()
+  {
+    if (started_)
+    {
+      hal_->stop();
+    }
+    if (brought_up_)
+    {
+      hal_->disconnect();
+    }
+  }
+
+  SynapticonHalI& hal()
+  {
+    return *hal_;
+  }
+
+private:
+  pluginlib::ClassLoader<SynapticonHalI> loader_;  // outlives the HAL it loaded
+  std::shared_ptr<SynapticonHalI> hal_;
+  bool brought_up_{ false };
+  bool started_{ false };
+};
+
+/// A command that keeps the drive where it is: NaN position holds, NaN gains and torque limit change nothing.
+DriveCommand neutral_command()
+{
+  DriveCommand command;
+  command.position = NaN;
+  command.stiffness = NaN;
+  command.damping = NaN;
+  command.max_joint_torque = NaN;
+  return command;
+}
+
+void print_state(const DriveState& s)
+{
+  std::cout << "q " << s.position << " rad | dq " << s.velocity << " rad/s | tau " << s.effort << " Nm | sw 0x"
+            << std::hex << std::setw(4) << std::setfill('0') << s.status_word << " | fault 0x" << std::setw(4)
+            << s.error_code << std::dec << std::setfill(' ') << "\n";
+}
+
+/// Call `cycle` once per bus period until it returns false, the duration ends or Ctrl-C.
+/// Returns the number of periods the loop fell behind, or nothing when `cycle` failed.
+std::optional<std::size_t> run_cycles(const Options& o, const std::function<bool()>& cycle)
+{
+  const auto period = std::chrono::duration_cast<Clock::duration>(std::chrono::duration<double>(1.0 / CYCLE_HZ));
+  const auto end =
+      o.duration > 0.0 ?
+          Clock::now() + std::chrono::duration_cast<Clock::duration>(std::chrono::duration<double>(o.duration)) :
+          Clock::time_point::max();
+  std::size_t behind = 0;
+  for (auto next = Clock::now() + period; !g_stop && Clock::now() < end; next += period)
+  {
+    if (!cycle())
+    {
+      return std::nullopt;
+    }
+    if (Clock::now() < next)
+    {
+      std::this_thread::sleep_until(next);
+    }
+    else
+    {
+      ++behind;
+    }
+  }
+  return behind;
+}
+
+/// True once every PRINT_PERIOD.
+class PrintTimer
+{
+public:
+  bool due()
+  {
+    if (Clock::now() < next_)
+    {
+      return false;
+    }
+    next_ = Clock::now() + PRINT_PERIOD;
+    return true;
+  }
+
+private:
+  Clock::time_point next_{ Clock::now() };
+};
+
+int check_read(SynapticonHalI& hal, const Options& o)
+{
+  std::vector<DriveState> states;
+  const std::vector<DriveCommand> neutral(1, neutral_command());
+  PrintTimer timer;
+  const auto behind = run_cycles(o, [&] {
+    if (!hal.read(states) || !hal.write(neutral))
+    {
+      std::cerr << "Exchange with the drive failed\n";
+      return false;
+    }
+    if (timer.due())
+    {
+      print_state(states[0]);
+    }
+    return true;
+  });
+  return behind ? 0 : 1;
+}
+
+/// Summary of call durations in microseconds.
+struct Durations
+{
+  double median{ 0.0 };
+  double p99{ 0.0 };
+  double p999{ 0.0 };
+  double worst{ 0.0 };
+  double mean{ 0.0 };
+  double spread{ 0.0 };  ///< standard deviation
+};
+
+/// The summary of `samples`, which it sorts.
+Durations summarize(std::vector<double>& samples)
+{
+  Durations d;
+  if (samples.empty())
+  {
+    return d;
+  }
+  std::sort(samples.begin(), samples.end());
+  const auto rank = [&samples](double fraction) {
+    return samples[static_cast<std::size_t>(std::llround(fraction * static_cast<double>(samples.size() - 1)))];
+  };
+  const double count = static_cast<double>(samples.size());
+  d.mean = std::accumulate(samples.begin(), samples.end(), 0.0) / count;
+  const double square_sum = std::accumulate(samples.begin(), samples.end(), 0.0,
+                                            [&d](double sum, double x) { return sum + (x - d.mean) * (x - d.mean); });
+  d.spread = std::sqrt(square_sum / count);
+  d.median = rank(0.5);
+  d.p99 = rank(0.99);
+  d.p999 = rank(0.999);
+  d.worst = samples.back();
+  return d;
+}
+
+void print_durations(const std::string& call, std::vector<double> samples)
+{
+  const Durations d = summarize(samples);
+  std::cout << std::fixed << std::setprecision(1) << call << ": median " << d.median << " us, 99 % below " << d.p99
+            << " us, 99.9 % below " << d.p999 << " us, worst " << d.worst << " us (mean " << d.mean << " +/- "
+            << d.spread << " us, " << samples.size() << " calls)\n";
+}
+
+int check_timing(SynapticonHalI& hal, const Options& o)
+{
+  const double seconds = o.duration > 0.0 ? o.duration : 600.0;
+  std::vector<double> read_us, write_us;
+  read_us.reserve(static_cast<std::size_t>(seconds * CYCLE_HZ) + 1);
+  write_us.reserve(read_us.capacity());
+  std::vector<DriveState> states;
+  const std::vector<DriveCommand> neutral(1, neutral_command());
+  std::size_t failures = 0;
+  const auto micros = [](Clock::duration d) { return std::chrono::duration<double, std::micro>(d).count(); };
+
+  const auto behind = run_cycles(o, [&] {
+    const auto t0 = Clock::now();
+    failures += hal.read(states) ? 0 : 1;
+    const auto t1 = Clock::now();
+    failures += hal.write(neutral) ? 0 : 1;
+    const auto t2 = Clock::now();
+    if (read_us.size() < read_us.capacity())  // never reallocate inside the loop
+    {
+      read_us.push_back(micros(t1 - t0));
+      write_us.push_back(micros(t2 - t1));
+    }
+    return true;
+  });
+  print_durations("read", read_us);
+  print_durations("write", write_us);
+  std::cout << read_us.size() << " cycles, " << failures << " failed calls, " << behind.value_or(0)
+            << " cycles behind schedule\n";
+  return failures == 0 ? 0 : 1;
+}
+
+/// hold and move: enable, follow the target, disable. move ramps the target between the start position and the
+/// travel away, and stops when the joint leaves that range.
+int check_motion(SynapticonHalI& hal, const Options& o)
+{
+  std::vector<DriveState> states;
+  if (!hal.read(states))
+  {
+    return 1;
+  }
+  const double start = states[0].position;
+  const double travel = o.check == "move" ? o.travel_deg * M_PI / 180.0 : 0.0;
+  const double lowest = std::min(start, start + travel) - TRAVEL_MARGIN;
+  const double highest = std::max(start, start + travel) + TRAVEL_MARGIN;
+
+  std::cout
+      << "Powering the drive now. Keep clear of the joint and the e-stop within reach, Ctrl-C takes the power off.\n";
+  if (!hal.enable())
+  {
+    std::cerr << "enable() failed\n";
+    return 1;
+  }
+  DriveCommand command = neutral_command();
+  command.position = start;
+  command.stiffness = o.stiffness;
+  command.damping = o.damping;
+  double goal = start;
+  const double max_step = TARGET_SPEED / CYCLE_HZ;
+  auto next_turn = Clock::now();
+  PrintTimer timer;
+
+  const auto behind = run_cycles(o, [&] {
+    if (!hal.read(states))
+    {
+      std::cerr << "read() failed\n";
+      return false;
+    }
+    const DriveState& s = states[0];
+    if (s.status_word & 0x08)
+    {
+      std::cerr << "Drive fault, error code 0x" << std::hex << s.error_code << std::dec << "\n";
+      return false;
+    }
+    if (s.position < lowest || s.position > highest)
+    {
+      std::cerr << "The joint left the range [" << lowest << ", " << highest << "] rad\n";
+      return false;
+    }
+    if (travel != 0.0 && Clock::now() >= next_turn)
+    {
+      goal = goal == start ? start + travel : start;
+      next_turn += TURN_PERIOD;
+    }
+    command.position += std::clamp(goal - command.position, -max_step, max_step);
+    if (timer.due())
+    {
+      std::cout << "setpoint " << command.position << " rad | ";
+      print_state(s);
+    }
+    return hal.write({ command });
+  });
+  const bool disabled = hal.disable();
+  std::cout << (disabled ? "Disabled\n" : "disable() failed\n");
+  return behind && disabled ? 0 : 1;
+}
+}  // namespace
+
+int main(int argc, char** argv)
+{
+  const auto options = parse_options(argc, argv);
+  if (!options)
+  {
+    return 2;
+  }
+  rclcpp::init(argc, argv);
+  std::signal(SIGINT, [](int) { g_stop = true; });
+  if (options->rt)
+  {
+    request_real_time(options->rt_priority);  // threads started later by the HAL inherit it
+  }
+
+  const bool moves = options->check == "hold" || options->check == "move";
+  int result = 1;
+  {
+    Bus bus;
+    if (bus.open(*options, moves && options->impedance ? -6 : 8))
+    {
+      std::cout << "The drive streams its data and has no power yet\n";
+      if (options->check == "read")
+      {
+        result = check_read(bus.hal(), *options);
+      }
+      else if (options->check == "timing")
+      {
+        result = check_timing(bus.hal(), *options);
+      }
+      else
+      {
+        result = check_motion(bus.hal(), *options);
+      }
+    }
+  }
+  rclcpp::shutdown();
+  return result;
 }
