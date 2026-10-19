@@ -1,0 +1,9 @@
+<library path="synapticon_ethercat_soem">
+  <class name="ethercat_soem"
+         type="synapticon_ethercat_soem::EthercatSoemHal"
+         base_class_type="synapticon_hardware::SynapticonHalI">
+    <description>
+      HAL for SOMANET drives on an EtherCAT bus, through the SOEM master library in user space.
+    </description>
+  </class>
+</library>
