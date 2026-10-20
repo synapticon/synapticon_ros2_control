@@ -180,7 +180,7 @@ Write it down, and look into it when it comes back.
 |---|---|---|
 | `SYNAPTICON_HIL_SLAVE_CONFIG` | the installed example slave_config | base slave_config |
 | `SYNAPTICON_HIL_NETWORK_INTERFACE` | unset | network interface of the drives, required |
-| `SYNAPTICON_HIL_ALIAS` | `0` | slave alias |
+| `SYNAPTICON_HIL_ALIAS` | `0` | slave alias, only `0` is supported |
 | `SYNAPTICON_HIL_POSITION` | `0` | slave ring position |
 | `SYNAPTICON_HIL_POSITION_2` | `SYNAPTICON_HIL_POSITION` + 1 | ring position of the second drive, for `--two-drives` |
 | `SYNAPTICON_HIL_STRICT` | unset | `1` turns a failed impedance bring-up into a failure instead of a skip |
