@@ -83,8 +83,8 @@ private:
 
   /// Find each joint's drive and check its identity. False, logged, when one is missing or another device.
   bool find_drives();
-  /// Write each drive's startup SDOs. A failed download is logged and the bring-up goes on.
-  void write_startup_sdos();
+  /// Write each drive's startup SDOs. False, logged, at the first one a drive refuses twice.
+  bool write_startup_sdos();
   /// Request `state` of every drive and wait for it, exchanging process data while waiting when `cycling`. The
   /// request is repeated until it takes.
   bool reach_state(uint16_t state, bool cycling);

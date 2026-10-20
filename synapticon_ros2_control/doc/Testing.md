@@ -141,7 +141,7 @@ When the joint travels further than the test expects, it cuts the voltage and fa
 2. With one drive, expect:
 
    ```text
-   [  PASSED  ] 49 tests.
+   [  PASSED  ] 50 tests.
    [  SKIPPED ] 4 tests, listed below:
    [  SKIPPED ] DrivePair.ADisableVoltageOfOneLeavesTheOtherInQuickStop
    [  SKIPPED ] DrivePair.AFaultOnOneLeavesTheOtherRunning
@@ -386,6 +386,7 @@ Problems show up at one of four moments. Find the moment first, then your sympto
   - A drive with MaxJointTorque 0 comes up, with a warning.
   - An impedance joint whose torque sensor type is None is refused.
   - A joint at a ring position without a drive, or with a missing slave_config, fails the bring-up.
+  - A startup SDO that the drive refuses fails the bring-up (SOEM HAL only).
 
 ### How the drive behaves on the bench
 
@@ -443,6 +444,6 @@ These observations explain why some tests retry, wait or allow for things.
 
 - **Right after the bus is released, the drive's mailbox may not be ready.**
   Then either the first config SDO of the next bring-up gets lost, or every SDO read fails and bring-up refuses.
-  A lost SDO only shows as a failed download in the log, and bring-up goes on.
+  The SOEM HAL writes a lost SDO once more, and refuses the bring-up when that fails too.
   The suite waits after every release and writes `0x605A` first.
   It repeats a bring-up that failed, or whose read-back shows that a value did not take.

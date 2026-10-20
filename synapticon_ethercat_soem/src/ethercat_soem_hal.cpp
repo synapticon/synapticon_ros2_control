@@ -436,7 +436,11 @@ bool EthercatSoemHal::connect()
     return false;
   }
   // The startup SDOs go before the checks, which read some of them back.
-  write_startup_sdos();
+  if (!write_startup_sdos())
+  {
+    disconnect();
+    return false;
+  }
   for (const uint16_t slave : bus_->slave_of_joint)
   {
     bus_->slaves[slave].PO2SOconfigx = &Bus::write_pdo_mapping;
@@ -712,15 +716,25 @@ bool EthercatSoemHal::find_drives()
   return true;
 }
 
-void EthercatSoemHal::write_startup_sdos()
+bool EthercatSoemHal::write_startup_sdos()
 {
   for (std::size_t j = 0; j < joints_.size(); ++j)
   {
     for (const auto& sdo : bus_->slave_configs[j].sdo)
     {
-      bus_->download(bus_->slave_of_joint[j], sdo.index, sdo.sub_index, sdo_bytes(sdo));  // checked at load
+      // The value was checked at load. One retry, since right after a bus release the drive's mailbox may drop the
+      // first SDO.
+      const uint16_t slave = bus_->slave_of_joint[j];
+      if (!bus_->download(slave, sdo.index, sdo.sub_index, sdo_bytes(sdo)) &&
+          !bus_->download(slave, sdo.index, sdo.sub_index, sdo_bytes(sdo)))
+      {
+        RCLCPP_ERROR(logger(), "Joint '%s': the drive refused the startup SDO 0x%04X:%u of its slave_config.",
+                     joints_[j].name.c_str(), sdo.index, sdo.sub_index);
+        return false;
+      }
     }
   }
+  return true;
 }
 
 bool EthercatSoemHal::reach_state(uint16_t state, bool cycling)

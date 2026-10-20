@@ -4,7 +4,8 @@
 // Copyright (c) 2026 b-robotized GmbH
 
 /// @file
-/// @brief Hardware-in-the-loop run of the drive action suite and the EtherCAT bring-up tests on EthercatSoemHal.
+/// @brief Hardware-in-the-loop run of the drive action suite and the EtherCAT bring-up tests on EthercatSoemHal, plus
+/// the bring-up tests that only this HAL passes.
 ///
 /// NOT part of `colcon test`: it needs one SOMANET drive connected, and it ENERGISES AND MOVES
 /// the motor. Run it on purpose, with the joint free to turn about one output revolution, and with no other
@@ -41,6 +42,22 @@ bool set_up_hal(EthercatHalUnderTest& hal, const ethercat::BusConfig& bus,
 }  // namespace synapticon_hardware::testing
 
 #include "synapticon_hardware/testing/ethercat_hal_tests.hpp"
+
+namespace synapticon_hardware::testing
+{
+/// A startup SDO that the drive refuses fails the bring-up. 0x1000 (device type) is read-only, so the write never
+/// takes and changes nothing.
+TEST_F(EthercatBringUp, ARefusedStartupSdoFailsTheBringUp)
+{
+  JointConfig joint = bench_joint();
+  joint.slave_config_file =
+      write_config({ { "0x605a", 0, "int16", "6" }, { "0x1000", 0, "uint32", "0" } }, test_name());
+  auto hal = std::make_shared<ProbedHal>();
+  ASSERT_TRUE(set_up_hal(*hal, bench_bus(), { joint }));
+  EXPECT_FALSE(hal->connect());
+  release(hal);
+}
+}  // namespace synapticon_hardware::testing
 
 int main(int argc, char** argv)
 {
