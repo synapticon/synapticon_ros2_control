@@ -110,14 +110,23 @@ public:
   }
 };
 
-/// One `sdo:` entry of a slave_config.
+/// One entry of a slave_config: in `sdo:` with its raw value, or with `si` in `sdo_si:` with its value in SI units.
 struct Sdo
 {
   std::string index;  ///< e.g. "0x6085", lower case as in the configs
   int sub_index;
   std::string type;
   std::string value;
+  bool si{ false };   ///< an `sdo_si:` entry, converted by bring-up into the drive's unit
+  bool raw{ false };  ///< `raw: true`, for a raw value of an object whose unit depends on the drive
 };
+
+/// `sdo` as one line of its list in a slave_config.
+inline std::string sdo_line(const Sdo& sdo)
+{
+  return "  - { index: " + sdo.index + ", sub_index: " + std::to_string(sdo.sub_index) + ", type: " + sdo.type +
+         (sdo.si ? ", si_value: " : ", value: ") + sdo.value + (sdo.raw ? ", raw: true" : "") + " }\n";
+}
 
 inline std::string base_config_path()
 {
@@ -125,13 +134,23 @@ inline std::string base_config_path()
                                                    "/config/example_somanet_circulo_safe_motion.yaml");
 }
 
-/// The base slave_config with `overrides` replacing any entry of the same index, written to a temporary file.
-/// Returns its path.
-inline std::string write_config(const std::vector<Sdo>& overrides, const std::string& name)
+/// The slave_config `base` with `overrides` replacing any entry of the same index, written to a temporary file. An
+/// SI entry goes into the `sdo_si:` list, which is added when `base` has none. Returns its path.
+inline std::string write_config(const std::vector<Sdo>& overrides, const std::string& name, const std::string& base)
 {
   std::ifstream in(base);
   std::stringstream out;
   std::string line;
+  bool si_list = false;
+  const auto write_entries = [&out, &overrides](bool si) {
+    for (const auto& sdo : overrides)
+    {
+      if (sdo.si == si)
+      {
+        out << sdo_line(sdo);
+      }
+    }
+  };
   while (std::getline(in, line))
   {
     bool replaced = false;
@@ -151,29 +170,49 @@ inline std::string write_config(const std::vector<Sdo>& overrides, const std::st
     out << line << "\n";
     if (line.rfind("sdo:", 0) == 0)
     {
-      for (const auto& sdo : overrides)
-      {
-        out << "  - { index: " << sdo.index << ", sub_index: " << sdo.sub_index << ", type: " << sdo.type
-            << ", value: " << sdo.value << " }\n";
-      }
+      write_entries(false);
     }
+    else if (line.rfind("sdo_si:", 0) == 0)
+    {
+      write_entries(true);
+      si_list = true;
+    }
+  }
+  if (!si_list)
+  {
+    out << "sdo_si:\n";
+    write_entries(true);
   }
   const std::string path = ::testing::TempDir() + "hil_" + name + ".yaml";
   std::ofstream(path) << out.str();
   return path;
 }
 
-/// The following error objects for `mode`. DEFAULT is the vendor default (report only, window off,
-/// 100 ms). REPORT and FAULT make a small commanded jump trip within a cycle (window 1000 increments, 1 ms).
+/// Following error window of the REPORT and FAULT modes [rad]: about 1000 increments of a geared SOMANET Circulo.
+inline constexpr double FOLLOWING_ERROR_WINDOW_RAD = 0.006;
+/// Set up `hal` on the bench's bus `bus` with `joints`. Each HAL's test executable defines it.
+bool set_up_hal(EthercatHalUnderTest& hal, const BusConfig& bus, const std::vector<JointConfig>& joints);
+
+/// The brake objects that decide whether a disable_voltage waits for the brake.
+inline constexpr ec::CoeAddress BRAKE_RELEASE_STRATEGY{ 0x2004, 4 };    ///< 0: the drive does not control a brake
+inline constexpr ec::CoeAddress CONTROLLER_DISABLE_DELAY{ 0x2004, 5 };  ///< ms the drive keeps control after a disable
+
+/// The following error objects for `mode`. DEFAULT is the vendor default (report only, window off, 100 ms). REPORT
+/// and FAULT make a small commanded jump trip within a cycle (window FOLLOWING_ERROR_WINDOW_RAD, 1 ms).
 inline std::vector<Sdo> following_error_objects(FollowingError mode)
 {
   if (mode == FollowingError::DEFAULT)
   {
-    // The SDO parser reads values as int, so the all-ones "window off" is written as -1.
-    return { { "0x2017", 1, "uint8", "0" }, { "0x6065", 0, "uint32", "-1" }, { "0x6066", 0, "uint16", "100" } };
+    // "Window off" is the all-ones raw value, which no angle expresses. The SDO parser reads values as int, so it is
+    // written as -1.
+    return { { "0x2017", 1, "uint8", "0" },
+             { "0x6065", 0, "uint32", "-1", false, true },
+             { "0x6066", 0, "uint16", "100" } };
   }
   const std::string faults = mode == FollowingError::FAULT ? "1" : "0";
-  return { { "0x2017", 1, "uint8", faults }, { "0x6065", 0, "uint32", "1000" }, { "0x6066", 0, "uint16", "1" } };
+  return { { "0x2017", 1, "uint8", faults },
+           { "0x6065", 0, "uint32", std::to_string(FOLLOWING_ERROR_WINDOW_RAD), true },
+           { "0x6066", 0, "uint16", "1" } };
 }
 
 inline uint16_t env_u16(const char* name, const std::string& fallback)
@@ -181,11 +220,111 @@ inline uint16_t env_u16(const char* name, const std::string& fallback)
   return static_cast<uint16_t>(std::stoul(env_or(name, fallback)));
 }
 
-/// The name of the running test, for the temporary slave_config files.
+/// @brief The robot definition that SYNAPTICON_HIL_ROBOT names, merged the way the HALs merge it.
+///
+/// Its bus entries become hardware parameters, and each joint gets its parameters. A joint that names no slave_config
+/// gets base_config_path(). Empty without SYNAPTICON_HIL_ROBOT.
+/// @throws std::runtime_error when the file is no valid robot definition.
+inline HalConfig robot_config()
+{
+  HalConfig config;
+  const std::string path = env_or("SYNAPTICON_HIL_ROBOT", "");
+  if (path.empty())
+  {
+    return config;
+  }
+  config.hardware_parameters[ec::ROBOT_CONFIG_PARAM] = path;
+  config.hardware_parameters[ec::DEFAULT_SLAVE_CONFIG_PARAM] = base_config_path();
+  try
+  {
+    for (const auto& entry : YAML::LoadFile(path)["joints"])
+    {
+      config.joints.push_back({ entry["name"].as<std::string>(), {} });
+    }
+  }
+  catch (const YAML::Exception& e)
+  {
+    throw std::runtime_error("robot definition '" + path + "': " + e.what());
+  }
+  std::string error;
+  if (!ec::apply_robot_config(config, error))
+  {
+    throw std::runtime_error(error);
+  }
+  return config;
+}
+
+/// The joints of the robot definition, read the way the HALs read them. Empty without SYNAPTICON_HIL_ROBOT.
+/// @throws std::runtime_error or std::invalid_argument when the file is no valid robot definition.
+inline std::vector<JointConfig> robot_joints()
+{
+  std::vector<JointConfig> joints;
+  for (const auto& spec : robot_config().joints)
+  {
+    joints.push_back(ec::joint_from(spec.name, spec.parameters));
+  }
+  return joints;
+}
+
+/// The robot definition's bus entry `key`, or `fallback` when it has none.
+inline std::string robot_bus_parameter(const std::string& key, const std::string& fallback)
+{
+  const auto parameters = robot_config().hardware_parameters;
+  const auto found = parameters.find(key);
+  return found != parameters.end() ? found->second : fallback;
+}
+
+/// The bench's bus: the robot definition's bus settings, at the bus rate the suite's timing is written for.
+/// @throws std::invalid_argument for a bus setting out of range.
+inline BusConfig bench_bus_config()
+{
+  BusConfig bus = ec::bus_from(robot_config().hardware_parameters);
+  bus.control_frequency = BENCH_RATE_HZ;
+  return bus;
+}
+
+/// @brief Drive `index` of the bench (0 or 1) in `mode`, on its base slave_config.
+///
+/// It is the joint of the same index in the robot definition, or a joint on base_config_path() when there is none.
+/// SYNAPTICON_HIL_ALIAS, SYNAPTICON_HIL_POSITION and SYNAPTICON_HIL_POSITION_2 override what the file gives.
+/// An impedance joint keeps the file's stiffness, damping and torque ceiling, and takes those of the example robot
+/// definitions for any the file leaves out. In the other modes the drive keeps its own.
+inline JointConfig bench_drive(std::size_t index, int mode)
+{
+  const auto joints = robot_joints();
+  JointConfig joint;
+  if (index < joints.size())
+  {
+    joint = joints[index];
+  }
+  else
+  {
+    joint.name = "joint_" + std::to_string(index + 1);
+    joint.slave_config_file = base_config_path();
+    joint.position = index == 0 ? 0 : static_cast<uint16_t>(bench_drive(0, mode).position + 1);
+  }
+  const char* position_variable = index == 0 ? "SYNAPTICON_HIL_POSITION" : "SYNAPTICON_HIL_POSITION_2";
+  joint.position = env_u16(position_variable, std::to_string(joint.position));
+  joint.alias = env_u16("SYNAPTICON_HIL_ALIAS", std::to_string(joint.alias));
+  joint.mode_of_operation = mode;
+  const bool impedance = mode == ec::mode::IMPEDANCE;
+  const auto fill = [impedance](double& value, double example) {
+    value = !impedance ? QUIET_NAN : std::isnan(value) ? example : value;
+  };
+  fill(joint.stiffness, 0.4);
+  fill(joint.damping, 0.1);
+  fill(joint.max_joint_torque, 50.0);
+  return joint;
+}
+
+/// The name of the running test, for the temporary slave_config files. The '/' of a parameterized test's name
+/// becomes '_', so the name stays one file name.
 inline std::string test_name()
 {
   const auto* info = ::testing::UnitTest::GetInstance()->current_test_info();
-  return info != nullptr ? info->name() : "suite";
+  std::string name = info != nullptr ? info->name() : "suite";
+  std::replace(name.begin(), name.end(), '/', '_');
+  return name;
 }
 
 /// @brief SOMANET drives on the bus of the HAL under test, set up through slave_config SDO entries.
@@ -202,7 +341,7 @@ public:
     std::vector<std::vector<Sdo>> sdo;
     for (std::size_t j = 0; j < drives.size(); ++j)
     {
-      sdo.push_back(overrides(drive));
+      sdo.push_back(overrides(drives[j]));
     }
     return connect_with_sdo(drives, sdo);
   }
@@ -213,26 +352,49 @@ public:
     std::this_thread::sleep_for(std::chrono::milliseconds(1500));
   }
 
-  /// Learn the drive's 0x6085 unit and its present value from two read-backs.
+  /// Note of each drive what the stack read: its quick stop ramp, to restore at the end, and its velocity step. Then
+  /// read whether a disable_voltage waits for its brake. Drives of different models differ in all of them.
   bool prepare() override
   {
     if (!learned_.empty())
     {
       return true;
     }
-    auto hal = connect_with_sdo({ DriveSettings{} }, { overrides(DriveSettings{}) });
+    std::vector<LearnedDrive> learned(two_drives_ ? 2 : 1);
+    const std::vector<DriveSettings> defaults(learned.size());
+    auto hal = connect_with_sdo(defaults, overrides(defaults));
     if (!hal)
     {
       return false;
     }
-    const double found = hal->quick_stop_deceleration(0);
-    release(hal);
-    std::vector<Sdo> sdo = overrides(DriveSettings{});
-    sdo.push_back(quick_stop_deceleration(100000));
-    hal = connect_with_sdo({ DriveSettings{} }, { sdo });
-    if (!hal)
+    for (std::size_t j = 0; j < learned.size(); ++j)
     {
-      return false;
+      learned[j].original_deceleration = hal->quick_stop_deceleration(j);
+      learned[j].velocity_step = hal->velocity_step(j);
+    }
+    release(hal);
+    for (std::size_t j = 0; j < learned.size(); ++j)
+    {
+      learned[j].disable_delay = brake_disable_delay(j);
+    }
+    learned_ = std::move(learned);
+    return true;
+  }
+
+  /// The brake's controller disable delay of drive `index` [s], 0 when the drive controls no brake. Read on a bus
+  /// that is set up but not started: a started bus answers SDO reads only while it exchanges cycles.
+  double brake_disable_delay(std::size_t index)
+  {
+    JointConfig joint = bench_drive(index, ec::mode::CSP);
+    joint.slave_config_file =
+        write_config(overrides(DriveSettings{}), "brake_" + std::to_string(index), joint.slave_config_file);
+    auto hal = std::make_shared<ProbedHal>();
+    double delay = 0.0;
+    if (set_up_hal(*hal, bench_bus_config(), { joint }) && hal->connect())
+    {
+      const auto strategy = hal->sdo_u32(joint.position, BRAKE_RELEASE_STRATEGY);
+      const auto delay_ms = hal->sdo_u32(joint.position, CONTROLLER_DISABLE_DELAY);
+      delay = strategy && *strategy != 0 && delay_ms ? *delay_ms / 1000.0 : 0.0;
     }
     release(hal);
     return delay;
@@ -245,9 +407,16 @@ public:
     {
       return;
     }
-    std::vector<Sdo> sdo = overrides(DriveSettings{});
-    sdo.push_back(quick_stop_deceleration(original_raw_));
-    if (auto hal = connect_with_sdo({ DriveSettings{} }, { sdo }))
+    const std::vector<DriveSettings> defaults(learned_.size());
+    auto sdo = overrides(defaults);
+    for (std::size_t j = 0; j < sdo.size(); ++j)
+    {
+      if (std::isfinite(learned_[j].original_deceleration))
+      {
+        sdo[j].push_back(quick_stop_deceleration(learned_[j].original_deceleration));
+      }
+    }
+    if (auto hal = connect_with_sdo(defaults, sdo))
     {
       release(hal);
     }
@@ -270,8 +439,11 @@ public:
   }
 
 private:
+  /// What prepare() noted of one drive.
   struct LearnedDrive
   {
+    /// The quick stop ramp the drive held [rad/s^2], restored at the end. NaN when it could not be read.
+    double original_deceleration{ std::numeric_limits<double>::quiet_NaN() };
     double velocity_step{ 0.0 };  ///< velocity of one raw velocity unit [rad/s]
     double disable_delay{ 0.0 };  ///< the brake's controller disable delay [s], 0 without brake control
   };
@@ -280,28 +452,32 @@ private:
   {
     return { "0x605a", 0, "int16", std::to_string(code) };
   }
-  static Sdo quick_stop_deceleration(uint32_t raw)
+  static Sdo quick_stop_deceleration(double rad_per_s2)
   {
-    return { "0x6085", 0, "uint32", std::to_string(raw) };
+    return { "0x6085", 0, "uint32", std::to_string(rad_per_s2), true };
   }
 
-  /// The SDO entries for `drive`, the quick stop option code first: the first config SDO of a
-  /// bring-up is occasionally lost, and this one's read-back shows whether it was.
-  std::vector<Sdo> overrides(const DriveSettings& drive) const
+  /// The SDO entries for `drive`, the quick stop option code first: the first config SDO of a bring-up is occasionally
+  /// lost, and this one's read-back shows whether it was. Bring-up converts the SI entries into each drive's units.
+  static std::vector<Sdo> overrides(const DriveSettings& drive)
   {
     std::vector<Sdo> sdo{ quick_stop_option_code(drive.quick_stop_option_code) };
     if (std::isfinite(drive.quick_stop_deceleration))
     {
-      sdo.push_back(
-          quick_stop_deceleration(static_cast<uint32_t>(std::lround(drive.quick_stop_deceleration / rad_per_raw_))));
+      sdo.push_back(quick_stop_deceleration(drive.quick_stop_deceleration));
     }
     const auto following_error = following_error_objects(drive.following_error);
     sdo.insert(sdo.end(), following_error.begin(), following_error.end());
     return sdo;
   }
 
+  /// The SDO entries of each drive, entry j for `drives[j]`.
+  static std::vector<std::vector<Sdo>> overrides(const std::vector<DriveSettings>& drives)
   {
     std::vector<std::vector<Sdo>> sdo;
+    for (const DriveSettings& drive : drives)
+    {
+      sdo.push_back(overrides(drive));
     }
     return sdo;
   }
@@ -512,6 +688,44 @@ TEST_F(EthercatBringUp, ADriveTorqueLimitOfZeroIsStreamedAsIs)
 
 /// Without configured gains, the slave_config leaves them alone: the drive's own stiffness and damping are streamed
 /// until a command brings its own.
+/// A value given in SI units reaches the drive in the drive's own unit: what the drive then holds, converted with the
+/// unit the stack read, is the value within one raw step. Run for a velocity and a position object, on every drive
+/// model of the bench, this checks the conversion against the real drive.
+class SiValueReachesTheDrive : public EthercatBringUp,
+                               public ::testing::WithParamInterface<std::pair<const char*, double>>
+{
+};
+
+TEST_P(SiValueReachesTheDrive, InItsUnit)
+{
+  const auto [index, value] = GetParam();
+  const ec::CoeAddress object{ static_cast<uint16_t>(std::stoul(index, nullptr, 16)), 0 };
+  const auto found = read_object(object);
+  ASSERT_TRUE(found);
+
+  auto hal = connected_hal(bench_joint(), { { index, 0, "uint32", std::to_string(value), true } });
+  ASSERT_TRUE(hal);
+  const auto held = hal->sdo_u32(bench_joint().position, object);
+  const double step = object.index == 0x6080 ? hal->velocity_step(0) : hal->position_step(0);
+  ASSERT_TRUE(held);
+  EXPECT_NEAR(*held * step, value, step) << "raw " << *held << ", one raw step " << step;
+  release(hal);
+
+  // The SDO parsers read values as int, so the found bits go back as a signed number.
+  const std::string restored = std::to_string(static_cast<int32_t>(*found));
+  hal = connected_hal(bench_joint(), { { index, 0, "uint32", restored, false, true } });
+  ASSERT_TRUE(hal);
+  EXPECT_EQ(hal->sdo_u32(bench_joint().position, object), found);
+  release(hal);
+}
+
+INSTANTIATE_TEST_SUITE_P(Objects, SiValueReachesTheDrive,
+                         ::testing::Values(std::pair{ "0x6080", 10.0 },   // max motor speed, rad/s
+                                           std::pair{ "0x6065", 0.05 }),  // following error window, rad
+                         [](const auto& info) {
+                           return info.param.first == std::string("0x6080") ? "MaxMotorSpeed" : "FollowingErrorWindow";
+                         });
+
 TEST_F(EthercatBringUp, TheDrivesOwnImpedanceGainsAreStreamed)
 {
   auto hal = connected_hal(bench_joint());

@@ -32,21 +32,41 @@ namespace synapticon_hardware::ethercat
 
 namespace
 {
-/// The bytes of `object`, at most `capacity` of them. On failure a warning is logged and the result is empty.
+/// The drive's abort code for an object it does not have.
+constexpr uint32_t ABORT_NO_OBJECT = 0x06020000;
+
+/// The bytes of `object`, at most `capacity` of them. On failure the result is empty, and a warning is logged unless
+/// the caller takes the drive's abort code in `abort_out` to decide itself.
 std::optional<std::vector<uint8_t>> upload(const SdoReader& sdo, const rclcpp::Logger& logger, uint16_t position,
-                                           CoeAddress object, std::size_t capacity)
+                                           CoeAddress object, std::size_t capacity, uint32_t* abort_out = nullptr)
 {
   std::vector<uint8_t> bytes(capacity, 0);
   std::size_t received = 0;
   uint32_t abort_code = 0;
   if (const int error = sdo.upload(position, object.index, object.subindex, bytes, received, abort_code); error != 0)
   {
+    if (abort_out != nullptr)
+    {
+      *abort_out = abort_code;
+      return std::nullopt;
+    }
     RCLCPP_WARN(logger, "Could not read 0x%04X:%02X over SDO (ring position %u): master error %d, abort code 0x%08X.",
                 object.index, object.subindex, position, error, abort_code);
     return std::nullopt;
   }
   bytes.resize(std::min(received, capacity));
   return bytes;
+}
+
+/// `bytes` as an unsigned value, least significant byte first. Bytes the drive did not send count as 0.
+uint32_t unsigned_value(const std::vector<uint8_t>& bytes)
+{
+  uint32_t value = 0;
+  for (std::size_t shift = 0; shift < bytes.size(); ++shift)
+  {
+    value |= static_cast<uint32_t>(bytes[shift]) << (8 * shift);
+  }
+  return value;
 }
 
 /// A text object as a string. Spaces and zero bytes at its end are dropped.
@@ -77,63 +97,151 @@ std::string comma_list(const std::vector<std::string>& items)
   return text;
 }
 
-/// The angle in rad of one position count. 0x2012:9 says which encoder counts, and a full turn is divided by that
-/// encoder's counts per turn.
-std::optional<double> position_factor(const SdoReader& sdo, const rclcpp::Logger& logger, const JointConfig& joint)
+/// @brief Decide one unit between the drive and the `units:` section of its slave_config.
+///
+/// `found` is what the drive reported, as text, and `understood` whether the stack understands it. The drive wins:
+/// an override that contradicts a drive the stack understands refuses the unit. An override only stands in for a
+/// drive that could not be read or understood. Without one, the warning names the key that would. Returns which of
+/// the two to take, or nothing when the unit stays unknown.
+enum class UnitSource
+{
+  DRIVE,
+  OVERRIDE,
+};
+std::optional<UnitSource> decide_unit(const rclcpp::Logger& logger, const JointConfig& joint, const char* what,
+                                      const std::optional<std::string>& found, bool understood,
+                                      const std::optional<std::string>& override_value, bool agree, const char* key)
+{
+  if (understood)
+  {
+    if (override_value && !agree)
+    {
+      RCLCPP_WARN(logger,
+                  "Joint '%s': its slave_config gives %s %s (units: %s), but the drive reports %s. The drive's "
+                  "commissioning and the slave_config must agree.",
+                  joint.name.c_str(), what, override_value->c_str(), key, found->c_str());
+      return std::nullopt;
+    }
+    return UnitSource::DRIVE;
+  }
+  const std::string drive = found ? "reports " + *found + ", which the stack does not understand" : "cannot be read";
+  if (override_value)
+  {
+    RCLCPP_WARN(logger, "Joint '%s': takes %s %s from its slave_config (units: %s), as the drive %s.",
+                joint.name.c_str(), what, override_value->c_str(), key, drive.c_str());
+    return UnitSource::OVERRIDE;
+  }
+  RCLCPP_WARN(logger,
+              "Joint '%s': its %s is unknown, as the drive %s. If you know it, give it in the slave_config as "
+              "units: %s.",
+              joint.name.c_str(), what, drive.c_str(), key);
+  return std::nullopt;
+}
+
+/// "0x00B44700", for messages.
+std::string hex8(uint32_t value)
+{
+  char text[16];
+  std::snprintf(text, sizeof(text), "0x%08X", value);
+  return text;
+}
+
+/// The velocity in rad/s of one raw step, from the velocity unit 0x60A9.
+std::optional<double> velocity_factor(const SdoReader& sdo, const rclcpp::Logger& logger, const JointConfig& joint,
+                                      const UnitOverrides& overrides)
+{
+  const auto unit = read_u32(sdo, logger, joint.position, coe::VELOCITY_UNIT);
+  const auto step = unit ? velocity_step(*unit) : std::nullopt;
+  const auto given = overrides.velocity_unit;
+  const auto source =
+      decide_unit(logger, joint, "the velocity unit (0x60A9)", unit ? std::optional(hex8(*unit)) : std::nullopt,
+                  step.has_value(), given ? std::optional(hex8(*given)) : std::nullopt, given == unit, "velocity_unit");
+  if (!source)
+  {
+    return std::nullopt;
+  }
+  return *source == UnitSource::DRIVE ? step : velocity_step(*given);
+}
+
+/// The counts per turn of the encoder that counts the position: 0x2012:9 names it, its resolution follows.
+std::optional<uint32_t> position_counts(const SdoReader& sdo, const rclcpp::Logger& logger, const JointConfig& joint)
 {
   const auto slot = read_u32(sdo, logger, joint.position, coe::POSITION_ENCODER);
-  if (!slot)
+  if (!slot || (*slot != 1 && *slot != 2))
   {
     return std::nullopt;
   }
-  if (*slot != 1 && *slot != 2)
-  {
-    RCLCPP_WARN(logger,
-                "Joint '%s': 0x2012:9 names encoder %u, which is neither 1 nor 2. The position stays in raw counts.",
-                joint.name.c_str(), *slot);
-    return std::nullopt;
-  }
-  const auto counts_per_turn =
+  const auto counts =
       read_u32(sdo, logger, joint.position, *slot == 2 ? coe::ENCODER_2_RESOLUTION : coe::ENCODER_1_RESOLUTION);
-  if (!counts_per_turn || *counts_per_turn == 0)
+  return counts && *counts > 0 ? counts : std::nullopt;
+}
+
+/// The angle in rad of one position count.
+std::optional<double> position_factor(const SdoReader& sdo, const rclcpp::Logger& logger, const JointConfig& joint,
+                                      const UnitOverrides& overrides)
+{
+  const auto counts = position_counts(sdo, logger, joint);
+  const auto given = overrides.counts_per_revolution;
+  const auto text = [](std::optional<uint32_t> value) {
+    return value ? std::optional(std::to_string(*value) + " counts per turn") : std::nullopt;
+  };
+  const auto source = decide_unit(logger, joint, "the position resolution (0x2012:9 and its encoder)", text(counts),
+                                  counts.has_value(), text(given), given == counts, "counts_per_revolution");
+  if (!source)
   {
     return std::nullopt;
   }
   const double one_turn = 2.0 * std::numbers::pi;
-  return one_turn / *counts_per_turn;
+  return one_turn / (*source == UnitSource::DRIVE ? *counts : *given);
 }
 
 /// The torque in Nm of one raw step, a thousandth of the rated torque. The drive gives the rated torque in mNm.
-std::optional<double> torque_factor(const SdoReader& sdo, const rclcpp::Logger& logger, const JointConfig& joint)
+std::optional<double> torque_factor(const SdoReader& sdo, const rclcpp::Logger& logger, const JointConfig& joint,
+                                    const UnitOverrides& overrides)
 {
-  const auto rated_torque_mnm = read_u32(sdo, logger, joint.position, coe::RATED_TORQUE);
-  if (rated_torque_mnm && *rated_torque_mnm > 0)
+  const auto rated_mnm = read_u32(sdo, logger, joint.position, coe::RATED_TORQUE);
+  const bool readable = rated_mnm && *rated_mnm > 0;
+  const auto given = overrides.rated_torque;
+  const auto text = [](std::optional<double> nm) {
+    return nm ? std::optional(std::to_string(*nm) + " Nm") : std::nullopt;
+  };
+  const bool agree = given && rated_mnm && std::llround(*given * 1000.0) == static_cast<long long>(*rated_mnm);
+  const auto source =
+      decide_unit(logger, joint, "rated torque (0x6076)", rated_mnm ? text(*rated_mnm / 1000.0) : std::nullopt,
+                  readable, text(given), agree, "rated_torque");
+  if (!source)
   {
-    return *rated_torque_mnm / 1.0e6;
+    return std::nullopt;
   }
-  return std::nullopt;
+  return *source == UnitSource::DRIVE ? *rated_mnm / 1.0e6 : *given / 1000.0;
 }
 
-/// The first raw torque ceiling to send. max_joint_torque wins when it is configured, else the drive's 0x2054 is used.
-std::optional<double> torque_limit_to_stream(const SdoReader& sdo, const rclcpp::Logger& logger,
-                                             const JointConfig& joint, const SiFactors& factors)
+/// True when the feed constant (0x6092:1) is disabled, so that positions are counts and velocities revolutions. A
+/// drive without the object has no feed constant.
+bool feed_constant_disabled(const SdoReader& sdo, const rclcpp::Logger& logger, const JointConfig& joint,
+                            const UnitOverrides& overrides)
 {
-  if (std::isfinite(joint.max_joint_torque))
+  uint32_t abort_code = 0;
+  const auto bytes = upload(sdo, logger, joint.position, coe::FEED_CONSTANT_FEED, sizeof(uint32_t), &abort_code);
+  if (!bytes && abort_code == ABORT_NO_OBJECT)
   {
-    const double raw = joint.max_joint_torque / si_factor(factors, Unit::TORQUE_LIMIT);
-    RCLCPP_INFO(logger,
-                "Joint '%s': torque ceiling %.3f Nm (%.0f mNm) from max_joint_torque, in place of the drive's 0x2054.",
-                joint.name.c_str(), joint.max_joint_torque, raw);
-    return raw;
+    return true;
   }
-  const auto stored = read_u32(sdo, logger, joint.position, coe::MAX_JOINT_TORQUE);
-  if (stored && *stored == 0)
+  const auto feed = bytes ? std::optional(unsigned_value(*bytes)) : std::nullopt;
+  if (feed && *feed != FEED_CONSTANT_DISABLED)
   {
     RCLCPP_WARN(logger,
-                "Joint '%s' will have no torque: 0x2054 is 0 on the drive, and no max_joint_torque is configured.",
-                joint.name.c_str());
+                "Joint '%s': the feed constant is enabled (0x6092:1 = %u), so positions and velocities are in "
+                "user-defined linear units. The stack does not support them: disable it (0x6092:1 = 0xFFFFFFFF) in "
+                "the drive's commissioning.",
+                joint.name.c_str(), *feed);
+    return false;
   }
-  return stored ? std::optional<double>(*stored) : std::nullopt;
+  return decide_unit(logger, joint, "feed constant (0x6092:1)", feed ? std::optional(hex8(*feed)) : std::nullopt,
+                     feed.has_value(),
+                     overrides.feed_constant_disabled ? std::optional<std::string>("disabled") : std::nullopt, true,
+                     "feed_constant: disabled")
+      .has_value();
 }
 
 /// The first raw value to send for one setting: the configured value in raw steps when there is one, else what the
@@ -208,13 +316,13 @@ void log_scaling(const SdoReader& sdo, const rclcpp::Logger& logger, const Joint
 
 /// Fill the unit factors and the first streamed values of `joint` into `readback`. True when the drive gave the
 /// factors of torque, velocity and position. A factor it did not give keeps its start value.
-bool read_scaling(const SdoReader& sdo, const rclcpp::Logger& logger, const JointConfig& joint, DriveReadback& readback)
+bool read_scaling(const SdoReader& sdo, const rclcpp::Logger& logger, const JointConfig& joint,
+                  const UnitOverrides& overrides, DriveReadback& readback)
 {
-  const auto torque = torque_factor(sdo, logger, joint);
-  const auto velocity_unit = read_u32(sdo, logger, joint.position, coe::VELOCITY_UNIT);
-  const auto angle = position_factor(sdo, logger, joint);
-  const std::optional<double> velocity =
-      velocity_unit ? std::optional<double>(velocity_step_in_rad_per_s(*velocity_unit)) : std::nullopt;
+  const bool counts_and_revolutions = feed_constant_disabled(sdo, logger, joint, overrides);
+  const auto torque = torque_factor(sdo, logger, joint, overrides);
+  const auto velocity = counts_and_revolutions ? velocity_factor(sdo, logger, joint, overrides) : std::nullopt;
+  const auto angle = counts_and_revolutions ? position_factor(sdo, logger, joint, overrides) : std::nullopt;
 
   SiFactors& f = readback.si_factors;
   const std::pair<Unit, std::optional<double>> found[] = {
@@ -261,8 +369,9 @@ bool scaling_usable(const rclcpp::Logger& logger, const std::vector<JointConfig>
     return true;
   }
   const std::string report = FramedReport("UNITS OF A DRIVE UNKNOWN")
-                                 .say("A failed SDO read (see the warnings above) left a unit factor unknown.\n"
-                                      "Commands in rad, rad/s or Nm would reach the drive as raw numbers.\n")
+                                 .say("The units of a drive could not be read or understood, or contradict its\n"
+                                      "slave_config (see the warnings above). Commands in rad, rad/s or Nm would\n"
+                                      "reach the drive as wrong numbers.\n")
                                  .list("Refused, these joints may be powered", refused)
                                  .list("Allowed with raw states, these joints are never powered", warned)
                                  .close();
@@ -434,10 +543,10 @@ void log_stopping_setup(const SdoReader& sdo, const rclcpp::Logger& logger, cons
     const uint16_t at = joints[j].position;
     char ramp[96] = "quick stop ramp not readable";
     const auto deceleration = read_u32(sdo, logger, at, coe::QUICK_STOP_DECELERATION);
-    const auto unit = read_u32(sdo, logger, at, coe::VELOCITY_UNIT);
-    if (deceleration && unit)
+    const double step = std::abs(si_factor(readback[j].si_factors, Unit::ANGULAR_VELOCITY));
+    if (deceleration && readback[j].units_known)
     {
-      readback[j].quick_stop_deceleration = *deceleration * velocity_step_in_rad_per_s(*unit);
+      readback[j].quick_stop_deceleration = *deceleration * step;
       std::snprintf(ramp, sizeof(ramp), "quick stop ramp %.4g rad/s^2 at the motor (0x6085 = %u)",
                     readback[j].quick_stop_deceleration, *deceleration);
     }
@@ -501,14 +610,69 @@ bool firmware_recent_enough(const SdoReader& sdo, const rclcpp::Logger& logger, 
   return true;
 }
 
+/// Write the `sdo_si:` entries of every joint, converted with its unit factors, and log each with both values. A joint
+/// with unknown units is never powered, so its entries are left out with a warning. False when an entry cannot be
+/// converted or the drive refuses it.
+bool write_si_entries(const SdoWriter& writer, const rclcpp::Logger& logger, const std::vector<JointConfig>& joints,
+                      const std::vector<SlaveConfigUnits>& units, const std::vector<DriveReadback>& readback)
+{
+  bool written = true;
+  for (std::size_t j = 0; j < joints.size(); ++j)
+  {
+    const auto& entries = units[j].si_sdo;
+    if (!entries.empty() && !readback[j].units_known)
+    {
+      RCLCPP_WARN(logger, "Joint '%s': its %zu sdo_si entries are not written, as its units are unknown.",
+                  joints[j].name.c_str(), entries.size());
+      continue;
+    }
+    for (const SiSdo& entry : entries)
+    {
+      std::string error;
+      const auto raw = si_to_raw(entry, readback[j].si_factors, error);
+      uint32_t abort_code = 0;
+      if (!raw)
+      {
+        RCLCPP_ERROR(logger, "Joint '%s': sdo_si entry %s.", joints[j].name.c_str(), error.c_str());
+        written = false;
+      }
+      else if (writer.download(joints[j].position, entry.object.index, entry.object.subindex,
+                               raw_bytes(*raw, entry.type), abort_code) != 0)
+      {
+        RCLCPP_ERROR(logger, "Joint '%s': the drive refused 0x%04X:%u = %lld (sdo_si), abort code 0x%08X.",
+                     joints[j].name.c_str(), entry.object.index, entry.object.subindex, static_cast<long long>(*raw),
+                     abort_code);
+        written = false;
+      }
+      else
+      {
+        RCLCPP_INFO(logger, "Joint '%s': 0x%04X:%u = %lld for %.6g %s at the motor (sdo_si).", joints[j].name.c_str(),
+                    entry.object.index, entry.object.subindex, static_cast<long long>(*raw), entry.value,
+                    si_unit_name(entry.quantity));
+      }
+    }
+  }
+  return written;
+}
+
 }  // namespace
 
+RetryingSdo::RetryingSdo(const SdoReader& reader, const SdoWriter& writer, const SdoRetry& retry,
+                         const rclcpp::Logger& logger)
+  : reader_(reader), writer_(writer), retry_(retry), logger_(logger)
+{
+}
+
+template <typename Transfer>
+int RetryingSdo::with_retries(const char* what, uint16_t position, uint16_t index, uint8_t sub_index,
+                              uint32_t& abort_code, const Transfer& transfer) const
 {
   const int attempts = given_up_ ? 1 : std::max(retry_.attempts, 1);
   int error = 0;
   for (int attempt = 1; attempt <= attempts; ++attempt)
   {
     abort_code = 0;
+    error = transfer();
     if (error == 0 || abort_code != 0)
     {
       return error;
@@ -516,7 +680,9 @@ bool firmware_recent_enough(const SdoReader& sdo, const rclcpp::Logger& logger, 
     if (attempt < attempts)
     {
       RCLCPP_WARN(logger_,
+                  "No valid answer to the SDO %s of 0x%04X:%02X (ring position %u, master error %d). "
                   "Try %d of %d in %.1f s.",
+                  what, index, sub_index, position, error, attempt + 1, attempts, retry_.wait_s);
       std::this_thread::sleep_for(std::chrono::duration<double>(retry_.wait_s));
     }
   }
@@ -524,24 +690,29 @@ bool firmware_recent_enough(const SdoReader& sdo, const rclcpp::Logger& logger, 
   return error;
 }
 
+int RetryingSdo::upload(uint16_t position, uint16_t index, uint8_t sub_index, std::vector<uint8_t>& bytes,
+                        std::size_t& size, uint32_t& abort_code) const
+{
+  return with_retries("read", position, index, sub_index, abort_code,
+                      [&] { return reader_.upload(position, index, sub_index, bytes, size, abort_code); });
+}
+
+int RetryingSdo::download(uint16_t position, uint16_t index, uint8_t sub_index, const std::vector<uint8_t>& bytes,
+                          uint32_t& abort_code) const
+{
+  return with_retries("write", position, index, sub_index, abort_code,
+                      [&] { return writer_.download(position, index, sub_index, bytes, abort_code); });
+}
+
 std::optional<uint32_t> read_u32(const SdoReader& sdo, const rclcpp::Logger& logger, uint16_t position,
                                  CoeAddress object)
 {
   const auto bytes = upload(sdo, logger, position, object, sizeof(uint32_t));
-  if (!bytes)
-  {
-    return std::nullopt;
-  }
-  // Least significant byte first. Bytes the drive did not send count as 0.
-  uint32_t value = 0;
-  for (std::size_t shift = 0; shift < bytes->size(); ++shift)
-  {
-    value |= static_cast<uint32_t>((*bytes)[shift]) << (8 * shift);
-  }
-  return value;
+  return bytes ? std::optional(unsigned_value(*bytes)) : std::nullopt;
 }
 
-bool check_drives(const SdoReader& sdo, const std::vector<JointConfig>& joints, const rclcpp::Logger& logger,
+bool check_drives(const SdoReader& sdo, const SdoWriter& writer, const std::vector<JointConfig>& joints,
+                  const std::vector<SlaveConfigUnits>& units, const rclcpp::Logger& logger,
                   std::vector<DriveReadback>& readback)
 {
   readback.assign(joints.size(), DriveReadback{});
@@ -552,9 +723,11 @@ bool check_drives(const SdoReader& sdo, const std::vector<JointConfig>& joints, 
   std::vector<bool> scaled(joints.size());
   for (std::size_t j = 0; j < joints.size(); ++j)
   {
-    scaled[j] = read_scaling(sdo, logger, joints[j], readback[j]);
+    scaled[j] = read_scaling(sdo, logger, joints[j], units.at(j).overrides, readback[j]);
+    readback[j].units_known = scaled[j];
   }
-  if (!scaling_usable(logger, joints, scaled) || !impedance_sensors_ready(sdo, logger, joints))
+  if (!scaling_usable(logger, joints, scaled) || !write_si_entries(writer, logger, joints, units, readback) ||
+      !impedance_sensors_ready(sdo, logger, joints))
   {
     return false;
   }

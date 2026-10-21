@@ -31,7 +31,7 @@ find_package(soem_source REQUIRED)
 # For the robot definition YAML that the EtherCAT HALs read.
 find_package(yaml-cpp REQUIRED)
 
-set(_sources src/cia402/cia402_hal.cpp src/ethercat/bus_config.cpp src/ethercat/drive_checks.cpp
+set(_sources src/cia402/cia402_hal.cpp src/ethercat/bus_config.cpp src/ethercat/drive_checks.cpp src/ethercat/drive_units.cpp
   src/ethercat/ethercat_pdo_hal.cpp src/ethercat/joint_config.cpp src/ethercat/robot_config.cpp
   src/interface_binding.cpp src/mock/mock_cia402_hal.cpp src/mock/mock_hal.cpp src/mock/simulated_drive.cpp
   src/synapticon_interface.cpp)
@@ -120,6 +120,7 @@ if(BUILD_TESTING)
   hardware_test(cia402/test_cia402_hal_failures USES ${_base_deps})
   hardware_test(ethercat/test_bus_config)
   hardware_test(ethercat/test_drive_checks USES rclcpp)
+  hardware_test(ethercat/test_drive_units)
   hardware_test(ethercat/test_joint_config)
   hardware_test(ethercat/test_robot_config)
   # The slave_config generator, against a small ESI file built from the example slave_config.

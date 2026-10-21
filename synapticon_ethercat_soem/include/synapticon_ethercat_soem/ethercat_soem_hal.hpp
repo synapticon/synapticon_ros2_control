@@ -76,6 +76,9 @@ protected:
   /// One SDO upload through SOEM's mailbox, while the drives are in PRE-OP.
   int upload(uint16_t position, uint16_t index, uint8_t sub_index, std::vector<uint8_t>& bytes, std::size_t& size,
              uint32_t& abort_code) const override;
+  /// One SDO download through SOEM's mailbox, while the drives are in PRE-OP.
+  int download(uint16_t position, uint16_t index, uint8_t sub_index, const std::vector<uint8_t>& bytes,
+               uint32_t& abort_code) const override;
 
 private:
   /// The SOEM context with its buffers, the process data and each drive's layout in it.

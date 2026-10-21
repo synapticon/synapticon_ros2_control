@@ -48,8 +48,8 @@ JointConfig joint(uint16_t position = 0, int mode = CSP)
   return config;
 }
 
-/// @brief Drives that answer SDO reads from a scripted dictionary.
-class ScriptedDrives : public SdoReader
+/// @brief Drives that answer SDO reads from a scripted dictionary and keep what is written to it.
+class ScriptedDrives : public SdoReader, public SdoWriter
 {
 public:
   /// The objects of a healthy drive at `position`: CSP and impedance ready, firmware 5.6.11.
@@ -58,7 +58,8 @@ public:
     put(coe::POSITION_ENCODER, 1, position);
     put(coe::ENCODER_1_RESOLUTION, 4096, position);
     put(coe::VELOCITY_UNIT, 0x00B44700, position);  // rev/min
-    put(coe::RATED_TORQUE, 1000, position);         // 1 Nm
+    put(coe::FEED_CONSTANT_FEED, FEED_CONSTANT_DISABLED, position);
+    put(coe::RATED_TORQUE, 1000, position);  // 1 Nm
     put(coe::IMPEDANCE_STIFFNESS, 400, position);
     put(coe::IMPEDANCE_DAMPING, 5, position);
     put(coe::MAX_JOINT_TORQUE, 50000, position);  // 50 Nm
@@ -108,8 +109,35 @@ public:
     return 0;
   }
 
+  int download(uint16_t position, uint16_t index, uint8_t sub_index, const std::vector<uint8_t>& bytes,
+               uint32_t& /*abort_code*/) const override
+  {
+    written[{ position, index, sub_index }] = bytes;
+    objects_[{ position, index, sub_index }] = bytes;
+    return 0;
+  }
+
+  /// What was written to the drive at `position`, as an integer of the written size. Empty when nothing was.
+  std::optional<int64_t> written_value(CoeAddress object, uint16_t position = 0) const
+  {
+    const auto found = written.find({ position, object.index, object.subindex });
+    if (found == written.end())
+    {
+      return std::nullopt;
+    }
+    uint64_t bits = 0;
+    for (std::size_t i = 0; i < found->second.size(); ++i)
+    {
+      bits |= static_cast<uint64_t>(found->second[i]) << (8 * i);
+    }
+    const int shift = 64 - 8 * static_cast<int>(found->second.size());
+    return static_cast<int64_t>(bits << shift) >> shift;  // sign-extend from the written size
+  }
+
+  mutable std::map<std::tuple<uint16_t, uint16_t, uint8_t>, std::vector<uint8_t>> written;
+
 private:
-  std::map<std::tuple<uint16_t, uint16_t, uint8_t>, std::vector<uint8_t>> objects_;
+  mutable std::map<std::tuple<uint16_t, uint16_t, uint8_t>, std::vector<uint8_t>> objects_;
 };
 
 /// Healthy drives for the joints a test checks.
@@ -126,7 +154,8 @@ protected:
         drives_.healthy_drive(j.position);
       }
     }
-    return check_drives(drives_, joints, rclcpp::get_logger("test_drive_checks"), readback_);
+    units_.resize(joints.size());
+    return check_drives(drives_, drives_, joints, units_, rclcpp::get_logger("test_drive_checks"), readback_);
   }
 
   /// The SI factor of joint 0 for `scale`.
@@ -137,6 +166,7 @@ protected:
 
   ScriptedDrives drives_;
   std::vector<DriveReadback> readback_;
+  std::vector<SlaveConfigUnits> units_;  ///< per joint, empty sections unless a test sets them
 };
 
 // --- SI factors, gains and torque limit ------------------------------------------
@@ -473,6 +503,7 @@ INSTANTIATE_TEST_SUITE_P(Cases, Firmware,
 
 /// @brief A reader whose first `failures` reads fail. With `abort_code` 0 they get no valid answer, as while another
 /// exchange holds the drive's mailbox, else the drive aborts them.
+class BusyMailbox : public SdoReader, public SdoWriter
 {
 public:
   explicit BusyMailbox(int failures, uint32_t abort_code = 0) : failures_(failures), abort_code_(abort_code)
@@ -493,6 +524,13 @@ public:
     return 0;
   }
 
+  int download(uint16_t, uint16_t, uint8_t, const std::vector<uint8_t>&, uint32_t& abort_code) const override
+  {
+    ++calls;
+    abort_code = calls <= failures_ ? abort_code_ : 0;
+    return calls <= failures_ ? -5 : 0;
+  }
+
   mutable int calls{ 0 };
 
 private:
@@ -503,26 +541,225 @@ private:
 constexpr SdoRetry QUICK_RETRY{ 3, 0.001 };
 
 /// Reads without a valid answer are tried again, up to the configured tries in all.
+TEST(RetryingSdo, RetriesUntilTheDriveAnswers)
 {
   BusyMailbox drive(2);
+  const RetryingSdo reader(drive, drive, QUICK_RETRY, rclcpp::get_logger("test_drive_checks"));
   EXPECT_EQ(read_u32(reader, rclcpp::get_logger("test_drive_checks"), 0, coe::RATED_TORQUE), 0u);
   EXPECT_EQ(drive.calls, 3);
 }
 
 /// An abort is the drive's answer, so it is not tried again.
+TEST(RetryingSdo, TakesAnAbortAsFinal)
 {
   BusyMailbox drive(100, ABORT_NO_OBJECT);
+  const RetryingSdo reader(drive, drive, QUICK_RETRY, rclcpp::get_logger("test_drive_checks"));
   EXPECT_FALSE(read_u32(reader, rclcpp::get_logger("test_drive_checks"), 0, coe::RATED_TORQUE));
   EXPECT_EQ(drive.calls, 1);
 }
 
 /// Once a read has used up its tries, the later reads get one try each.
+TEST(RetryingSdo, TriesOnceAfterAReadGaveUp)
 {
   BusyMailbox drive(100);
+  const RetryingSdo reader(drive, drive, QUICK_RETRY, rclcpp::get_logger("test_drive_checks"));
   EXPECT_FALSE(read_u32(reader, rclcpp::get_logger("test_drive_checks"), 0, coe::RATED_TORQUE));
   EXPECT_EQ(drive.calls, 3);
   EXPECT_FALSE(read_u32(reader, rclcpp::get_logger("test_drive_checks"), 0, coe::VELOCITY_UNIT));
   EXPECT_EQ(drive.calls, 4);
 }
+
+// Units read from the drive, the units: section of the slave_config, and the sdo_si entries.
+
+constexpr double RAD_PER_RPS = 2.0 * M_PI;
+
+/// A velocity unit per second is understood, not taken for per minute.
+TEST_F(DriveChecks, DecodesAVelocityUnitPerSecond)
+{
+  drives_.healthy_drive();
+  drives_.put(coe::VELOCITY_UNIT, 0x00B40300);  // rev/s
+  ASSERT_TRUE(check({ joint() }, false));
+  EXPECT_DOUBLE_EQ(si(Unit::ANGULAR_VELOCITY), RAD_PER_RPS);
+}
+
+/// A finer velocity unit scales by its power of ten.
+TEST_F(DriveChecks, DecodesAMilliRpmVelocityUnit)
+{
+  drives_.healthy_drive();
+  drives_.put(coe::VELOCITY_UNIT, 0xFDB44700);  // 10^-3 rev/min
+  ASSERT_TRUE(check({ joint() }, false));
+  EXPECT_DOUBLE_EQ(si(Unit::ANGULAR_VELOCITY), 1e-3 * RAD_PER_RPM);
+}
+
+class UnknownVelocityUnit : public DriveChecks, public ::testing::WithParamInterface<uint32_t>
+{
+};
+
+/// A velocity unit the stack does not understand refuses a joint that may be powered.
+TEST_P(UnknownVelocityUnit, RefusesAJointThatMayBeEnergised)
+{
+  drives_.healthy_drive();
+  drives_.put(coe::VELOCITY_UNIT, GetParam());
+  EXPECT_FALSE(check({ joint() }, false));
+}
+
+INSTANTIATE_TEST_SUITE_P(Cases, UnknownVelocityUnit,
+                         ::testing::Values(0x00B44701u,    // last byte not 0
+                                           0x00B54700u,    // distance not revolutions
+                                           0x00B40400u,    // time neither minute nor second
+                                           0xFCB44700u));  // power of ten below 10^-3
+
+/// With the feed constant enabled, positions and velocities are in linear units the stack does not support.
+TEST_F(DriveChecks, RefusesAnEnabledFeedConstant)
+{
+  drives_.healthy_drive();
+  drives_.put(coe::FEED_CONSTANT_FEED, 10);
+  EXPECT_FALSE(check({ joint() }, false));
+}
+
+/// A drive without the feed constant object has none.
+TEST_F(DriveChecks, TakesAMissingFeedConstantAsDisabled)
+{
+  drives_.healthy_drive();
+  drives_.drop(coe::FEED_CONSTANT_FEED);
+  EXPECT_TRUE(check({ joint() }, false));
+}
+
+/// The units: section stands in for a unit the drive cannot report.
+TEST_F(DriveChecks, TakesTheSlaveConfigUnitsForUnreadableOnes)
+{
+  drives_.healthy_drive();
+  drives_.drop(coe::VELOCITY_UNIT);
+  drives_.drop(coe::ENCODER_1_RESOLUTION);
+  drives_.drop(coe::RATED_TORQUE);
+  units_.resize(1);
+  units_[0].overrides.velocity_unit = 0x00B40300;  // rev/s
+  units_[0].overrides.counts_per_revolution = 1000;
+  units_[0].overrides.rated_torque = 2.0;
+  ASSERT_TRUE(check({ joint() }, false));
+  EXPECT_DOUBLE_EQ(si(Unit::ANGULAR_VELOCITY), RAD_PER_RPS);
+  EXPECT_DOUBLE_EQ(si(Unit::ANGLE), 2.0 * M_PI / 1000);
+  EXPECT_DOUBLE_EQ(si(Unit::MOTOR_TORQUE), 2.0e-3);
+}
+
+/// The units: section also stands in for a velocity unit the drive reports but the stack does not understand.
+TEST_F(DriveChecks, TakesTheSlaveConfigVelocityUnitForAnUnknownOne)
+{
+  drives_.healthy_drive();
+  drives_.put(coe::VELOCITY_UNIT, 0x00B44701);
+  units_.resize(1);
+  units_[0].overrides.velocity_unit = 0x00B44700;
+  ASSERT_TRUE(check({ joint() }, false));
+  EXPECT_DOUBLE_EQ(si(Unit::ANGULAR_VELOCITY), RAD_PER_RPM);
+}
+
+/// A units: entry that contradicts what the drive reports refuses the joint: the drive's commissioning wins.
+TEST_F(DriveChecks, RefusesSlaveConfigUnitsThatContradictTheDrive)
+{
+  const auto contradicting = [](UnitOverrides& overrides, int which) {
+    if (which == 0)
+    {
+      overrides.velocity_unit = 0xFDB44700;  // the drive has rev/min
+    }
+    else if (which == 1)
+    {
+      overrides.counts_per_revolution = 8192;  // the drive has 4096
+    }
+    else
+    {
+      overrides.rated_torque = 2.0;  // the drive has 1 Nm
+    }
+  };
+  for (int which = 0; which < 3; ++which)
+  {
+    drives_ = ScriptedDrives{};
+    drives_.healthy_drive();
+    units_.assign(1, SlaveConfigUnits{});
+    contradicting(units_[0].overrides, which);
+    EXPECT_FALSE(check({ joint() }, false)) << "case " << which;
+  }
+}
+
+/// A units: entry that agrees with the drive changes nothing.
+TEST_F(DriveChecks, AcceptsSlaveConfigUnitsThatAgreeWithTheDrive)
+{
+  drives_.healthy_drive();
+  units_.resize(1);
+  units_[0].overrides.velocity_unit = 0x00B44700;
+  units_[0].overrides.counts_per_revolution = 4096;
+  units_[0].overrides.rated_torque = 1.0;
+  units_[0].overrides.feed_constant_disabled = true;
+  ASSERT_TRUE(check({ joint() }, false));
+  EXPECT_DOUBLE_EQ(si(Unit::ANGULAR_VELOCITY), RAD_PER_RPM);
+}
+
+/// One sdo_si entry for each quantity, converted with the drive's units.
+TEST_F(DriveChecks, WritesTheSdoSiEntriesInTheDrivesUnits)
+{
+  drives_.healthy_drive();  // rev/min, 4096 counts per turn, rated torque 1 Nm
+  units_.resize(1);
+  units_[0].si_sdo = { { { 0x6080, 0 }, "uint32", 15.7, SiQuantity::VELOCITY },
+                       { { 0x6085, 0 }, "uint32", 1000.0, SiQuantity::ACCELERATION },
+                       { { 0x6065, 0 }, "uint32", 0.1, SiQuantity::POSITION },
+                       { { 0x6072, 0 }, "uint16", 0.96, SiQuantity::TORQUE } };
+  ASSERT_TRUE(check({ joint() }, false));
+  EXPECT_EQ(drives_.written_value({ 0x6080, 0 }), 150);   // 15.7 rad/s = 149.9 rev/min
+  EXPECT_EQ(drives_.written_value({ 0x6085, 0 }), 9549);  // 1000 rad/s^2 = 9549.3 rev/min/s
+  EXPECT_EQ(drives_.written_value({ 0x6065, 0 }), 65);    // 0.1 rad = 65.2 counts
+  EXPECT_EQ(drives_.written_value({ 0x6072, 0 }), 960);   // 0.96 Nm = 960 per mille of 1 Nm
+  EXPECT_NEAR(readback_.at(0).quick_stop_deceleration, 1000.0, 0.1) << "the ramp is read after it was written";
+}
+
+/// The same SI value becomes a different raw value on a drive with another unit.
+TEST_F(DriveChecks, WritesAnSdoSiEntryInAFinerUnit)
+{
+  drives_.healthy_drive();
+  drives_.put(coe::VELOCITY_UNIT, 0xFDB44700);  // 10^-3 rev/min
+  units_.resize(1);
+  units_[0].si_sdo = { { { 0x6085, 0 }, "uint32", 1000.0, SiQuantity::ACCELERATION } };
+  ASSERT_TRUE(check({ joint() }, false));
+  EXPECT_EQ(drives_.written_value({ 0x6085, 0 }), 9549297);
+}
+
+/// A joint with unknown units is never powered, so its sdo_si entries are not written.
+TEST_F(DriveChecks, LeavesOutTheSdoSiEntriesOfAJointWithUnknownUnits)
+{
+  drives_.healthy_drive();
+  drives_.drop(coe::VELOCITY_UNIT);
+  JointConfig monitored = joint();
+  monitored.energize = false;
+  units_.resize(1);
+  units_[0].si_sdo = { { { 0x6085, 0 }, "uint32", 1000.0, SiQuantity::ACCELERATION } };
+  EXPECT_TRUE(check({ monitored }, false));
+  EXPECT_FALSE(drives_.written_value({ 0x6085, 0 }));
+}
+
+struct BadSiCase
+{
+  const char* name;
+  SiSdo entry;
+};
+
+class BadSiEntry : public DriveChecks, public ::testing::WithParamInterface<BadSiCase>
+{
+};
+
+/// An sdo_si entry that the drive's unit cannot hold stops the bring-up, and nothing of it is written.
+TEST_P(BadSiEntry, StopsTheBringUp)
+{
+  drives_.healthy_drive();
+  units_.resize(1);
+  units_[0].si_sdo = { GetParam().entry };
+  EXPECT_FALSE(check({ joint() }, false));
+  EXPECT_FALSE(drives_.written_value(GetParam().entry.object));
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    Cases, BadSiEntry,
+    ::testing::Values(BadSiCase{ "RoundsToZero", { { 0x6085, 0 }, "uint32", 0.01, SiQuantity::ACCELERATION } },
+                      BadSiCase{ "TooCoarse", { { 0x6065, 0 }, "uint32", 0.006, SiQuantity::POSITION } },
+                      BadSiCase{ "TooLargeForTheType", { { 0x6072, 0 }, "uint16", 100.0, SiQuantity::TORQUE } },
+                      BadSiCase{ "NegativeForUnsigned", { { 0x6080, 0 }, "uint32", -10.0, SiQuantity::VELOCITY } }),
+    [](const auto& info) { return std::string(info.param.name); });
 
 }  // namespace

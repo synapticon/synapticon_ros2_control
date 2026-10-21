@@ -435,9 +435,12 @@ def test_the_csp_only_file_has_no_impedance_objects(tmp_path, esi_file):
 def test_disabled_startup_sdos_are_written_as_comments(tmp_path, esi_file):
     text = generate(tmp_path, esi_file)
     assert (
-        "\n  # - { index: 0x6085, sub_index: 0, type: uint32, value: 10000 }\n" in text
+        "\nsdo_si:\n  # quick stop deceleration in rad/s^2 at the motor, see the note on 0x605A\n"
+        "  # - { index: 0x6085, sub_index: 0, type: uint32, si_value: 200.0 }\n" in text
     )
-    assert all(s["index"] not in (0x6085, 0x2150) for s in yaml.safe_load(text)["sdo"])
+    config = yaml.safe_load(text)
+    assert all(s["index"] not in (0x6085, 0x2150) for s in config["sdo"])
+    assert config["sdo_si"] is None  # the section holds only comments
 
 
 def test_a_layout_object_the_device_lacks_stops_and_writes_nothing(tmp_path):

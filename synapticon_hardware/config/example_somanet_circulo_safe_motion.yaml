@@ -13,28 +13,28 @@ assign_activate: 0x0300  # distributed clock activation from the ESI file
 #   2  ramps down and then takes the power off (the factory setting)
 #   any other value disables the drive at once
 # Bring-up reads 0x605A back, and the quick stop deceleration 0x6085 too. This file leaves 0x6085 to the
-# commissioning of the drive. Its unit is the velocity unit of 0x60A9 per second.
+# commissioning of the drive. To set it at every bring-up, enable its sdo_si entry below.
 #
-# In impedance mode, 0x2054 caps every torque of the drive. At 0 the drive is powered but does not move.
-# 0x2060:3 is the gain of the inner torque loop. Start with low values.
-# The impedance controller needs a torque sensor type in 0x2150:1. Without a sensor, use 1 (analog input) and
-# leave the analog coefficients at 0. Storing it on the drive once is enough. To write it at every bring-up
-# instead, enable the 0x2150 line below.
+# 'sdo' holds values without a unit, written as they are. An object whose unit depends on the drive's
+# commissioning goes into 'sdo_si' with si_value in SI units at the motor: bring-up reads the drive's
+# units first and converts it. Any other object in 'sdo' needs 'raw: true' to say the value is meant as written.
+#
+# Impedance mode:
+#   0x2060:3  gain of the inner torque loop. Raise it in small steps.
+#   0x2150:1  torque sensor type, must be set. With no sensor: 1 (analog input), all analog coefficients 0.
+#             Store it on the drive once, or enable the 0x2150 entry below to write it at every bring-up.
+# The stiffness, the damping and the torque ceiling (0x2054) are streamed. They come from the commands, and
+# from the robot definition where a command leaves them out.
 sdo:
   # quick stop option code
   - { index: 0x605a, sub_index: 0, type: int16, value: 6 }
-  # quick stop deceleration, see the note on 0x605A
-  # - { index: 0x6085, sub_index: 0, type: uint32, value: 10000 }
-  # torque cap [mNm] until the first cycle
-  - { index: 0x2054, sub_index: 0, type: uint32, value: 50000 }
-  # impedance stiffness [mNm/rad]
-  - { index: 0x2060, sub_index: 1, type: int32, value: 400 }
-  # impedance damping
-  - { index: 0x2060, sub_index: 2, type: int32, value: 0 }
   # gain of the inner torque loop
   - { index: 0x2060, sub_index: 3, type: real32, value: 1.0 }
   # torque sensor type, see the impedance note
   # - { index: 0x2150, sub_index: 1, type: uint8, value: 1 }
+sdo_si:
+  # quick stop deceleration in rad/s^2 at the motor, see the note on 0x605A
+  # - { index: 0x6085, sub_index: 0, type: uint32, si_value: 200.0 }
 
 rpdo:
   - index: 0x1600

@@ -14,6 +14,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <limits>
+#include <stdexcept>
 #include <string>
 #include <thread>
 #include <utility>
@@ -73,9 +74,22 @@ double EthercatPdoHal::quick_stop_deceleration(std::size_t joint) const
 
 // Steps of connect().
 
-void EthercatPdoHal::set_up_drives(const std::vector<JointConfig>& joints, bool quick_stop_hold,
+bool EthercatPdoHal::set_up_drives(const std::vector<JointConfig>& joints, bool quick_stop_hold,
                                    double control_frequency)
 {
+  slave_config_units_.clear();
+  for (const JointConfig& joint : joints)
+  {
+    try
+    {
+      slave_config_units_.push_back(read_slave_config_units(joint.slave_config_file));
+    }
+    catch (const std::invalid_argument& e)
+    {
+      RCLCPP_ERROR(log(), "Joint '%s': %s", joint.name.c_str(), e.what());
+      return false;
+    }
+  }
   outputs_.assign(joints.size(), initial_outputs());
   inputs_.assign(joints.size(), std::vector<double>(layout::INPUT_SIZE, 0.0));
   si_factors_.assign(joints.size(), UNREAD_SI_FACTORS);
@@ -88,12 +102,15 @@ void EthercatPdoHal::set_up_drives(const std::vector<JointConfig>& joints, bool 
     return JointSettings{ joint.name, joint.energize, quick_stop_hold && joint.mode_of_operation == mode::IMPEDANCE };
   });
   init_joints(std::move(settings), control_frequency);
+  return true;
 }
 
 bool EthercatPdoHal::check_drives(const std::vector<JointConfig>& joints, const SdoRetry& retry)
 {
   std::vector<DriveReadback> readback;
-  const bool usable = synapticon_hardware::ethercat::check_drives(*this, joints, log(), readback);
+  const RetryingSdo sdo(*this, *this, retry, log());
+  const bool usable =
+      synapticon_hardware::ethercat::check_drives(sdo, sdo, joints, slave_config_units_, log(), readback);
   for (std::size_t j = 0; j < readback.size(); ++j)
   {
     apply_readback(j, readback[j]);

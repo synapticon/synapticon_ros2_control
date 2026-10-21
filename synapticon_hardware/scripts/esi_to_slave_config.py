@@ -77,7 +77,11 @@ class Pdo:
 
 @dataclass(frozen=True)
 class StartupSdo:
-    """An SDO written in PRE-OP at every bring-up. An inactive one is written as a comment to enable by hand."""
+    """
+    An SDO written in PRE-OP at every bring-up. An inactive one is written as a comment to enable by hand.
+
+    An SI one goes into the `sdo_si` list: its value is in SI units, and bring-up converts it into the drive's unit.
+    """
 
     index: int
     sub_index: int
@@ -86,6 +90,7 @@ class StartupSdo:
     note: str
     active: bool = True
     variants: frozenset[str] = BOTH
+    si: bool = False
 
 
 # fmt: off
@@ -136,10 +141,8 @@ PDO_LAYOUT = (
 
 STARTUP_SDOS = (
     StartupSdo(0x605A, 0, "int16", 6, "quick stop option code"),
-    StartupSdo(0x6085, 0, "uint32", 10000, "quick stop deceleration, see the note on 0x605A", active=False),
-    StartupSdo(0x2054, 0, "uint32", 50000, "torque cap [mNm] until the first cycle", variants=IMPEDANCE_ONLY),
-    StartupSdo(0x2060, 1, "int32", 400, "impedance stiffness [mNm/rad]", variants=IMPEDANCE_ONLY),
-    StartupSdo(0x2060, 2, "int32", 0, "impedance damping", variants=IMPEDANCE_ONLY),
+    StartupSdo(0x6085, 0, "uint32", 200.0, "quick stop deceleration in rad/s^2 at the motor, see the note on 0x605A",
+               active=False, si=True),
     StartupSdo(0x2060, 3, "real32", 1.0, "gain of the inner torque loop", variants=IMPEDANCE_ONLY),
     StartupSdo(0x2150, 1, "uint8", 1, "torque sensor type, see the impedance note", active=False,
                variants=IMPEDANCE_ONLY),
@@ -162,7 +165,11 @@ Startup SDOs are written in PRE-OP at every bring-up. Check each value for your 
   2  ramps down and then takes the power off (the factory setting)
   any other value disables the drive at once
 Bring-up reads 0x605A back, and the quick stop deceleration 0x6085 too. This file leaves 0x6085 to the
-commissioning of the drive. Its unit is the velocity unit of 0x60A9 per second.
+commissioning of the drive. To set it at every bring-up, enable its sdo_si entry below.
+
+'sdo' holds values without a unit, written as they are. An object whose unit depends on the drive's
+commissioning goes into 'sdo_si' with si_value in SI units at the motor: bring-up reads the drive's
+units first and converts it. Any other object in 'sdo' needs 'raw: true' to say the value is meant as written.
 """,
     "impedance": """\
 Impedance mode:
@@ -486,14 +493,19 @@ def sdo_lines(variant: Variant) -> list[str]:
             if lines[-1] != "":
                 lines.append("#")
             lines += comment_block(NOTES[topic])
-    lines.append("sdo:")
-    for sdo in sdos_for(variant.name):
-        fields = (
-            f"index: {sdo.index:#06x}, sub_index: {sdo.sub_index}, type: {sdo.type}, "
-            f"value: {yaml_value(sdo.value)}"
-        )
-        prefix = "  - " if sdo.active else "  # - "
-        lines += [f"  # {sdo.note}", f"{prefix}{{ {fields} }}"]
+    for section, si in (("sdo", False), ("sdo_si", True)):
+        sdos = [sdo for sdo in sdos_for(variant.name) if sdo.si == si]
+        if not sdos:
+            continue
+        lines.append(f"{section}:")
+        for sdo in sdos:
+            key = "si_value" if sdo.si else "value"
+            fields = (
+                f"index: {sdo.index:#06x}, sub_index: {sdo.sub_index}, type: {sdo.type}, "
+                f"{key}: {yaml_value(sdo.value)}"
+            )
+            prefix = "  - " if sdo.active else "  # - "
+            lines += [f"  # {sdo.note}", f"{prefix}{{ {fields} }}"]
     return lines
 
 

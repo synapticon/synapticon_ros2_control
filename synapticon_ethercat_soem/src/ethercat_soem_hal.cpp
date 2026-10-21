@@ -401,7 +401,11 @@ bool EthercatSoemHal::connect()
     bus_->images.emplace_back(*config, joint.mode_of_operation);
   }
   bus_->slave_of_joint.assign(joints_.size(), 0);
-  set_up_drives(joints_, config_.quick_stop_hold, config_.control_frequency);
+  if (!set_up_drives(joints_, config_.quick_stop_hold, config_.control_frequency))
+  {
+    bus_.reset();
+    return false;
+  }
 
   if (ecx_init(&bus_->context, config_.network_interface.c_str()) <= 0)
   {
@@ -670,6 +674,25 @@ int EthercatSoemHal::upload(uint16_t position, uint16_t index, uint8_t sub_index
   if (wkc > 0)
   {
     size = static_cast<std::size_t>(length);
+    return 0;
+  }
+  ec_errort error{};
+  abort_code = ecx_poperror(&bus_->context, &error) ? static_cast<uint32_t>(error.AbortCode) : 0;
+  return -1;
+}
+
+int EthercatSoemHal::download(uint16_t position, uint16_t index, uint8_t sub_index, const std::vector<uint8_t>& bytes,
+                              uint32_t& abort_code) const
+{
+  if (!bus_ || !bus_->open)
+  {
+    return -1;
+  }
+  std::vector<uint8_t> data(bytes);  // SOEM takes a mutable buffer
+  const int wkc = ecx_SDOwrite(&bus_->context, static_cast<uint16_t>(position + 1), index, sub_index, FALSE,
+                               static_cast<int>(data.size()), data.data(), EC_TIMEOUTRXM);
+  if (wkc > 0)
+  {
     return 0;
   }
   ec_errort error{};

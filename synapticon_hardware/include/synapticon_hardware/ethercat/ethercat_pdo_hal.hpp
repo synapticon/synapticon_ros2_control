@@ -30,8 +30,8 @@ namespace synapticon_hardware::ethercat
 ///   order of the PDO channel tables. On them it does the CiA 402 hooks, the SI conversion of states and commands,
 ///   the bring-up checks and the wait for valid data after the bus starts.
 /// - The derived HAL owns the master. It sets up and starts the bus, moves the arrays to and from the drives in
-///   exchange_read() and exchange_write(), and implements upload() for SDO reads.
-class EthercatPdoHal : public Cia402Hal, protected SdoReader
+///   exchange_read() and exchange_write(), and implements upload() and download() for SDO reads and writes.
+class EthercatPdoHal : public Cia402Hal, protected SdoReader, protected SdoWriter
 {
 public:
   /// Whether the joint can quick stop under control, that is its 0x605A from bring-up is 6 or 2. If not, the
@@ -46,15 +46,17 @@ protected:
   /// `logger_name` is the logger the HAL writes to.
   explicit EthercatPdoHal(std::string logger_name);
 
-  /// First step of connect(), before the bus gets the arrays: allocate them for `joints` and prepare the CiA 402
-  /// logic. Targets start as NaN, the controlword, gains and torque ceiling as 0 until check_drives() fills them.
-  /// `quick_stop_hold` makes the HAL hold an impedance joint where its quick stop started, because the drive does not
-  /// brake in impedance mode.
-  void set_up_drives(const std::vector<JointConfig>& joints, bool quick_stop_hold, double control_frequency);
+  /// First step of connect(), before the bus gets the arrays and before any SDO is written: allocate them for
+  /// `joints`, prepare the CiA 402 logic, and read and check the unit sections of each joint's slave_config. Targets
+  /// start as NaN, the controlword, gains and torque ceiling as 0 until check_drives() fills them. `quick_stop_hold`
+  /// makes the HAL hold an impedance joint where its quick stop started, because the drive does not brake in impedance
+  /// mode. False, with the reason logged, when a slave_config breaks a rule of read_slave_config_units().
+  bool set_up_drives(const std::vector<JointConfig>& joints, bool quick_stop_hold, double control_frequency);
 
-  /// The bring-up checks of `joints`, read through upload(). Their results go into the arrays, the factors and the
-  /// quick stop getters. Call it while the bus is configured but not yet running. False means bring-up must stop.
-  bool check_drives(const std::vector<JointConfig>& joints);
+  /// The bring-up checks of `joints` and the `sdo_si:` entries of their slave_configs, through upload() and
+  /// download() with `retry` for transfers without a valid answer. Their results go into the arrays, the factors and
+  /// the quick stop getters. Call it while the bus is configured but not yet running. False means bring-up must stop.
+  bool check_drives(const std::vector<JointConfig>& joints, const SdoRetry& retry);
 
   /// Right after the bus reached OP: exchange process data, with controlword 0, until the drive of every joint that
   /// may be powered sends a statusword. False after `timeout_s` or on a failed exchange. Joints that are only read
@@ -91,6 +93,8 @@ private:
   // Quick stop values per joint, from bring-up.
   std::vector<int> option_codes_;
   std::vector<double> quick_stop_decelerations_;
+  /// The `sdo_si:` entries and unit overrides of each joint's slave_config.
+  std::vector<SlaveConfigUnits> slave_config_units_;
 };
 
 }  // namespace synapticon_hardware::ethercat

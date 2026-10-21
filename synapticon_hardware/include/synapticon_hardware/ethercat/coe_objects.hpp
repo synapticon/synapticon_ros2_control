@@ -12,9 +12,7 @@
 /// The indices from 0x1000 and 0x6000 come from the CiA 301 and CiA 402 standards. Everything at 0x2000 is defined by
 /// the SOMANET firmware and may sit elsewhere on other products or firmware versions.
 
-#include <cmath>
 #include <cstdint>
-#include <numbers>
 
 namespace synapticon_hardware::ethercat
 {
@@ -34,8 +32,11 @@ namespace coe
 /// @{
 /// UDINT, the motor's rated torque in mNm. Torque values are given in thousandths of it.
 inline constexpr CoeAddress RATED_TORQUE{ 0x6076, 0 };
-/// UDINT in CiA notation. Its top byte holds a power of ten.
+/// UDINT in CiA notation: power of ten, distance unit, time unit. See velocity_step().
 inline constexpr CoeAddress VELOCITY_UNIT{ 0x60A9, 0 };
+/// UDINT, the feed of the feed constant. Any value but FEED_CONSTANT_DISABLED turns positions and velocities into
+/// user-defined linear units.
+inline constexpr CoeAddress FEED_CONSTANT_FEED{ 0x6092, 1 };
 /// Number 1 or 2: the encoder whose count is the position. It replaces 0x608F, which SOMANET does not have.
 inline constexpr CoeAddress POSITION_ENCODER{ 0x2012, 9 };
 /// Counts per turn of encoder 1.
@@ -107,15 +108,5 @@ inline constexpr int IMPEDANCE = -6;  ///< Impedance control of the SOMANET firm
 inline constexpr int CSP = 8;         ///< Cyclic synchronous position, CiA 402.
 inline constexpr int CSV = 9;         ///< Cyclic synchronous velocity, CiA 402.
 }  // namespace mode
-
-/// @brief The size of one raw velocity step in rad/s, given the content of 0x60A9.
-///
-/// The base unit on SOMANET is one revolution per minute. The signed top byte of 0x60A9 scales it by a power of ten.
-inline double velocity_step_in_rad_per_s(uint32_t velocity_unit)
-{
-  const auto exponent = static_cast<int8_t>(velocity_unit >> 24);
-  const double revolutions_per_minute = std::pow(10.0, exponent);
-  return revolutions_per_minute * 2.0 * std::numbers::pi / 60.0;
-}
 
 }  // namespace synapticon_hardware::ethercat
