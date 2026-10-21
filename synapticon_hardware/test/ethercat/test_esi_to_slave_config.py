@@ -253,9 +253,6 @@ def test_only_the_impedance_variant_seeds_the_impedance_objects():
     assert active(gen.CSP) == {(0x605A, 0)}
     assert active(gen.IMPEDANCE) == {
         (0x605A, 0),
-        (0x2054, 0),
-        (0x2060, 1),
-        (0x2060, 2),
         (0x2060, 3),
     }
 

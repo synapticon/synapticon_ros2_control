@@ -36,9 +36,13 @@ struct JointConfig
   /// 0x6060 value, -6 when missing. 8 (CSP) and 9 (CSV) are sent to the drive. For -6 (impedance), the drive
   /// takes the 0x6060 default of its slave_config.
   int mode_of_operation{ -6 };
-  /// Torque ceiling in Nm, sent in place of the drive's 0x2054 while the HAL runs. NaN when missing: the drive keeps
-  /// its own.
+  /// Torque ceiling in Nm, sent in place of the drive's 0x2054 from bring-up on. NaN when missing: the drive keeps
+  /// its own. Required in impedance mode, like the two gains below.
   double max_joint_torque{ std::numeric_limits<double>::quiet_NaN() };
+  /// Impedance stiffness in Nm/rad, sent in place of the drive's 0x2060:1 from bring-up on. NaN when missing.
+  double stiffness{ std::numeric_limits<double>::quiet_NaN() };
+  /// Impedance damping in Nm s/rad, sent in place of the drive's 0x2060:2 from bring-up on. NaN when missing.
+  double damping{ std::numeric_limits<double>::quiet_NaN() };
   /// True when missing. False: the drive is brought up and read, but never powered.
   bool energize{ true };
   /// False when missing. True for a drive mounted in reverse: position, velocity and torque change sign on the way

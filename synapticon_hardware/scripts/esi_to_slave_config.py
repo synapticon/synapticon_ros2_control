@@ -165,11 +165,12 @@ Bring-up reads 0x605A back, and the quick stop deceleration 0x6085 too. This fil
 commissioning of the drive. Its unit is the velocity unit of 0x60A9 per second.
 """,
     "impedance": """\
-In impedance mode, 0x2054 caps every torque of the drive. At 0 the drive is powered but does not move.
-0x2060:3 is the gain of the inner torque loop. Start with low values.
-The impedance controller needs a torque sensor type in 0x2150:1. Without a sensor, use 1 (analog input) and
-leave the analog coefficients at 0. Storing it on the drive once is enough. To write it at every bring-up
-instead, enable the 0x2150 line below.
+Impedance mode:
+  0x2060:3  gain of the inner torque loop. Raise it in small steps.
+  0x2150:1  torque sensor type, must be set. With no sensor: 1 (analog input), all analog coefficients 0.
+            Store it on the drive once, or enable the 0x2150 entry below to write it at every bring-up.
+The stiffness, the damping and the torque ceiling (0x2054) are streamed. They come from the commands, and
+from the robot definition where a command leaves them out.
 """,
 }
 

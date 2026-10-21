@@ -53,21 +53,6 @@ int supported_mode(const std::string& text)
                                   " cannot be run. Allowed are -6 (impedance), 8 (CSP) and 9 (CSV).");
   }
 }
-
-/// The torque ceiling in Nm from `text`, or NaN for an empty text (the drive keeps its own).
-double torque_cap(const std::string& text)
-{
-  if (text.empty())
-  {
-    return std::numeric_limits<double>::quiet_NaN();
-  }
-  const double newton_metres = std::stod(text);
-  if (std::isnan(newton_metres) || std::isinf(newton_metres) || newton_metres < 0.0)
-  {
-    throw std::invalid_argument("max_joint_torque must be a finite number of Nm, 0 or more, got " + text);
-  }
-  return newton_metres;
-}
 }  // namespace
 
 JointConfig joint_from(const std::string& name, const ParameterMap& params)
@@ -82,7 +67,9 @@ JointConfig joint_from(const std::string& name, const ParameterMap& params)
   drive.mode_of_operation = supported_mode(param_or(params, "mode_of_operation", "-6"));
   drive.alias = address("alias", param_or(params, "alias", "0"));
   drive.position = address("position", param_or(params, "position", "0"));
-  drive.max_joint_torque = torque_cap(param_or(params, "max_joint_torque"));
+  drive.max_joint_torque = read_non_negative("max_joint_torque", "Nm", param_or(params, "max_joint_torque"));
+  drive.stiffness = read_non_negative("stiffness", "Nm/rad", param_or(params, "stiffness"));
+  drive.damping = read_non_negative("damping", "Nm s/rad", param_or(params, "damping"));
   drive.energize = read_flag(param_or(params, "energize", "true"));
   drive.invert = read_flag(param_or(params, "invert", "false"));
   return drive;

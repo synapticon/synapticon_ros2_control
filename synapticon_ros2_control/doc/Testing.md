@@ -141,7 +141,7 @@ When the joint travels further than the test expects, it cuts the voltage and fa
 2. With one drive, expect:
 
    ```text
-   [  PASSED  ] 50 tests.
+   [  PASSED  ] 53 tests.
    [  SKIPPED ] 4 tests, listed below:
    [  SKIPPED ] DrivePair.ADisableVoltageOfOneLeavesTheOtherInQuickStop
    [  SKIPPED ] DrivePair.AFaultOnOneLeavesTheOtherRunning
@@ -285,14 +285,13 @@ It then takes the power off and releases the bus.
    A joint with power but no torque has a torque limit of 0 on the drive (`0x2054`).
    Give it a limit for the run with `--max-torque <Nm>`, or store one on the drive.
 
-4. Impedance mode needs the torque sensor configured on the drive.
-   Without `--stiffness` and `--damping`, the gains stored on the drive apply.
+4. Impedance mode needs the torque sensor configured on the drive, and `--stiffness`, `--damping` and `--max-torque`.
    Hold with a soft spring, push the joint, and it gives way and comes back.
    For `move`, keep the travel small: the target is where the spring pulls to.
 
    ```bash
-   ros2 run synapticon_hardware drive_check hold --impedance --stiffness 20 --damping 0.5 --config "$CFG" --network-interface "$IF"
-   ros2 run synapticon_hardware drive_check move --impedance --stiffness 20 --damping 0.5 --travel-deg 10 --config "$CFG" --network-interface "$IF"
+   ros2 run synapticon_hardware drive_check hold --impedance --stiffness 15 --damping 0.5 --max-torque 10 --config "$CFG" --network-interface "$IF"
+   ros2 run synapticon_hardware drive_check move --impedance --stiffness 15 --damping 0.5 --max-torque 10 --travel-deg 10 --config "$CFG" --network-interface "$IF"
    ```
 
 A fault stays on the drive until a `reset_fault`, or until the drive is power-cycled.

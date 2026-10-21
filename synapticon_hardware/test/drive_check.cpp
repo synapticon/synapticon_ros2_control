@@ -32,6 +32,7 @@
 #include <optional>
 #include <string>
 #include <thread>
+#include <utility>
 #include <vector>
 
 #include <fcntl.h>
@@ -74,10 +75,10 @@ Usage: drive_check <read|timing|hold|move> [--config <slave_config.yaml>] [optio
   --ring-position N  place of the drive on the ring, counted from 0 (default 0)
   --duration S       run time, 0 until Ctrl-C (default 10)
   --travel-deg D     travel of the move check (default 30)
-  --max-torque NM    MaxJointTorque for the run (default: the drive's value)
-  --impedance        hold and move in impedance mode instead of CSP
-  --stiffness K      impedance stiffness [Nm/rad] (default: the drive's value)
-  --damping D        impedance damping [Nm s/rad] (default: the drive's value)
+  --max-torque NM    MaxJointTorque for the run (default in CSP: the drive's value)
+  --impedance        hold and move in impedance mode instead of CSP. Needs the next two and --max-torque.
+  --stiffness K      impedance stiffness [Nm/rad]
+  --damping D        impedance damping [Nm s/rad]
   --rt               real-time scheduling, locked memory, no deep CPU idle states (needs root)
   --rt-priority N    like --rt, at SCHED_FIFO priority N from 1 to 99. --rt alone uses 60, the priority of the
                      example controller manager
@@ -170,6 +171,11 @@ std::optional<Options> parse_options(int argc, char** argv)
     std::cerr << "--rt-priority takes a SCHED_FIFO priority from 1 to 99.\n";
     return std::nullopt;
   }
+  if (o.impedance && !(std::isfinite(o.stiffness) && std::isfinite(o.damping) && std::isfinite(o.max_torque)))
+  {
+    std::cerr << "--impedance needs --stiffness, --damping and --max-torque, so the drive runs on known values.\n";
+    return std::nullopt;
+  }
   if (o.config.empty())
   {
     o.config = ament_index_cpp::get_package_share_directory("synapticon_hardware") +
@@ -215,9 +221,15 @@ synapticon_hardware::HalConfig hal_config(const Options& o, int mode_of_operatio
   joint.parameters = { { "position", std::to_string(o.ring_position) },
                        { "mode_of_operation", std::to_string(mode_of_operation) },
                        { "slave_config", o.config } };
-  if (std::isfinite(o.max_torque))
+  const std::pair<const char*, double> values[] = { { "max_joint_torque", o.max_torque },
+                                                    { "stiffness", o.stiffness },
+                                                    { "damping", o.damping } };
+  for (const auto& [key, value] : values)
   {
-    joint.parameters["max_joint_torque"] = std::to_string(o.max_torque);
+    if (std::isfinite(value))
+    {
+      joint.parameters[key] = std::to_string(value);
+    }
   }
   config.joints.push_back(joint);
   return config;

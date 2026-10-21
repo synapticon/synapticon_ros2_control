@@ -43,8 +43,7 @@ struct DriveReadback
   /// position, velocity and torque.
   SiFactors si_factors{ UNREAD_SI_FACTORS };
   /// First raw values for the streamed stiffness, damping and torque limit, used until a command brings its own.
-  /// The gains are those stored on the drive. The limit is max_joint_torque if configured, else the drive's 0x2054.
-  /// Nothing when the read failed.
+  /// Each is the joint's configured value, else what the drive holds. Nothing when neither is known.
   std::optional<double> stiffness;
   std::optional<double> damping;
   std::optional<double> max_torque;

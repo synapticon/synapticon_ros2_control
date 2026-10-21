@@ -59,10 +59,10 @@ TEST(SlaveConfig, ReadsTheExample)
   EXPECT_EQ(config->vendor_id, 0x22d2u);
   EXPECT_EQ(config->product_id, 0x302u);
   EXPECT_EQ(config->assign_activate, 0x0300u);
-  ASSERT_EQ(config->sdo.size(), 5u);
+  ASSERT_EQ(config->sdo.size(), 2u);
   EXPECT_EQ(config->sdo[0].index, 0x605A);
   EXPECT_EQ(config->sdo[0].value, "6");
-  EXPECT_EQ(config->sdo[4].type.kind, ValueKind::REAL);
+  EXPECT_EQ(config->sdo[1].type.kind, ValueKind::REAL);
   ASSERT_EQ(config->rpdo.size(), 1u);
   EXPECT_EQ(config->rpdo[0].index, 0x1600);
   EXPECT_EQ(config->rpdo[0].channels.size(), 8u);

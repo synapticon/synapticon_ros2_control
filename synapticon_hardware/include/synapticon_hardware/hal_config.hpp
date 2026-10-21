@@ -6,7 +6,7 @@
 #pragma once
 
 /// @file
-/// @brief Input of SynapticonHalI::setup(), and two helpers to read values from it.
+/// @brief Input of SynapticonHalI::setup(), and helpers to read values from it.
 ///
 /// The parameters of the robot description arrive here as plain text. Each HAL converts the values it uses, which
 /// keeps the HALs free of ros2_control types.
@@ -14,6 +14,8 @@
 #include <algorithm>
 #include <array>
 #include <cctype>
+#include <cmath>
+#include <limits>
 #include <stdexcept>
 #include <string>
 #include <string_view>
@@ -78,6 +80,30 @@ inline bool read_flag(std::string_view text)
     return false;
   }
   throw std::invalid_argument("expected true, false, 1 or 0, got '" + std::string(text) + "'");
+}
+
+/// @brief Parse parameter `name`, a finite value of 0 or more in `unit`. An empty text gives NaN, "not set".
+///
+/// Anything else throws std::invalid_argument naming the parameter.
+inline double read_non_negative(const std::string& name, const std::string& unit, const std::string& text)
+{
+  if (text.empty())
+  {
+    return std::numeric_limits<double>::quiet_NaN();
+  }
+  double value = std::numeric_limits<double>::quiet_NaN();
+  try
+  {
+    value = std::stod(text);
+  }
+  catch (const std::exception&)
+  {
+  }
+  if (!std::isfinite(value) || value < 0.0)
+  {
+    throw std::invalid_argument(name + " must be a finite number of " + unit + ", 0 or more, got '" + text + "'");
+  }
+  return value;
 }
 
 }  // namespace synapticon_hardware

@@ -90,6 +90,24 @@ TEST(RobotConfig, AppliesTheDefaultsToJointsWithoutTheirOwn)
   EXPECT_EQ(config.joints[0].parameters.at("mode_of_operation"), "9");
 }
 
+/// command_defaults become hardware parameters and fill the joints without their own value.
+TEST(RobotConfig, AppliesTheCommandDefaults)
+{
+  const std::string yaml = std::string(ROBOT_YAML) +
+                           "command_defaults: {stiffness: 0.4, damping: 0.1, max_joint_torque: 50, "
+                           "keep_last_given: true}\n";
+  HalConfig config = make_config(write_file("command_defaults.yaml", yaml));
+  config.joints[0].parameters["stiffness"] = "2.0";
+  std::string error;
+  ASSERT_TRUE(apply_robot_config(config, error)) << error;
+  EXPECT_EQ(config.hardware_parameters.at("default_stiffness"), "0.4");
+  EXPECT_EQ(config.hardware_parameters.at("keep_last_given"), "true");
+  EXPECT_EQ(config.joints[0].parameters.at("stiffness"), "2.0");
+  EXPECT_EQ(config.joints[0].parameters.at("damping"), "0.1");
+  EXPECT_EQ(config.joints[1].parameters.at("stiffness"), "0.4");
+  EXPECT_EQ(config.joints[1].parameters.at("max_joint_torque"), "50");
+}
+
 /// A parameter the description sets itself wins over the file.
 TEST(RobotConfig, ADescriptionParameterWinsOverTheFile)
 {

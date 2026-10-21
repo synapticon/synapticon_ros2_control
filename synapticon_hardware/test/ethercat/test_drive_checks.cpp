@@ -9,6 +9,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
+#include <limits>
 #include <map>
 #include <optional>
 #include <string>
@@ -30,7 +31,7 @@ constexpr int IMPEDANCE = mode::IMPEDANCE;
 constexpr double RAD_PER_RPM = 2.0 * M_PI / 60.0;
 constexpr uint32_t ABORT_NO_OBJECT = 0x06020000;
 
-/// One joint at ring position `position` in `mode`.
+/// One joint at ring position `position` in `mode`. An impedance joint gets the command defaults it needs.
 JointConfig joint(uint16_t position = 0, int mode = CSP)
 {
   JointConfig config;
@@ -38,6 +39,12 @@ JointConfig joint(uint16_t position = 0, int mode = CSP)
   config.position = position;
   config.slave_config_file = "unused.yaml";
   config.mode_of_operation = mode;
+  if (mode == IMPEDANCE)
+  {
+    config.stiffness = 0.4;
+    config.damping = 0.1;
+    config.max_joint_torque = 50.0;
+  }
   return config;
 }
 
@@ -231,6 +238,34 @@ TEST_F(DriveChecks, SeedsAConfiguredTorqueLimitInsteadOfTheDrives)
   limited.max_joint_torque = 2.5;
   ASSERT_TRUE(check({ limited }));
   EXPECT_DOUBLE_EQ(readback_[0].max_torque.value(), 2500.0);  // mNm
+}
+
+/// Configured gains replace the drive's, in raw steps of mNm/rad and mNm s/rad.
+TEST_F(DriveChecks, SeedsConfiguredGainsInsteadOfTheDrives)
+{
+  JointConfig configured = joint();
+  configured.stiffness = 1.5;
+  configured.damping = 0.02;
+  ASSERT_TRUE(check({ configured }));
+  EXPECT_DOUBLE_EQ(readback_[0].stiffness.value(), 1500.0);
+  EXPECT_DOUBLE_EQ(readback_[0].damping.value(), 20.0);
+}
+
+/// An impedance joint that may be powered needs all three command defaults. A monitored one does not, and 0 is
+/// allowed.
+TEST_F(DriveChecks, AnImpedanceJointNeedsItsCommandDefaults)
+{
+  for (const auto clear : { &JointConfig::stiffness, &JointConfig::damping, &JointConfig::max_joint_torque })
+  {
+    JointConfig incomplete = joint(0, IMPEDANCE);
+    incomplete.*clear = std::numeric_limits<double>::quiet_NaN();
+    EXPECT_FALSE(check({ incomplete }));
+    incomplete.energize = false;
+    EXPECT_TRUE(check({ incomplete }));
+  }
+  JointConfig zero = joint(0, IMPEDANCE);
+  zero.damping = 0.0;
+  EXPECT_TRUE(check({ zero }));
 }
 
 /// A drive commissioned with no torque comes up, and bring-up warns about it.

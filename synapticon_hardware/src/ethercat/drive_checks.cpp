@@ -134,20 +134,58 @@ std::optional<double> torque_limit_to_stream(const SdoReader& sdo, const rclcpp:
   return stored ? std::optional<double>(*stored) : std::nullopt;
 }
 
-/// Put the first raw torque ceiling, stiffness and damping into `readback`.
+/// The first raw value to send for one setting: the configured value in raw steps when there is one, else what the
+/// drive holds.
+std::optional<double> first_raw_value(double configured, double factor, std::optional<uint32_t> held)
+{
+  if (std::isfinite(configured))
+  {
+    return configured / factor;
+  }
+  return held ? std::optional<double>(*held) : std::nullopt;
+}
+
+/// `raw` in SI units with three decimals, for a log line, or "unreadable".
+std::string si_text(std::optional<double> raw, double factor)
+{
+  if (!raw)
+  {
+    return "unreadable";
+  }
+  char text[32];
+  std::snprintf(text, sizeof(text), "%.3f", *raw * factor);
+  return text;
+}
+
+/// Put the first raw torque ceiling, stiffness and damping into `readback`, and log them next to what the drive
+/// held. A configured value replaces the drive's.
 void seed_command_values(const SdoReader& sdo, const rclcpp::Logger& logger, const JointConfig& joint,
                          DriveReadback& readback)
 {
-  readback.max_torque = torque_limit_to_stream(sdo, logger, joint, readback.si_factors);
-  const auto stored_stiffness = read_u32(sdo, logger, joint.position, coe::IMPEDANCE_STIFFNESS);
-  const auto stored_damping = read_u32(sdo, logger, joint.position, coe::IMPEDANCE_DAMPING);
-  if (stored_stiffness)
+  const SiFactors& f = readback.si_factors;
+  const double torque_step = si_factor(f, Unit::TORQUE_LIMIT);
+  const double stiffness_step = si_factor(f, Unit::STIFFNESS);
+  const double damping_step = si_factor(f, Unit::DAMPING);
+  const auto held_ceiling = read_u32(sdo, logger, joint.position, coe::MAX_JOINT_TORQUE);
+  const auto held_stiffness = read_u32(sdo, logger, joint.position, coe::IMPEDANCE_STIFFNESS);
+  const auto held_damping = read_u32(sdo, logger, joint.position, coe::IMPEDANCE_DAMPING);
+  readback.max_torque = first_raw_value(joint.max_joint_torque, torque_step, held_ceiling);
+  readback.stiffness = first_raw_value(joint.stiffness, stiffness_step, held_stiffness);
+  readback.damping = first_raw_value(joint.damping, damping_step, held_damping);
+  const auto held = [](std::optional<uint32_t> value) { return value ? std::optional<double>(*value) : std::nullopt; };
+  RCLCPP_INFO(logger,
+              "Joint '%s' starts with stiffness %s Nm/rad, damping %s Nm s/rad and torque ceiling %s Nm. The drive "
+              "held %s, %s and %s.",
+              joint.name.c_str(), si_text(readback.stiffness, stiffness_step).c_str(),
+              si_text(readback.damping, damping_step).c_str(), si_text(readback.max_torque, torque_step).c_str(),
+              si_text(held(held_stiffness), stiffness_step).c_str(), si_text(held(held_damping), damping_step).c_str(),
+              si_text(held(held_ceiling), torque_step).c_str());
+  if (!std::isfinite(joint.max_joint_torque) && held_ceiling && *held_ceiling == 0)
   {
-    readback.stiffness = *stored_stiffness;
-  }
-  if (stored_damping)
-  {
-    readback.damping = *stored_damping;
+    RCLCPP_WARN(logger,
+                "Joint '%s' cannot produce torque. Its ceiling is 0, as neither the drive (0x2054) nor the robot "
+                "definition (max_joint_torque) sets one.",
+                joint.name.c_str());
   }
 }
 
@@ -233,6 +271,68 @@ bool scaling_usable(const rclcpp::Logger& logger, const std::vector<JointConfig>
   }
   RCLCPP_WARN(logger, "%s", report.c_str());
   return true;
+}
+
+/// What a value of 0 does, for the warning about it.
+const char* effect_of_zero(const std::string& key)
+{
+  if (key == "stiffness")
+  {
+    return "the joint is not pulled back to its target";
+  }
+  if (key == "damping")
+  {
+    return "the joint is not damped";
+  }
+  return "the joint has no torque";
+}
+
+/// True when every impedance joint that may be powered has its stiffness, damping and max_joint_torque. These fill
+/// every command that leaves them out, so the drive never runs on what it last stored. A value of 0 is allowed, with
+/// a warning.
+bool command_values_complete(const rclcpp::Logger& logger, const std::vector<JointConfig>& joints)
+{
+  std::vector<std::string> incomplete;
+  for (const JointConfig& joint : joints)
+  {
+    if (joint.mode_of_operation != mode::IMPEDANCE || !joint.energize)
+    {
+      continue;
+    }
+    const std::pair<std::string, double> values[] = { { "stiffness", joint.stiffness },
+                                                      { "damping", joint.damping },
+                                                      { "max_joint_torque", joint.max_joint_torque } };
+    std::string missing;
+    for (const auto& [key, value] : values)
+    {
+      if (std::isnan(value))
+      {
+        missing += (missing.empty() ? "" : ", ") + key;
+      }
+      else if (value == 0.0)
+      {
+        RCLCPP_WARN(logger, "Joint '%s' has %s 0 for commands that leave it out, so %s.", joint.name.c_str(),
+                    key.c_str(), effect_of_zero(key));
+      }
+    }
+    if (!missing.empty())
+    {
+      incomplete.push_back(joint.name + " (" + missing + ")");
+    }
+  }
+  if (incomplete.empty())
+  {
+    return true;
+  }
+  const std::string report =
+      FramedReport("IMPEDANCE JOINTS WITHOUT COMMAND DEFAULTS")
+          .say("A command that leaves out stiffness, damping or max_joint_torque gets a configured\n"
+               "value. Without one, the drive would run on whatever it last stored.\n")
+          .list("Missing", incomplete)
+          .say("\nSet them in the command_defaults section of the robot definition, or per joint.\n")
+          .close();
+  RCLCPP_ERROR(logger, "%s", report.c_str());
+  return false;
 }
 
 /// True when the drive of every impedance joint has a torque sensor type. Impedance mode controls on the measured
@@ -422,6 +522,10 @@ bool check_drives(const SdoReader& sdo, const std::vector<JointConfig>& joints, 
                   std::vector<DriveReadback>& readback)
 {
   readback.assign(joints.size(), DriveReadback{});
+  if (!command_values_complete(logger, joints))
+  {
+    return false;
+  }
   std::vector<bool> scaled(joints.size());
   for (std::size_t j = 0; j < joints.size(); ++j)
   {

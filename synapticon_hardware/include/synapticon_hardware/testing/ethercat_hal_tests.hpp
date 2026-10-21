@@ -481,6 +481,7 @@ TEST_F(EthercatBringUp, ADriveTorqueLimitOfZeroIsStreamedAsIs)
   release(hal);
 }
 
+/// Without configured gains, the slave_config leaves them alone: the drive's own stiffness and damping are streamed
 /// until a command brings its own.
 TEST_F(EthercatBringUp, TheDrivesOwnImpedanceGainsAreStreamed)
 {
@@ -510,6 +511,34 @@ TEST_F(EthercatBringUp, TheDrivesOwnImpedanceGainsAreStreamed)
   EXPECT_EQ(hal->sdo_u32(bench_joint().position, ec::coe::IMPEDANCE_STIFFNESS), stiffness);
   EXPECT_EQ(hal->sdo_u32(bench_joint().position, ec::coe::IMPEDANCE_DAMPING), damping);
   release(hal);
+}
+
+/// Configured gains replace the drive's from the start, in raw steps of mNm/rad and mNm s/rad.
+TEST_F(EthercatBringUp, ConfiguredGainsAreStreamedInsteadOfTheDrives)
+{
+  JointConfig configured = bench_joint();
+  configured.stiffness = 1.234;
+  configured.damping = 0.056;
+  auto hal = connected_hal(configured);
+  ASSERT_TRUE(hal);
+  EXPECT_NEAR(hal->streamed(ec::slot::STIFFNESS), 1234.0, 1e-6);
+  EXPECT_NEAR(hal->streamed(ec::slot::DAMPING), 56.0, 1e-6);
+  release(hal);
+}
+
+/// An impedance joint without a stiffness, damping or torque ceiling is refused before the bus goes active, as the
+/// drive would otherwise run on whatever it stored last.
+TEST_F(EthercatBringUp, AnImpedanceJointWithoutCommandDefaultsIsRefused)
+{
+  for (const auto clear : { &JointConfig::stiffness, &JointConfig::damping, &JointConfig::max_joint_torque })
+  {
+    JointConfig impedance = bench_joint(ec::mode::IMPEDANCE);
+    impedance.*clear = std::numeric_limits<double>::quiet_NaN();
+    auto hal = std::make_shared<ProbedHal>();
+    ASSERT_TRUE(set_up_hal(*hal, bench_bus(), { impedance }));
+    EXPECT_FALSE(hal->connect());
+    release(hal);
+  }
 }
 
 /// With the torque sensor type set to None, an impedance bring-up is refused before the bus goes active.

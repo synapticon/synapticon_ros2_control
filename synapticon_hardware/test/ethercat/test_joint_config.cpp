@@ -50,12 +50,16 @@ TEST(JointConfig, ReadsEveryParameter)
                                                   { "position", "65535" },
                                                   { "mode_of_operation", "9" },
                                                   { "max_joint_torque", "2.5" },
+                                                  { "stiffness", "0.4" },
+                                                  { "damping", "0.1" },
                                                   { "energize", "false" },
                                                   { "invert", "true" } }));
   EXPECT_EQ(joint.alias, 7);
   EXPECT_EQ(joint.position, 65535);
   EXPECT_EQ(joint.mode_of_operation, 9);
   EXPECT_DOUBLE_EQ(joint.max_joint_torque, 2.5);
+  EXPECT_DOUBLE_EQ(joint.stiffness, 0.4);
+  EXPECT_DOUBLE_EQ(joint.damping, 0.1);
   EXPECT_FALSE(joint.energize);
   EXPECT_TRUE(joint.invert);
 }
@@ -81,7 +85,8 @@ INSTANTIATE_TEST_SUITE_P(Cases, InvalidJoint,
                                            with({ { "max_joint_torque", "-1" } }),
                                            with({ { "max_joint_torque", "inf" } }), with({ { "invert", "maybe" } }),
                                            with({ { "alias", "-1" } }), with({ { "position", "+3" } }),
-                                           with({ { "position", "" } }), with({ { "max_joint_torque", "nan" } })));
+                                           with({ { "position", "" } }), with({ { "max_joint_torque", "nan" } }),
+                                           with({ { "stiffness", "-0.1" } }), with({ { "damping", "soft" } })));
 
 TEST(JointConfig, AnAddressErrorNamesTheParameter)
 {

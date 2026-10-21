@@ -11,6 +11,8 @@
 #include <exception>
 #include <string>
 #include <unordered_map>
+#include <utility>
+#include <vector>
 
 #include <yaml-cpp/yaml.h>
 
@@ -24,21 +26,22 @@ namespace
 
 using ParamMap = std::unordered_map<std::string, std::string>;
 
-/// Copy every scalar entry of `node` except `name` into `params`, keeping the entries `params`
-/// already has. A null or empty value counts as absent.
-void merge_scalars(const YAML::Node& node, ParamMap& params)
+/// Copy every scalar entry of `node` except `name` into `params`, with `prefix` before its key, keeping the
+/// entries `params` already has. A null or empty value counts as absent.
+void merge_scalars(const YAML::Node& node, ParamMap& params, const std::string& prefix = {})
 {
   for (const auto& entry : node)
   {
     const std::string key = entry.first.as<std::string>();
-    if (key == "name" || !entry.second.IsScalar() || params.count(key) != 0)
+    const std::string target = key == KEEP_LAST_GIVEN_PARAM ? key : prefix + key;
+    if (key == "name" || !entry.second.IsScalar() || params.count(target) != 0)
     {
       continue;
     }
     const std::string value = entry.second.as<std::string>();
     if (!value.empty())
     {
-      params[key] = value;
+      params[target] = value;
     }
   }
 }
@@ -54,6 +57,10 @@ bool merge_file(const YAML::Node& root, HalConfig& config, std::string& error)
   if (const YAML::Node bus = root["bus"]; bus && bus.IsMap())
   {
     merge_scalars(bus, config.hardware_parameters);
+  }
+  if (const YAML::Node defaults = root[COMMAND_DEFAULTS_SECTION]; defaults && defaults.IsMap())
+  {
+    merge_scalars(defaults, config.hardware_parameters, "default_");
   }
   const YAML::Node entries = root["joints"];
   if (!entries || !entries.IsSequence())
@@ -82,20 +89,24 @@ bool merge_file(const YAML::Node& root, HalConfig& config, std::string& error)
   return true;
 }
 
-/// Give every joint without its own slave_config or mode_of_operation the hardware-wide default.
+/// Give every joint without its own value of a joint parameter the hardware-wide default of it.
 void apply_joint_defaults(HalConfig& config)
 {
-  const std::string slave_config = param_or(config.hardware_parameters, DEFAULT_SLAVE_CONFIG_PARAM);
-  const std::string mode = param_or(config.hardware_parameters, DEFAULT_MODE_PARAM);
-  for (auto& joint : config.joints)
+  std::vector<std::pair<std::string, std::string>> defaults{ { "slave_config", DEFAULT_SLAVE_CONFIG_PARAM },
+                                                             { "mode_of_operation", DEFAULT_MODE_PARAM } };
+  for (const char* key : COMMAND_DEFAULT_KEYS)
   {
-    if (!slave_config.empty() && param_or(joint.parameters, "slave_config").empty())
+    defaults.emplace_back(key, std::string("default_") + key);
+  }
+  for (const auto& [key, hardware_key] : defaults)
+  {
+    const std::string value = param_or(config.hardware_parameters, hardware_key);
+    for (auto& joint : config.joints)
     {
-      joint.parameters["slave_config"] = slave_config;
-    }
-    if (!mode.empty() && param_or(joint.parameters, "mode_of_operation").empty())
-    {
-      joint.parameters["mode_of_operation"] = mode;
+      if (!value.empty() && param_or(joint.parameters, key).empty())
+      {
+        joint.parameters[key] = value;
+      }
     }
   }
 }
