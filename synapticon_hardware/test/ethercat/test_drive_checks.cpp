@@ -471,4 +471,58 @@ INSTANTIATE_TEST_SUITE_P(Cases, Firmware,
                                            FirmwareCase{ "UnreadableImpedance", std::nullopt, IMPEDANCE, false }),
                          [](const auto& info) { return std::string(info.param.name); });
 
+/// @brief A reader whose first `failures` reads fail. With `abort_code` 0 they get no valid answer, as while another
+/// exchange holds the drive's mailbox, else the drive aborts them.
+{
+public:
+  explicit BusyMailbox(int failures, uint32_t abort_code = 0) : failures_(failures), abort_code_(abort_code)
+  {
+  }
+
+  int upload(uint16_t, uint16_t, uint8_t, std::vector<uint8_t>& bytes, std::size_t& size,
+             uint32_t& abort_code) const override
+  {
+    ++calls;
+    if (calls <= failures_)
+    {
+      abort_code = abort_code_;
+      return -5;
+    }
+    std::fill(bytes.begin(), bytes.end(), 0);
+    size = bytes.size();
+    return 0;
+  }
+
+  mutable int calls{ 0 };
+
+private:
+  int failures_;
+  uint32_t abort_code_;
+};
+
+constexpr SdoRetry QUICK_RETRY{ 3, 0.001 };
+
+/// Reads without a valid answer are tried again, up to the configured tries in all.
+{
+  BusyMailbox drive(2);
+  EXPECT_EQ(read_u32(reader, rclcpp::get_logger("test_drive_checks"), 0, coe::RATED_TORQUE), 0u);
+  EXPECT_EQ(drive.calls, 3);
+}
+
+/// An abort is the drive's answer, so it is not tried again.
+{
+  BusyMailbox drive(100, ABORT_NO_OBJECT);
+  EXPECT_FALSE(read_u32(reader, rclcpp::get_logger("test_drive_checks"), 0, coe::RATED_TORQUE));
+  EXPECT_EQ(drive.calls, 1);
+}
+
+/// Once a read has used up its tries, the later reads get one try each.
+{
+  BusyMailbox drive(100);
+  EXPECT_FALSE(read_u32(reader, rclcpp::get_logger("test_drive_checks"), 0, coe::RATED_TORQUE));
+  EXPECT_EQ(drive.calls, 3);
+  EXPECT_FALSE(read_u32(reader, rclcpp::get_logger("test_drive_checks"), 0, coe::VELOCITY_UNIT));
+  EXPECT_EQ(drive.calls, 4);
+}
+
 }  // namespace

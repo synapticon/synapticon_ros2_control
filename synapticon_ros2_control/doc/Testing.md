@@ -320,6 +320,11 @@ Problems show up at one of four moments. Find the moment first, then your sympto
 - The drive does not reach OP.
   It refuses an index or a type in the PDO mapping of its slave_config.
   Generate the slave_config from the drive's ESI file.
+- Bring-up warns `No valid answer to the SDO read` and tries again, or refuses with `UNITS OF A DRIVE UNKNOWN`.
+  After a rescan of the bus, the IgH master reads each drive's object dictionary, and meanwhile the drive answers no
+  other read. A rescan can follow when a program releases the master.
+  Bring-up tries each read up to `sdo_read_attempts` times (5), `sdo_retry_wait_s` apart (1 s).
+  If it still gives up, raise them in the `bus` section of the robot definition.
 - Bring-up refuses an impedance joint because of its firmware.
   The drive runs a version older than 5.6.11. Update it.
 

@@ -36,6 +36,27 @@ public:
                      std::size_t& size, uint32_t& abort_code) const = 0;
 };
 
+struct SdoRetry
+{
+  int attempts{ 1 };
+  double wait_s{ 0.0 };
+};
+
+///
+/// each, so a drive that never answers delays the bring-up only once.
+{
+public:
+
+  int upload(uint16_t position, uint16_t index, uint8_t sub_index, std::vector<uint8_t>& bytes, std::size_t& size,
+             uint32_t& abort_code) const override;
+
+private:
+  const SdoReader& reader_;
+  SdoRetry retry_;
+  rclcpp::Logger logger_;
+  mutable bool given_up_{ false };
+};
+
 /// @brief One drive's results of check_drives(), which the HAL keeps for the cyclic exchange.
 struct DriveReadback
 {

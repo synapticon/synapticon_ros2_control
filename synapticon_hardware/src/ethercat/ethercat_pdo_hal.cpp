@@ -90,7 +90,7 @@ void EthercatPdoHal::set_up_drives(const std::vector<JointConfig>& joints, bool 
   init_joints(std::move(settings), control_frequency);
 }
 
-bool EthercatPdoHal::check_drives(const std::vector<JointConfig>& joints)
+bool EthercatPdoHal::check_drives(const std::vector<JointConfig>& joints, const SdoRetry& retry)
 {
   std::vector<DriveReadback> readback;
   const bool usable = synapticon_hardware::ethercat::check_drives(*this, joints, log(), readback);

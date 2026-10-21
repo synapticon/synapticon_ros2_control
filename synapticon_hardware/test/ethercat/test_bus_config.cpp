@@ -25,15 +25,22 @@ TEST(BusConfig, EverySettingHasADefault)
   EXPECT_DOUBLE_EQ(bus.control_frequency, 500.0);
   EXPECT_DOUBLE_EQ(bus.readiness_timeout_s, 20.0);
   EXPECT_TRUE(bus.quick_stop_hold);
+  EXPECT_EQ(bus.sdo_read_attempts, 5);
+  EXPECT_DOUBLE_EQ(bus.sdo_retry_wait_s, 1.0);
 }
 
 TEST(BusConfig, ReadsEverySetting)
 {
-  const auto bus =
-      bus_from({ { "control_frequency", "500" }, { "readiness_timeout_s", "2.5" }, { "quick_stop_hold", "false" } });
-  EXPECT_DOUBLE_EQ(bus.control_frequency, 500.0);
+  const auto bus = bus_from({ { "control_frequency", "250" },
+                              { "readiness_timeout_s", "2.5" },
+                              { "quick_stop_hold", "false" },
+                              { "sdo_read_attempts", "3" },
+                              { "sdo_retry_wait_s", "0.2" } });
+  EXPECT_DOUBLE_EQ(bus.control_frequency, 250.0);
   EXPECT_DOUBLE_EQ(bus.readiness_timeout_s, 2.5);
   EXPECT_FALSE(bus.quick_stop_hold);
+  EXPECT_EQ(bus.sdo_read_attempts, 3);
+  EXPECT_DOUBLE_EQ(bus.sdo_retry_wait_s, 0.2);
 }
 
 class InvalidBus : public ::testing::TestWithParam<Parameters>
@@ -45,11 +52,12 @@ TEST_P(InvalidBus, IsRefused)
   EXPECT_THROW(bus_from(GetParam()), std::invalid_argument);
 }
 
-INSTANTIATE_TEST_SUITE_P(Cases, InvalidBus,
-                         ::testing::Values(Parameters{ { "control_frequency", "0" } },
-                                           Parameters{ { "control_frequency", "fast" } },
-                                           Parameters{ { "readiness_timeout_s", "-1" } },
-                                           Parameters{ { "readiness_timeout_s", "nan" } },
-                                           Parameters{ { "quick_stop_hold", "sometimes" } }));
+INSTANTIATE_TEST_SUITE_P(
+    Cases, InvalidBus,
+    ::testing::Values(Parameters{ { "control_frequency", "0" } }, Parameters{ { "control_frequency", "fast" } },
+                      Parameters{ { "readiness_timeout_s", "-1" } }, Parameters{ { "readiness_timeout_s", "nan" } },
+                      Parameters{ { "quick_stop_hold", "sometimes" } }, Parameters{ { "sdo_read_attempts", "0" } },
+                      Parameters{ { "sdo_read_attempts", "2.5" } }, Parameters{ { "sdo_read_attempts", "often" } },
+                      Parameters{ { "sdo_retry_wait_s", "0" } }));
 
 }  // namespace

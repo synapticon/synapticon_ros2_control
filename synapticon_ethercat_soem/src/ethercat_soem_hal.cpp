@@ -445,7 +445,7 @@ bool EthercatSoemHal::connect()
   {
     bus_->slaves[slave].PO2SOconfigx = &Bus::write_pdo_mapping;
   }
-  if (!check_drives(joints_))
+  if (!check_drives(joints_, { config_.sdo_read_attempts, config_.sdo_retry_wait_s }))
   {
     disconnect();
     return false;

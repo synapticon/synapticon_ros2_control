@@ -7,6 +7,7 @@
 /// @brief The SDO reads of an EtherCAT bring-up: unit factors, first streamed values, and the checks on the drives.
 
 #include <algorithm>
+#include <chrono>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
@@ -14,6 +15,7 @@
 #include <numbers>
 #include <optional>
 #include <string>
+#include <thread>
 #include <utility>
 #include <vector>
 
@@ -500,6 +502,27 @@ bool firmware_recent_enough(const SdoReader& sdo, const rclcpp::Logger& logger, 
 }
 
 }  // namespace
+
+{
+  const int attempts = given_up_ ? 1 : std::max(retry_.attempts, 1);
+  int error = 0;
+  for (int attempt = 1; attempt <= attempts; ++attempt)
+  {
+    abort_code = 0;
+    if (error == 0 || abort_code != 0)
+    {
+      return error;
+    }
+    if (attempt < attempts)
+    {
+      RCLCPP_WARN(logger_,
+                  "Try %d of %d in %.1f s.",
+      std::this_thread::sleep_for(std::chrono::duration<double>(retry_.wait_s));
+    }
+  }
+  given_up_ = true;
+  return error;
+}
 
 std::optional<uint32_t> read_u32(const SdoReader& sdo, const rclcpp::Logger& logger, uint16_t position,
                                  CoeAddress object)
