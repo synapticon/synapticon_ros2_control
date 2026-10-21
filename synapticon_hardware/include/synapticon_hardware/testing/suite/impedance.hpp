@@ -44,13 +44,10 @@ TEST_F(SingleDrive, ImpedanceQuickStopHoldsAndDisableVoltageCuts)
   EXPECT_EQ(drive_state(), DeviceState::QUICK_STOP_ACTIVE);
   EXPECT_NEAR(reading_.position, p0, 0.01);
   act(DriveAction::DISABLE_VOLTAGE);
-  EXPECT_GE(tick_until([this] { return drive_state() == DeviceState::SWITCH_ON_DISABLED; }, 0.1), 0.0);
+  EXPECT_GE(tick_until([this] { return drive_state() == DeviceState::SWITCH_ON_DISABLED; },
+                       0.1 + bench().disable_delay(0)),
+            0.0);
 }
-
-/// Stiffness and damping streamed for the impedance motion tests: stiff enough that the joint tracks
-/// a slow motion instead of sticking on friction.
-constexpr double TEST_STIFFNESS = 20.0;  // Nm/rad
-constexpr double TEST_DAMPING = 0.5;     // Nm s/rad
 
 /// Impedance mode: a quick stop from motion stops the joint and keeps it there while new targets keep coming.
 TEST_F(SingleDrive, ImpedanceQuickStopFromMotionStops)
@@ -60,8 +57,8 @@ TEST_F(SingleDrive, ImpedanceQuickStopFromMotionStops)
   {
     SKIP_OR_FAIL("impedance bring-up failed, most likely no torque sensor is configured");
   }
-  setpoint_.stiffness = TEST_STIFFNESS;
-  setpoint_.damping = TEST_DAMPING;
+  setpoint_.stiffness = test_gains(0).stiffness;
+  setpoint_.damping = test_gains(0).damping;
   energize();
   run_at(0.5, 0.8);
   const double p_request = reading_.position;
@@ -82,8 +79,8 @@ TEST_F(SingleDrive, ImpedanceWithoutTheHoldStopsAtTheLastForwardedTarget)
   {
     SKIP_OR_FAIL("impedance bring-up failed, most likely no torque sensor is configured");
   }
-  setpoint_.stiffness = TEST_STIFFNESS;
-  setpoint_.damping = TEST_DAMPING;
+  setpoint_.stiffness = test_gains(0).stiffness;
+  setpoint_.damping = test_gains(0).damping;
   energize();
   run_at(0.5, 0.8);
   const double last_forwarded = setpoint_.position;  // the request's own cycle is not forwarded
@@ -102,8 +99,8 @@ TEST_F(SingleDrive, ImpedanceRampedDisableFromMotionStops)
   {
     SKIP_OR_FAIL("impedance bring-up failed, most likely no torque sensor is configured");
   }
-  setpoint_.stiffness = TEST_STIFFNESS;
-  setpoint_.damping = TEST_DAMPING;
+  setpoint_.stiffness = test_gains(0).stiffness;
+  setpoint_.damping = test_gains(0).damping;
   energize();
   run_at(0.5, 0.8);
   const double p_request = reading_.position;
@@ -127,8 +124,8 @@ TEST_F(SingleDrive, ImpedanceQuickStopWithOptionCodeTwoStopsThenDeEnergises)
   {
     SKIP_OR_FAIL("impedance bring-up failed, most likely no torque sensor is configured");
   }
-  setpoint_.stiffness = TEST_STIFFNESS;
-  setpoint_.damping = TEST_DAMPING;
+  setpoint_.stiffness = test_gains(0).stiffness;
+  setpoint_.damping = test_gains(0).damping;
   energize();
   run_at(0.5, 0.8);
   const double p_request = reading_.position;

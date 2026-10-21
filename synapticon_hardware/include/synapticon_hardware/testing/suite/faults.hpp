@@ -259,7 +259,9 @@ TEST_F(SingleDrive, TheLifecycleEnableResumesForwarding)
   energize();
   act(DriveAction::DISABLE_VOLTAGE);
   EXPECT_FALSE(drive_->forwarding_setpoints(0));
-  ASSERT_GE(tick_until([this] { return drive_state() == DeviceState::SWITCH_ON_DISABLED; }, 0.1), 0.0);
+  ASSERT_GE(tick_until([this] { return drive_state() == DeviceState::SWITCH_ON_DISABLED; },
+                       0.1 + bench().disable_delay(0)),
+            0.0);
   hold_here();
   ASSERT_TRUE(drive_->write({ setpoint_ }));
   ASSERT_TRUE(drive_->enable());

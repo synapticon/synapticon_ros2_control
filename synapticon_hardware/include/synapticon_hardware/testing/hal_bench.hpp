@@ -19,11 +19,13 @@
 #include <functional>
 #include <limits>
 #include <memory>
+#include <stdexcept>
 #include <string>
 #include <thread>
 #include <vector>
 
 #include <gtest/gtest.h>
+#include <yaml-cpp/yaml.h>
 
 #include "synapticon_hardware/cia402/state_machine.hpp"
 #include "synapticon_hardware/cia402/cia402_hal.hpp"
@@ -53,6 +55,79 @@ inline std::string env_or(const char* name, const std::string& fallback)
 {
   const char* value = std::getenv(name);
   return (value != nullptr && *value != '\0') ? value : fallback;
+}
+
+/// Stiffness and damping the impedance tests move a joint with: stiff enough that the joint tracks a slow motion
+/// instead of sticking on friction, soft enough that the drive stays quiet.
+struct TestGains
+{
+  double stiffness{ 15.0 };  ///< Nm/rad
+  double damping{ 0.5 };     ///< Nm s/rad
+};
+
+/// Overwrite `gains` with the `stiffness` and `damping` that `node` gives.
+inline void read_test_gains(const YAML::Node& node, TestGains& gains)
+{
+  if (node && node["stiffness"])
+  {
+    gains.stiffness = node["stiffness"].as<double>();
+  }
+  if (node && node["damping"])
+  {
+    gains.damping = node["damping"].as<double>();
+  }
+}
+
+/// @brief The test gains of joint `joint` (its index in the robot definition) from the `hil_tests` section of the
+/// robot definition `robot`: its entry under `joints`, else the section's own values.
+///
+/// The defaults suit a geared joint. A joint without a gear has far less inertia and needs much smaller values.
+/// @throws std::runtime_error when a value cannot be read, or `joints` names a joint the robot does not have.
+inline TestGains test_gains(const YAML::Node& robot, std::size_t joint)
+{
+  TestGains gains;
+  const YAML::Node section = robot["hil_tests"];
+  read_test_gains(section, gains);
+  if (!section || !section["joints"])
+  {
+    return gains;
+  }
+  const YAML::Node joints = robot["joints"];
+  for (const auto& entry : section["joints"])
+  {
+    const auto name = entry.first.as<std::string>();
+    const bool known = std::any_of(joints.begin(), joints.end(),
+                                   [&](const YAML::Node& j) { return j["name"].as<std::string>() == name; });
+    if (!known)
+    {
+      throw std::runtime_error("hil_tests names joint '" + name + "', which the robot does not have");
+    }
+  }
+  if (joint < joints.size())
+  {
+    read_test_gains(section["joints"][joints[joint]["name"].as<std::string>()], gains);
+  }
+  return gains;
+}
+
+/// @brief The test gains of joint `joint` of the robot definition that SYNAPTICON_HIL_ROBOT names, the defaults
+/// without one.
+/// @throws std::runtime_error when the file or a value cannot be read.
+inline TestGains test_gains(std::size_t joint)
+{
+  const char* path = std::getenv("SYNAPTICON_HIL_ROBOT");
+  if (path == nullptr || *path == '\0')
+  {
+    return {};
+  }
+  try
+  {
+    return test_gains(YAML::LoadFile(path), joint);
+  }
+  catch (const std::exception& e)
+  {
+    throw std::runtime_error(std::string("hil_tests of '") + path + "': " + e.what());
+  }
 }
 
 /// Strict mode (SYNAPTICON_HIL_STRICT=1): a test that cannot run on this bench fails instead of skipping.
@@ -115,6 +190,17 @@ public:
   }
   /// Whether the two drive tests can run.
   virtual bool two_drives() const = 0;
+  /// How long drive `drive` (0 is joint_1) keeps control after it was told to cut the voltage, for example while its
+  /// brake engages [s].
+  virtual double disable_delay(std::size_t /*drive*/) const
+  {
+    return 0.0;
+  }
+  /// The smallest velocity step drive `drive` takes [rad/s], 0 when it takes any value.
+  virtual double velocity_step(std::size_t /*drive*/) const
+  {
+    return 0.0;
+  }
 };
 
 /// The bench of this test executable, set in main() before RUN_ALL_TESTS().
@@ -466,6 +552,15 @@ class DrivePair : public ::testing::Test
 {
 protected:
   static constexpr std::size_t JOINTS = 2;
+
+  static void SetUpTestSuite()
+  {
+    if (bench().two_drives())
+    {
+      ASSERT_TRUE(bench().prepare())
+          << "the bench could not be prepared: are both drives connected and the master free?";
+    }
+  }
 
   void SetUp() override
   {

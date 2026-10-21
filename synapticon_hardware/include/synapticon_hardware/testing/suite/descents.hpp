@@ -78,7 +78,7 @@ TEST_F(SingleDrive, TheLifecycleDisableKeepsADisableVoltageInProgress)
   sample();
   EXPECT_EQ(drive_state(), DeviceState::SWITCH_ON_DISABLED);
   // A ramp from 0.5 rad/s at 2 rad/s^2 would take 0.25 s, plus the time to count as stopped.
-  EXPECT_LT(took, 0.1) << "disable() ramped instead of keeping the disable_voltage";
+  EXPECT_LT(took, 0.1 + bench().disable_delay(0)) << "disable() ramped instead of keeping the disable_voltage";
 }
 
 /// disable_voltage from motion goes straight to Switch On Disabled, without a ramp.
@@ -95,9 +95,9 @@ TEST_F(SingleDrive, DisableVoltageCutsAtOnce)
         passed_quick_stop |= drive_state() == DeviceState::QUICK_STOP_ACTIVE;
         return drive_state() == DeviceState::SWITCH_ON_DISABLED;
       },
-      0.1);
+      0.1 + bench().disable_delay(0));
   EXPECT_GE(t, 0.0);
-  EXPECT_LT(t, 0.02);
+  EXPECT_LT(t, 0.02 + bench().disable_delay(0));
   EXPECT_FALSE(passed_quick_stop) << "the direct route must not ramp";
 }
 
@@ -110,9 +110,10 @@ TEST_F(SingleDrive, DisableVoltageFromQuickStopActiveIsDirect)
   tick(cycles(0.2));
   ASSERT_EQ(drive_state(), DeviceState::QUICK_STOP_ACTIVE);
   act(DriveAction::DISABLE_VOLTAGE);
-  const double t = tick_until([this] { return drive_state() == DeviceState::SWITCH_ON_DISABLED; }, 0.1);
+  const double t =
+      tick_until([this] { return drive_state() == DeviceState::SWITCH_ON_DISABLED; }, 0.1 + bench().disable_delay(0));
   EXPECT_GE(t, 0.0);
-  EXPECT_LT(t, 0.02);
+  EXPECT_LT(t, 0.02 + bench().disable_delay(0));
 }
 
 // ---------------------------------------------------------------------------

@@ -112,8 +112,9 @@ TEST_F(SingleDrive, CsvTracksASmallMove)
     }
   }
   setpoint_.velocity = 0.0;
-  tick(500);
-  EXPECT_NEAR(sum / 300.0, v, 0.1) << "the drive did not follow the streamed velocity";
+  tick(cycles(0.5));
+  // A drive with a coarse velocity unit gets the target cut to a whole unit.
+  EXPECT_NEAR(sum / summed, v, 0.1 + bench().velocity_step(0)) << "the drive did not follow the streamed velocity";
   EXPECT_LT(joint_speed(), 0.05) << "the joint did not stop";
 }
 

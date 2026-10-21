@@ -9,24 +9,26 @@
 /// @brief The hardware-in-the-loop run of an EtherCAT HAL: the drive action suite on SOMANET drives, set up through
 /// slave_config SDO entries, plus the bring-up tests every EtherCAT HAL shares.
 ///
-/// An executable includes this header after it declared, in synapticon_hardware::testing, the HAL it tests and how
-/// to set it up on the bench's bus:
+/// An executable includes this header after it declared, in synapticon_hardware::testing, the HAL it tests:
 ///
 ///   using EthercatHalUnderTest = <a HAL derived from ethercat::EthercatPdoHal>;
-///   bool set_up_hal(EthercatHalUnderTest& hal, const ethercat::BusConfig& bus,
-///                   const std::vector<ethercat::JointConfig>& joints);
 ///
-/// and its main() returns run_ethercat_hil_tests(argc, argv). Each test's drive settings become SDO entries of a
+/// It defines set_up_hal(), declared here, which sets the HAL up on the bench's bus, and its main() returns
+/// run_ethercat_hil_tests(argc, argv). Each test's drive settings become SDO entries of a
 /// slave_config derived from a base config. The suite writes the quick stop objects and the following error objects
 /// (the vendor defaults, except in the fault tests), and restores the quick stop deceleration it found at the end.
 /// The bring-up tests set MaxJointTorque and the torque sensor type for one bring-up each and write back what they
 /// found. Drives keep SDO values until a power cycle.
 ///
 /// Environment (all optional):
-///   SYNAPTICON_HIL_SLAVE_CONFIG  base slave_config (default: the installed example config)
-///   SYNAPTICON_HIL_ALIAS         slave alias (default 0)
-///   SYNAPTICON_HIL_POSITION      slave ring position (default 0)
-///   SYNAPTICON_HIL_POSITION_2    second drive's ring position, for --two-drives (default: +1)
+///   SYNAPTICON_HIL_ROBOT         robot definition YAML of the bench: its first joint is the bench drive, its second
+///                                the second drive, with their ring position, slave_config and command defaults.
+///                                Its bus section sets the bus, except the control frequency of the suite
+///   SYNAPTICON_HIL_SLAVE_CONFIG  base slave_config of a drive that names none (default: the installed example config)
+///   SYNAPTICON_HIL_ALIAS         slave alias, overrides the robot definition (default 0)
+///   SYNAPTICON_HIL_POSITION      ring position, overrides the robot definition (default 0)
+///   SYNAPTICON_HIL_POSITION_2    second drive's ring position, for --two-drives (default: the robot definition's
+///                                second joint, or SYNAPTICON_HIL_POSITION + 1)
 ///   SYNAPTICON_HIL_STRICT        1: a failed impedance bring-up fails its test instead of
 ///                                skipping it (default: skip, for a bench without a torque sensor)
 ///
@@ -43,11 +45,13 @@
 #include <memory>
 #include <optional>
 #include <sstream>
+#include <stdexcept>
 #include <string>
 #include <thread>
 #include <vector>
 
 #include <gtest/gtest.h>
+#include <yaml-cpp/yaml.h>
 
 #include <ament_index_cpp/get_package_share_directory.hpp>
 #include <rclcpp/rclcpp.hpp>
@@ -57,6 +61,8 @@
 #include "synapticon_hardware/ethercat/ethercat_pdo_hal.hpp"
 #include "synapticon_hardware/ethercat/joint_config.hpp"
 #include "synapticon_hardware/ethercat/pdo_channels.hpp"
+#include "synapticon_hardware/ethercat/robot_config.hpp"
+#include "synapticon_hardware/hal_config.hpp"
 #include "synapticon_hardware/testing/cia402_hal_tests.hpp"
 
 namespace synapticon_hardware::testing
@@ -76,6 +82,18 @@ public:
   double streamed(std::size_t slot) const
   {
     return this->outputs_[0][slot];
+  }
+
+  /// The angle of one position increment (0x6064) of joint `joint` [rad].
+  double position_step(std::size_t joint) const
+  {
+    return std::abs(ec::si_factor(this->si_factors_[joint], ec::Unit::ANGLE));
+  }
+
+  /// The velocity of one raw velocity unit (0x60FF) of joint `joint` [rad/s].
+  double velocity_step(std::size_t joint) const
+  {
+    return std::abs(ec::si_factor(this->si_factors_[joint], ec::Unit::ANGULAR_VELOCITY));
   }
 
   /// The joint's position after a few cycles that write only what start() left in the outputs.
@@ -111,7 +129,7 @@ inline std::string base_config_path()
 /// Returns its path.
 inline std::string write_config(const std::vector<Sdo>& overrides, const std::string& name)
 {
-  std::ifstream in(base_config_path());
+  std::ifstream in(base);
   std::stringstream out;
   std::string line;
   while (std::getline(in, line))
@@ -180,8 +198,9 @@ public:
 
   std::shared_ptr<Cia402Hal> open_drives(const std::vector<DriveSettings>& drives) override
   {
+    finished_ = false;  // this bring-up may change what finish() restores
     std::vector<std::vector<Sdo>> sdo;
-    for (const auto& drive : drives)
+    for (std::size_t j = 0; j < drives.size(); ++j)
     {
       sdo.push_back(overrides(drive));
     }
@@ -197,7 +216,7 @@ public:
   /// Learn the drive's 0x6085 unit and its present value from two read-backs.
   bool prepare() override
   {
-    if (std::isfinite(rad_per_raw_))
+    if (!learned_.empty())
     {
       return true;
     }
@@ -215,16 +234,14 @@ public:
     {
       return false;
     }
-    rad_per_raw_ = hal->quick_stop_deceleration(0) / 100000.0;
     release(hal);
-    original_raw_ = static_cast<uint32_t>(std::lround(found / rad_per_raw_));
-    return std::isfinite(rad_per_raw_) && rad_per_raw_ > 0.0;
+    return delay;
   }
 
-  /// Restore the quick stop deceleration found and the vendor following error defaults.
+  /// Restore each drive's quick stop deceleration found and the vendor following error defaults.
   void finish() override
   {
-    if (!std::isfinite(rad_per_raw_) || finished_)
+    if (learned_.empty() || finished_)
     {
       return;
     }
@@ -242,7 +259,23 @@ public:
     return two_drives_;
   }
 
+  double disable_delay(std::size_t drive) const override
+  {
+    return drive < learned_.size() ? learned_[drive].disable_delay : 0.0;
+  }
+
+  double velocity_step(std::size_t drive) const override
+  {
+    return drive < learned_.size() ? learned_[drive].velocity_step : 0.0;
+  }
+
 private:
+  struct LearnedDrive
+  {
+    double velocity_step{ 0.0 };  ///< velocity of one raw velocity unit [rad/s]
+    double disable_delay{ 0.0 };  ///< the brake's controller disable delay [s], 0 without brake control
+  };
+
   static Sdo quick_stop_option_code(int code)
   {
     return { "0x605a", 0, "int16", std::to_string(code) };
@@ -264,6 +297,12 @@ private:
     }
     const auto following_error = following_error_objects(drive.following_error);
     sdo.insert(sdo.end(), following_error.begin(), following_error.end());
+    return sdo;
+  }
+
+  {
+    std::vector<std::vector<Sdo>> sdo;
+    }
     return sdo;
   }
 
@@ -296,19 +335,15 @@ private:
   std::shared_ptr<ProbedHal> connect_once(const std::vector<DriveSettings>& drives,
                                           const std::vector<std::vector<Sdo>>& sdo)
   {
-    BusConfig bus;
+    BusConfig bus = bench_bus_config();
     bus.quick_stop_hold = drives.front().quick_stop_hold;
-    const uint16_t first = env_u16("SYNAPTICON_HIL_POSITION", "0");
-    const uint16_t positions[] = { first, env_u16("SYNAPTICON_HIL_POSITION_2", std::to_string(first + 1)) };
-    std::vector<JointConfig> joints(drives.size());
+    std::vector<JointConfig> joints;
     for (std::size_t j = 0; j < drives.size(); ++j)
     {
-      joints[j].name = "joint_" + std::to_string(j + 1);
-      joints[j].alias = env_u16("SYNAPTICON_HIL_ALIAS", "0");
-      joints[j].position = positions[j];
-      joints[j].slave_config_file = write_config(sdo[j], test_name() + "_" + joints[j].name);
-      joints[j].mode_of_operation = drives[j].mode;
-      joints[j].energize = drives[j].energize;
+      JointConfig joint = bench_drive(j, drives[j].mode);
+      joint.energize = drives[j].energize;
+      joint.slave_config_file = write_config(sdo[j], test_name() + "_" + joint.name, joint.slave_config_file);
+      joints.push_back(joint);
     }
     auto hal = std::make_shared<ProbedHal>();
     if (!set_up_hal(*hal, bus, joints) || !hal->connect() || !hal->start())
@@ -328,8 +363,7 @@ private:
 
   bool two_drives_;
   bool finished_{ false };
-  double rad_per_raw_{ std::numeric_limits<double>::quiet_NaN() };  ///< quick stop deceleration per 0x6085 unit
-  uint32_t original_raw_{ 0 };                                      ///< 0x6085 as found, restored at the end
+  std::vector<LearnedDrive> learned_;  ///< one per drive, filled by prepare()
 };
 
 /// Bring-up reads back the quick stop deceleration (0x6085) it wrote.
@@ -348,30 +382,25 @@ TEST_F(SingleDrive, BringUpReadsBackTheQuickStopDeceleration)
 class EthercatBringUp : public ::testing::Test
 {
 protected:
-  /// The joint of the bench drive in `mode`, before a slave_config is chosen.
+  /// The joint of the bench drive in `mode`, on its base slave_config.
   static JointConfig bench_joint(int mode = ec::mode::CSP)
   {
-    JointConfig joint;
-    joint.name = "joint_1";
-    joint.alias = env_u16("SYNAPTICON_HIL_ALIAS", "0");
-    joint.position = env_u16("SYNAPTICON_HIL_POSITION", "0");
-    joint.mode_of_operation = mode;
-    return joint;
+    return bench_drive(0, mode);
   }
 
   static BusConfig bench_bus()
   {
-    return BusConfig{};
+    return bench_bus_config();
   }
 
-  /// Bring up `joint` with the base slave_config and `sdo`, started when `start` is set. Nothing when the bring-up
+  /// Bring up `joint` with its base slave_config and `sdo`, started when `start` is set. Nothing when the bring-up
   /// fails. 0x605A = 6 goes first, as in the suite, so a lost first SDO does not hide one a test asked for.
   static std::shared_ptr<ProbedHal> connected_hal(JointConfig joint, const std::vector<Sdo>& sdo = {},
                                                   bool start = false)
   {
     std::vector<Sdo> entries{ { "0x605a", 0, "int16", "6" } };
     entries.insert(entries.end(), sdo.begin(), sdo.end());
-    joint.slave_config_file = write_config(entries, test_name());
+    joint.slave_config_file = write_config(entries, test_name(), joint.slave_config_file);
     for (int attempt = 0; attempt < 3; ++attempt)
     {
       auto hal = std::make_shared<ProbedHal>();
@@ -534,6 +563,8 @@ TEST_F(EthercatBringUp, AnImpedanceJointWithoutCommandDefaultsIsRefused)
   {
     JointConfig impedance = bench_joint(ec::mode::IMPEDANCE);
     impedance.*clear = std::numeric_limits<double>::quiet_NaN();
+    impedance.slave_config_file =
+        write_config({ { "0x605a", 0, "int16", "6" } }, test_name(), impedance.slave_config_file);
     auto hal = std::make_shared<ProbedHal>();
     ASSERT_TRUE(set_up_hal(*hal, bench_bus(), { impedance }));
     EXPECT_FALSE(hal->connect());
@@ -552,8 +583,8 @@ TEST_F(EthercatBringUp, ImpedanceWithoutATorqueSensorIsRefused)
   }
 
   JointConfig impedance = bench_joint(ec::mode::IMPEDANCE);
-  impedance.slave_config_file =
-      write_config({ { "0x605a", 0, "int16", "6" }, { "0x2150", 1, "uint8", "0" } }, test_name());
+  impedance.slave_config_file = write_config({ { "0x605a", 0, "int16", "6" }, { "0x2150", 1, "uint8", "0" } },
+                                             test_name(), impedance.slave_config_file);
   bool refused = false;
   for (int attempt = 0; attempt < 3 && !refused; ++attempt)
   {
@@ -575,7 +606,6 @@ TEST_F(EthercatBringUp, AJointWithoutADriveFailsTheBringUp)
 {
   JointConfig missing = bench_joint();
   missing.position = 99;
-  missing.slave_config_file = base_config_path();
   auto hal = std::make_shared<ProbedHal>();
   ASSERT_TRUE(set_up_hal(*hal, bench_bus(), { missing }));
   EXPECT_FALSE(hal->connect());

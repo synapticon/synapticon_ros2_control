@@ -181,8 +181,8 @@ Write it down, and look into it when it comes back.
 | `SYNAPTICON_HIL_SLAVE_CONFIG` | the installed example slave_config | base slave_config |
 | `SYNAPTICON_HIL_NETWORK_INTERFACE` | unset | network interface of the drives, required |
 | `SYNAPTICON_HIL_ALIAS` | `0` | slave alias, only `0` is supported |
-| `SYNAPTICON_HIL_POSITION` | `0` | slave ring position |
-| `SYNAPTICON_HIL_POSITION_2` | `SYNAPTICON_HIL_POSITION` + 1 | ring position of the second drive, for `--two-drives` |
+| `SYNAPTICON_HIL_POSITION` | `0`, or the robot file's | ring position, overrides the robot file |
+| `SYNAPTICON_HIL_POSITION_2` | the robot file's second joint, or `SYNAPTICON_HIL_POSITION` + 1 | ring position of the second drive, for `--two-drives` |
 | `SYNAPTICON_HIL_STRICT` | unset | `1` turns a failed impedance bring-up into a failure instead of a skip |
 
 ### What the suite leaves on the drive
@@ -196,7 +196,7 @@ The suite writes these:
 Every bring-up writes the vendor defaults of the following error objects, unless the test sets them itself.
 So no test starts with the armed detection of an earlier fault test.
 
-At the end, the suite writes back the `0x6085` it found.
+At the end, the suite writes back the `0x6085` it found on each drive.
 `0x605A` keeps the value of the base config (6 for the example config).
 Two bring-up tests change a value for one bring-up and write the old value back right after:
 MaxJointTorque (`0x2054`) set to 0, and the torque sensor type (`0x2150:1`) set to None.
@@ -363,9 +363,13 @@ Problems show up at one of four moments. Find the moment first, then your sympto
 - **Following error.**
   Three tests measure and print figures: the drive's own reaction to a position step, a reported following error
   that the client answers with a quick stop, and one that is left alone.
+  The tests set the window as an angle (0.006 rad), converted into the drive's own position increments, so a jump
+  trips it on any drive.
 - **Disable.**
   `disable` and the lifecycle `disable()` cut the power only once the joint has stopped.
   `disable_voltage` cuts at once.
+  A drive that controls a brake (`0x2004:4` not 0) first engages it and keeps control for its controller disable
+  delay (`0x2004:5`, for example 100 ms). The tests allow that time.
   A monitored joint (`energize: false`) refuses every request that would give it power.
 - **Tracking.**
   A small streamed move in CSP.
@@ -434,7 +438,7 @@ These observations explain why some tests retry, wait or allow for things.
   still reporting Fault.
   The fault test allows for it.
 - **A following error window left armed faults any later step.**
-  With the window of a fault test (1000 increments, 1 ms) still armed, a 0.05 rad step 200 ms after a re-enable
+  With the window of a fault test (0.006 rad, 1 ms) still armed, a 0.05 rad step 200 ms after a re-enable
   faulted the drive 7 ms later.
   Holding still did not fault it.
   That is why every bring-up writes the vendor defaults back.

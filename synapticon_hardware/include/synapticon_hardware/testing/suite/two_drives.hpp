@@ -75,8 +75,10 @@ TEST_F(DrivePair, ADisableVoltageOfOneLeavesTheOtherInQuickStop)
             0.0)
       << "a quick stop for both did not reach both";
   act({ 1 }, DriveAction::DISABLE_VOLTAGE);
-  EXPECT_GE(tick_until([this] { return drive_state(1) == DeviceState::SWITCH_ON_DISABLED; }, 0.05), 0.0);
-  tick(500);
+  EXPECT_GE(tick_until([this] { return drive_state(1) == DeviceState::SWITCH_ON_DISABLED; },
+                       0.05 + bench().disable_delay(1)),
+            0.0);
+  tick(cycles(0.5));
   EXPECT_EQ(drive_state(0), DeviceState::QUICK_STOP_ACTIVE) << "the other drive was touched";
   EXPECT_EQ(drive_state(1), DeviceState::SWITCH_ON_DISABLED);
 }
