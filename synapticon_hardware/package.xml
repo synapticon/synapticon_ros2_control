@@ -22,7 +22,7 @@
   <depend>pluginlib</depend>
   <depend>rclcpp</depend>
   <depend>rclcpp_lifecycle</depend>
-  <depend>soem_source</depend>
+  <depend>transmission_interface</depend>
   <depend>yaml-cpp</depend>
 
   <test_depend>ament_cmake_gmock</test_depend>

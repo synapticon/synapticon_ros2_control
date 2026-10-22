@@ -1,181 +1,118 @@
+// SPDX-License-Identifier: MIT
 // Copyright (c) 2025 Elevate Robotics Inc
-// Copyright (c) 2025 Synapticon GmbH
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated
-// documentation files (the "Software"), to deal in the Software without restriction, including without limitation
-// the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to
-// permit persons to whom the Software is furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in all copies or substantial portions of the
-// Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE
-// WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS
-// OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
-// OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+// Copyright (c) 2025-2026 Synapticon GmbH
+// Copyright (c) 2026 b-robotized GmbH
 
 #pragma once
 
+/// @file
+/// @brief The ros2_control hardware interface for Synapticon SOMANET drives.
+
 #include <atomic>
-#include <deque>
 #include <memory>
-#include <mutex>
-#include <optional>
 #include <string>
-#include <thread>
 #include <vector>
 
-#include <hardware_interface/handle.hpp>
-#include <hardware_interface/hardware_info.hpp>
 #include <hardware_interface/system_interface.hpp>
+#include <hardware_interface/types/hardware_component_interface_params.hpp>
 #include <hardware_interface/types/hardware_interface_return_values.hpp>
-#include <rclcpp/logger.hpp>
-#include <rclcpp/macros.hpp>
-#include <rclcpp_lifecycle/node_interfaces/lifecycle_node_interface.hpp>
+#include <pluginlib/class_loader.hpp>
+#include <rclcpp/duration.hpp>
+#include <rclcpp/time.hpp>
 #include <rclcpp_lifecycle/state.hpp>
 
-#include "ethercat.h"
+#include "synapticon_hardware/drive_data.hpp"
+#include "synapticon_hardware/drive_joint_map.hpp"
+#include "synapticon_hardware/ethercat_health.hpp"
+#include "synapticon_hardware/hal_config.hpp"
+#include "synapticon_hardware/handle_access_report.hpp"
+#include "synapticon_hardware/interface_binding.hpp"
+#include "synapticon_hardware/synapticon_hal.hpp"
+#include "synapticon_hardware/transmission_set.hpp"
 
-namespace synapticon_ros2_control
+namespace synapticon_hardware
 {
 
-#pragma pack(1)
-// Somanet structs
-typedef struct
-{
-  uint16_t Statusword;
-  int8_t OpModeDisplay;
-  int32_t PositionValue;
-  int32_t VelocityValue;
-  int16_t TorqueValue;
-  uint16_t AnalogInput1;
-  uint16_t AnalogInput2;
-  uint16_t AnalogInput3;
-  uint16_t AnalogInput4;
-  uint32_t TuningStatus;
-  uint32_t DigitalInputs;
-  uint32_t UserMISO;
-  uint32_t Timestamp;
-  int32_t PositionDemandInternalValue;
-  int32_t VelocityDemandValue;
-  int16_t TorqueDemand;
-} InSomanet50t;
-
-typedef struct
-{
-  uint16_t Controlword;
-  int8_t OpMode;
-  int16_t TargetTorque;
-  int32_t TargetPosition;
-  int32_t TargetVelocity;
-  int16_t TorqueOffset;
-  int32_t TuningCommand;
-  int32_t PhysicalOutputs;
-  int32_t BitMask;
-  int32_t UserMOSI;
-  int32_t VelocityOffset;
-} OutSomanet50t;
-#pragma pack()
-
+/// @brief The ros2_control hardware for Synapticon drives, the same for every mode and any number of joints.
+///
+/// It exports whatever interfaces the URDF declares and connects them to the drives through a HAL plugin, which
+/// the `<hardware>` parameter `hal` names. Whether a joint runs in CSP or impedance mode is configuration only:
+/// the declared interfaces and the drive's mode of operation.
+///
+/// The HAL reads all other parameters itself, from the URDF and the robot definition it names.
+/// URDF transmissions are loaded through pluginlib and sit between the joints and the drives.
 class SynapticonSystemInterface : public hardware_interface::SystemInterface
 {
 public:
-  RCLCPP_SHARED_PTR_DEFINITIONS(SynapticonSystemInterface)
-
-  ~SynapticonSystemInterface();
-
   hardware_interface::CallbackReturn
   on_init(const hardware_interface::HardwareComponentInterfaceParams& params) override;
-
-  hardware_interface::return_type prepare_command_mode_switch(const std::vector<std::string>& start_interfaces,
-                                                              const std::vector<std::string>& stop_interfaces) override;
-
+  hardware_interface::CallbackReturn on_configure(const rclcpp_lifecycle::State& previous_state) override;
   hardware_interface::CallbackReturn on_activate(const rclcpp_lifecycle::State& previous_state) override;
-
   hardware_interface::CallbackReturn on_deactivate(const rclcpp_lifecycle::State& previous_state) override;
+  hardware_interface::CallbackReturn on_cleanup(const rclcpp_lifecycle::State& previous_state) override;
+  /// Lets go of the HAL like on_cleanup(). A failed deactivation also lands here.
+  hardware_interface::CallbackReturn on_error(const rclcpp_lifecycle::State& previous_state) override;
 
   hardware_interface::return_type read(const rclcpp::Time& time, const rclcpp::Duration& period) override;
-
   hardware_interface::return_type write(const rclcpp::Time& time, const rclcpp::Duration& period) override;
 
-  std::vector<hardware_interface::StateInterface> export_state_interfaces() override;
-
-  std::vector<hardware_interface::CommandInterface> export_command_interfaces() override;
-
-  /**
-   * \return logger of the SystemInterface.
-   */
-  rclcpp::Logger get_logger() const
+  /// How often an interface access was refused since the last activation. Normally zero.
+  const HandleAccessFailures& handle_access_failures() const
   {
-    return *logger_;
+    return access_report_.failures();
   }
 
-  /**
-   * @brief Error checking. Typically runs in a separate thread.
-   */
-  OSAL_THREAD_FUNC ecatCheck(void* ptr);
+  /// The declared interfaces this hardware does not know. They are exported, but nothing reads or writes them.
+  const std::vector<std::string>& unknown_interfaces() const
+  {
+    return binding_.unknown_interfaces();
+  }
+
+protected:
+  /// Load the HAL plugin. Returns nullptr after logging when it is not installed. Tests override it.
+  virtual std::shared_ptr<SynapticonHalI> make_hal();
 
 private:
-  /**
-   * @brief Somanet control loop runs in a dedicated thread
-   * This steps through several states to get to Operational, if needed
-   * @param in_normal_op_mode_ A flag to the main thread that the Somanet state
-   * machine is ready
-   */
-  void somanetCyclicLoop(std::atomic<bool>& in_normal_op_mode_);
+  /// Give up on the HAL after a failed configure step, and log why.
+  hardware_interface::CallbackReturn drop_hal(const char* reason);
 
-  std::optional<std::thread> somanet_control_thread_;
+  /// Copy the drive states to their joints, then let the transmissions fill in the joints without a drive.
+  void states_from_drives();
 
-  size_t num_joints_;
+  /// Build the drive commands from the joint commands, through the transmissions.
+  void commands_to_drives();
 
-  // Objects for logging
-  std::shared_ptr<rclcpp::Logger> logger_;
+  /// Copy the HAL's link health to the health interfaces. Joints without a drive keep "healthy".
+  void refresh_link_health();
 
-  std::vector<double> mechanical_reductions_;
+  std::string hal_plugin_{ "ethercat_soem" };
+  HalConfig hal_config_{};
 
-  // Store the commands for the simulated robot
-  std::vector<double> hw_commands_positions_;
-  std::vector<double> hw_commands_velocities_;
-  std::vector<double> hw_commands_efforts_;
-  // hw_commands_quick_stop_ is never actually used, just a placeholder for compilation
-  std::vector<double> hw_commands_quick_stop_;
-  std::vector<double> hw_states_positions_;
-  std::vector<double> hw_states_velocities_;
-  std::vector<double> hw_states_accelerations_;
-  std::vector<double> hw_states_efforts_;
-  // Threadsafe deques to share commands with somanet control loop thread
-  std::deque<std::atomic<double>> threadsafe_commands_efforts_;
-  std::deque<std::atomic<double>> threadsafe_commands_velocities_;
-  std::deque<std::atomic<double>> threadsafe_commands_positions_;
+  // The loader must outlive the HAL it created, so it comes first.
+  std::unique_ptr<pluginlib::ClassLoader<SynapticonHalI>> hal_loader_;
+  std::shared_ptr<SynapticonHalI> hal_;
 
-  // Enum defining current control level
-  enum control_level_t : std::uint8_t
-  {
-    UNDEFINED = 0,
-    EFFORT = 1,  // aka torque
-    VELOCITY = 2,
-    POSITION = 3,
-    QUICK_STOP = 4,
-  };
+  // Whether read() and write() talk to the HAL. The controller manager can still call them while another thread
+  // deactivates the hardware. They then return OK without doing anything, since an error would look like a fault.
+  std::atomic<bool> exchanging_{ false };
 
-  // Active control mode for each actuator
-  std::vector<control_level_t> control_level_;
+  // One entry per URDF joint. The exported handles point into these vectors, so they keep their size.
+  // clean_commands_ is what goes out: the controllers' commands with gaps filled in.
+  std::vector<DriveState> joint_states_;
+  std::vector<DriveCommand> joint_commands_;
+  std::vector<DriveCommand> clean_commands_;
+  std::vector<EthercatSlaveHealth> joint_link_health_;
+  EthercatBusHealth bus_link_health_;
+  LinkHealth hal_link_health_;
 
-  // For SOEM
-  OSAL_THREAD_HANDLE ecat_error_thread_;
-  char io_map_[4096];
+  // One entry per drive, in the order the HAL knows them.
+  DriveJointMap drives_;
+  std::vector<DriveState> drive_states_;
+  std::vector<DriveCommand> drive_commands_;
 
-  std::vector<InSomanet50t*> in_somanet_1_;
-  std::mutex in_somanet_mtx_;
-  std::vector<OutSomanet50t*> out_somanet_1_;
-
-  std::vector<uint32_t> encoder_resolutions_;
-
-  // For coordination between threads
-  volatile std::atomic<int> wkc_;
-  std::atomic<int> expected_wkc_;
-  std::atomic<bool> needlf_ = false;
-  std::atomic<bool> in_normal_op_mode_ = false;
+  InterfaceBinding binding_;
+  HandleAccessReport access_report_;
+  TransmissionSet transmissions_;
 };
 
-}  // namespace synapticon_ros2_control
+}  // namespace synapticon_hardware

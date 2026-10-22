@@ -1,9 +1,11 @@
 <library path="synapticon_hardware">
   <class name="synapticon_ros2_control/SynapticonSystemInterface"
-         type="synapticon_ros2_control::SynapticonSystemInterface"
+         type="synapticon_hardware::SynapticonSystemInterface"
          base_class_type="hardware_interface::SystemInterface">
     <description>
-      A ros2_control interface for Synapticon motor drivers.
+      The ros2_control hardware for Synapticon SOMANET drives, the same for every mode and any number of joints.
+      It exports what the URDF declares and connects it to the drives through the HAL that the hardware parameter
+      hal names: ethercat_soem for drives on EtherCAT, mock or mock_cia402 without hardware.
     </description>
   </class>
 </library>
