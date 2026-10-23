@@ -1,0 +1,190 @@
+<mxfile host="localhost">
+  <diagram name="Page-1" id="_IehofA8M0qzr9hl2xNY"><mxGraphModel dx="1571" dy="954" grid="0" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1300" pageHeight="1160" math="0" shadow="0">
+  <root>
+    <mxCell id="0" />
+    <mxCell id="1" parent="0" />
+    <mxCell id="subtitle" parent="1" style="text;html=1;align=left;verticalAlign=middle;fontSize=14;fontStyle=2;fontColor=#666666;" value="Drive fault reaction (this package) and robot fault handling (consumer). The policy decides, the hardware layer executes, only the consumer decides where the robot goes." vertex="1">
+      <mxGeometry height="24" width="1140" x="60" y="60" as="geometry" />
+    </mxCell>
+    <mxCell id="controller" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#EAF0F8;strokeColor=#7A93AD;verticalAlign=top;spacingTop=8;fontSize=13;fontColor=#333333;" value="&lt;b&gt;DriveController&lt;/b&gt;&amp;nbsp;&amp;nbsp;the drive fault reaction" vertex="1">
+      <mxGeometry height="290" width="420" x="60" y="110" as="geometry" />
+    </mxCell>
+    <mxCell id="policy" parent="1" style="rounded=0;whiteSpace=wrap;html=1;dashed=1;dashPattern=6 4;fillColor=#FFE6CC;strokeColor=#D79B00;strokeWidth=2;fontSize=12;fontColor=#333333;verticalAlign=top;spacingTop=10;" value="&lt;b&gt;Drive fault policy&lt;/b&gt;&lt;br&gt;reads drive conditions, emits actions&lt;br&gt;never touches hardware, never sends a setpoint" vertex="1">
+      <mxGeometry height="140" width="350" x="95" y="200" as="geometry" />
+    </mxCell>
+    <mxCell id="badge" parent="1" style="rounded=1;arcSize=40;whiteSpace=wrap;html=1;fillColor=#D79B00;strokeColor=none;fontColor=#FFFFFF;fontSize=11;fontStyle=1;" value="pluggable" vertex="1">
+      <mxGeometry height="24" width="93" x="352" y="172" as="geometry" />
+    </mxCell>
+    <mxCell id="rulelabel" parent="1" style="text;html=1;align=left;verticalAlign=middle;fontSize=10;fontStyle=2;fontColor=#8A6A2F;" value="example rule" vertex="1">
+      <mxGeometry height="14" width="200" x="112" y="266" as="geometry" />
+    </mxCell>
+    <mxCell id="rulebox" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#D79B00;fontFamily=Courier New;fontSize=11;fontColor=#333333;" value="if any joint is not healthy&lt;br&gt;-&amp;gt; quick_stop on all joints" vertex="1">
+      <mxGeometry height="46" width="320" x="110" y="282" as="geometry" />
+    </mxCell>
+    <mxCell id="motion" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#EAF0F8;strokeColor=#7A93AD;fontSize=12;fontColor=#333333;" value="&lt;b&gt;Motion controller&lt;/b&gt;&lt;br&gt;MotorCommandController, a trajectory&lt;br&gt;controller, or any other&lt;br&gt;&lt;i&gt;forwards the consumer's setpoints,&lt;br&gt;knows nothing about faults&lt;/i&gt;" vertex="1">
+      <mxGeometry height="120" width="220" x="510" y="250" as="geometry" />
+    </mxCell>
+    <mxCell id="hw" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#E8E8E8;strokeColor=#666666;fontSize=12;fontColor=#333333;" value="&lt;b&gt;Hardware layer&lt;/b&gt;&amp;nbsp;&amp;nbsp;SynapticonSystemInterface + HAL&lt;br&gt;&lt;i&gt;executes the actions, forwards the setpoints, ignores them for drives under reaction&lt;/i&gt;" vertex="1">
+      <mxGeometry height="80" width="700" x="60" y="460" as="geometry" />
+    </mxCell>
+    <mxCell id="drives" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#D5D5D5;strokeColor=#666666;fontSize=12;fontColor=#333333;" value="EtherCAT motor drives&amp;nbsp;&amp;nbsp;(one per joint)" vertex="1">
+      <mxGeometry height="55" width="700" x="60" y="590" as="geometry" />
+    </mxCell>
+    <mxCell id="consumer" parent="1" style="rounded=0;whiteSpace=wrap;html=1;dashed=1;dashPattern=6 4;fillColor=#FFFFFF;strokeColor=#999999;verticalAlign=top;spacingTop=8;fontSize=12;fontColor=#333333;" value="&lt;b&gt;Consumer&lt;/b&gt;&lt;br&gt;&lt;i&gt;the only one that decides where the robot goes&lt;/i&gt;" vertex="1">
+      <mxGeometry height="280" width="380" x="820" y="110" as="geometry" />
+    </mxCell>
+    <mxCell id="e_cond" edge="1" parent="1" source="hw" style="endArrow=block;html=1;rounded=0;exitX=0.12;exitY=0;exitDx=0;exitDy=0;entryX=0.2;entryY=1;entryDx=0;entryDy=0;strokeColor=#0B7A75;strokeWidth=2;fontSize=11;fontColor=#0B7A75;labelBackgroundColor=#FFFFFF;verticalAlign=bottom;" target="controller" value="drive state, per joint">
+      <mxGeometry relative="1" as="geometry">
+        <mxPoint y="-4" as="offset" />
+      </mxGeometry>
+    </mxCell>
+    <mxCell id="e_act" edge="1" parent="1" source="controller" style="endArrow=block;html=1;rounded=0;exitX=0.8;exitY=1;exitDx=0;exitDy=0;entryX=0.48;entryY=0;entryDx=0;entryDy=0;strokeColor=#D79B00;strokeWidth=2;fontSize=11;fontColor=#B07000;labelBackgroundColor=#FFFFFF;verticalAlign=bottom;" target="hw" value="actions, per joint">
+      <mxGeometry relative="1" as="geometry">
+        <mxPoint y="-4" as="offset" />
+      </mxGeometry>
+    </mxCell>
+    <mxCell id="e_set" edge="1" parent="1" source="motion" style="endArrow=block;html=1;rounded=0;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.8;entryY=0;entryDx=0;entryDy=0;strokeColor=#1F6FB2;strokeWidth=2;fontSize=11;fontColor=#1F6FB2;labelBackgroundColor=#FFFFFF;verticalAlign=bottom;" target="hw" value="setpoints, per joint">
+      <mxGeometry relative="1" as="geometry">
+        <mxPoint y="-4" as="offset" />
+      </mxGeometry>
+    </mxCell>
+    <mxCell id="e_drv" edge="1" parent="1" source="hw" style="endArrow=block;html=1;rounded=0;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;strokeColor=#666666;strokeWidth=2;" target="drives" value="">
+      <mxGeometry relative="1" as="geometry" />
+    </mxCell>
+    <mxCell id="e_cmd" edge="1" parent="1" source="normal" style="endArrow=block;html=1;rounded=0;exitX=0;exitY=0.5;exitDx=0;exitDy=0;entryX=1;entryY=0.625;entryDx=0;entryDy=0;strokeColor=#1F6FB2;strokeWidth=2;fontSize=11;fontColor=#1F6FB2;labelBackgroundColor=#FFFFFF;verticalAlign=bottom;" target="motion" value="commands">
+      <mxGeometry relative="1" as="geometry">
+        <mxPoint y="-4" as="offset" />
+      </mxGeometry>
+    </mxCell>
+    <mxCell id="e_evt" edge="1" parent="1" source="rfh" style="endArrow=block;html=1;rounded=0;exitX=0;exitY=0.7;exitDx=0;exitDy=0;entryX=1;entryY=0.12;entryDx=0;entryDy=0;strokeColor=#9673A6;strokeWidth=2;fontSize=11;fontColor=#7A5C96;labelBackgroundColor=#FFFFFF;verticalAlign=bottom;" target="policy" value="requests: clear the reaction, reset, enable (services)&lt;br&gt;named events for the policy, &lt;i&gt;never actions on a drive directly&lt;/i&gt;">
+      <mxGeometry relative="1" as="geometry">
+        <mxPoint x="20" y="-6" as="offset" />
+      </mxGeometry>
+    </mxCell>
+    <mxCell id="e_rep" edge="1" parent="1" source="controller" style="endArrow=block;html=1;rounded=0;exitX=1;exitY=0.265;exitDx=0;exitDy=0;entryX=0;entryY=0.2;entryDx=0;entryDy=0;strokeColor=#2E8B57;strokeWidth=2;fontSize=11;fontColor=#2E8B57;labelBackgroundColor=#FFFFFF;verticalAlign=bottom;" target="rfh" value="reporting line: drive state per joint, reaction events (topics)">
+      <mxGeometry relative="1" as="geometry">
+        <mxPoint y="-4" as="offset" />
+      </mxGeometry>
+    </mxCell>
+    <mxCell id="inset" parent="1" style="rounded=0;whiteSpace=wrap;html=1;dashed=1;dashPattern=2 4;fillColor=none;strokeColor=#AAAAAA;verticalAlign=top;spacingTop=6;fontSize=13;fontStyle=1;fontColor=#888888;" value="Write your own drive fault policy" vertex="1">
+      <mxGeometry height="250" width="400" x="800" y="440" as="geometry" />
+    </mxCell>
+    <mxCell id="base" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFE6CC;strokeColor=#D79B00;fontSize=12;fontColor=#333333;" value="&lt;i&gt;FaultPolicyI&lt;/i&gt;&lt;br&gt;abstract interface" vertex="1">
+      <mxGeometry height="48" width="200" x="900" y="480" as="geometry" />
+    </mxCell>
+    <mxCell id="dflt" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFE6CC;strokeColor=#D79B00;fontSize=11;fontColor=#333333;" value="QuickStopPolicy&lt;br&gt;&lt;i&gt;built in, the default&lt;/i&gt;" vertex="1">
+      <mxGeometry height="62" width="175" x="817" y="602" as="geometry" />
+    </mxCell>
+    <mxCell id="cust" parent="1" style="rounded=0;whiteSpace=wrap;html=1;dashed=1;dashPattern=6 4;fillColor=#FFE6CC;strokeColor=#D79B00;fontSize=11;fontColor=#333333;" value="YourFaultPolicy&lt;br&gt;&lt;i&gt;your implementation,&lt;br&gt;may know the robot&lt;/i&gt;" vertex="1">
+      <mxGeometry height="62" width="175" x="1008" y="602" as="geometry" />
+    </mxCell>
+    <mxCell id="g1" edge="1" parent="1" source="dflt" style="endArrow=block;endFill=0;endSize=10;html=1;rounded=0;edgeStyle=orthogonalEdgeStyle;exitX=0.5;exitY=0;exitDx=0;exitDy=0;entryX=0.25;entryY=1;entryDx=0;entryDy=0;strokeColor=#666666;" target="base" value="">
+      <mxGeometry relative="1" as="geometry" />
+    </mxCell>
+    <mxCell id="g2" edge="1" parent="1" source="cust" style="endArrow=block;endFill=0;endSize=10;html=1;rounded=0;edgeStyle=orthogonalEdgeStyle;exitX=0.5;exitY=0;exitDx=0;exitDy=0;entryX=0.75;entryY=1;entryDx=0;entryDy=0;strokeColor=#666666;" target="base" value="">
+      <mxGeometry relative="1" as="geometry" />
+    </mxCell>
+    <mxCell id="note" parent="1" style="text;html=1;align=left;verticalAlign=top;fontSize=11;fontStyle=2;fontColor=#777777;" value="The controller constructs the built-in policy.&lt;br&gt;Another policy implements FaultPolicyI and replaces it there." vertex="1">
+      <mxGeometry height="36" width="400" x="800" y="704" as="geometry" />
+    </mxCell>
+    <mxCell id="band" parent="1" style="rounded=0;whiteSpace=wrap;html=1;dashed=1;dashPattern=2 4;fillColor=none;strokeColor=#AAAAAA;" value="" vertex="1">
+      <mxGeometry height="360" width="1140" x="60" y="766" as="geometry" />
+    </mxCell>
+    <mxCell id="bandtitle" parent="1" style="text;html=1;align=left;verticalAlign=middle;fontSize=13;fontStyle=1;fontColor=#888888;" value="What flows on the arrows" vertex="1">
+      <mxGeometry height="22" width="400" x="82" y="774" as="geometry" />
+    </mxCell>
+    <mxCell id="c_chip" parent="1" style="text;html=1;align=center;verticalAlign=middle;whiteSpace=wrap;fontSize=11;fontColor=#0B7A75;" value="&lt;b&gt;drive state, condition&lt;/b&gt;&lt;br&gt;&lt;i&gt;per joint, input&lt;/i&gt;" vertex="1">
+      <mxGeometry height="50" width="150" x="120" y="868" as="geometry" />
+    </mxCell>
+    <mxCell id="c_txt" parent="1" style="text;html=1;align=left;verticalAlign=middle;whiteSpace=wrap;fontSize=11;fontColor=#333333;" value="the raw drive state the controller reads (statusword, error code, link),&lt;br&gt;decoded into a condition: &lt;b&gt;healthy&lt;/b&gt;, &lt;b&gt;faulted&lt;/b&gt; or &lt;b&gt;unreachable&lt;/b&gt;.&lt;br&gt;An unreachable drive can only be observed, not commanded." vertex="1">
+      <mxGeometry height="50" width="345" x="283" y="868" as="geometry" />
+    </mxCell>
+    <mxCell id="v_chip" parent="1" style="text;html=1;align=center;verticalAlign=middle;whiteSpace=wrap;fontSize=11;fontColor=#7A5C96;" value="&lt;b&gt;request, event&lt;/b&gt;&lt;br&gt;&lt;i&gt;from the consumer&lt;/i&gt;" vertex="1">
+      <mxGeometry height="50" width="150" x="120" y="1048" as="geometry" />
+    </mxCell>
+    <mxCell id="v_txt" parent="1" style="text;html=1;align=left;verticalAlign=middle;whiteSpace=wrap;fontSize=11;fontColor=#333333;" value="a drive action request (reset, enable) or a named event (clear, estop).&lt;br&gt;Advisory input, not a command: the policy may refuse it,&lt;br&gt;e.g. no clearing while a joint is still faulted." vertex="1">
+      <mxGeometry height="50" width="345" x="283" y="1048" as="geometry" />
+    </mxCell>
+    <mxCell id="a_chip" parent="1" style="text;html=1;align=center;verticalAlign=middle;whiteSpace=wrap;fontSize=11;fontColor=#B07000;" value="&lt;b&gt;action&lt;/b&gt;&lt;br&gt;&lt;i&gt;per joint, output&lt;/i&gt;" vertex="1">
+      <mxGeometry height="50" width="150" x="120" y="808" as="geometry" />
+    </mxCell>
+    <mxCell id="a_txt" parent="1" style="text;html=1;align=left;verticalAlign=middle;whiteSpace=wrap;fontSize=11;fontColor=#333333;" value="&lt;b&gt;DriveAction&lt;/b&gt;, a small enum:&lt;br&gt;enable, quick_stop, disable, reset_fault, ...&lt;br&gt;It names a &lt;b&gt;target state&lt;/b&gt;, not a controlword." vertex="1">
+      <mxGeometry height="50" width="345" x="283" y="808" as="geometry" />
+    </mxCell>
+    <mxCell id="s_chip" parent="1" style="text;html=1;align=center;verticalAlign=middle;whiteSpace=wrap;fontSize=11;fontColor=#1F6FB2;" value="&lt;b&gt;setpoint&lt;/b&gt;&lt;br&gt;&lt;i&gt;per joint, from the consumer&lt;/i&gt;" vertex="1">
+      <mxGeometry height="50" width="150" x="120" y="928" as="geometry" />
+    </mxCell>
+    <mxCell id="s_txt" parent="1" style="text;html=1;align=left;verticalAlign=middle;whiteSpace=wrap;fontSize=11;fontColor=#333333;" value="position, velocity, effort or gains, carried by the motion controller.&lt;br&gt;Forwarded untouched, except to a drive under reaction:&lt;br&gt;that drive gets none until it is enabled again." vertex="1">
+      <mxGeometry height="50" width="345" x="283" y="928" as="geometry" />
+    </mxCell>
+    <mxCell id="r_chip" parent="1" style="text;html=1;align=center;verticalAlign=middle;whiteSpace=wrap;fontSize=11;fontColor=#2E8B57;" value="&lt;b&gt;report&lt;/b&gt;&lt;br&gt;&lt;i&gt;to the consumer&lt;/i&gt;" vertex="1">
+      <mxGeometry height="50" width="150" x="120" y="988" as="geometry" />
+    </mxCell>
+    <mxCell id="r_txt" parent="1" style="text;html=1;align=left;verticalAlign=middle;whiteSpace=wrap;fontSize=11;fontColor=#333333;" value="decoded drive state per joint and the reaction's events:&lt;br&gt;what latched, why, which joints were stopped.&lt;br&gt;This is what robot fault handling reacts to." vertex="1">
+      <mxGeometry height="50" width="345" x="283" y="988" as="geometry" />
+    </mxCell>
+    <mxCell id="divider" edge="1" parent="1" style="endArrow=none;html=1;strokeColor=#CCCCCC;" value="">
+      <mxGeometry relative="1" as="geometry">
+        <mxPoint x="640" y="808" as="sourcePoint" />
+        <mxPoint x="640" y="1100" as="targetPoint" />
+      </mxGeometry>
+    </mxCell>
+    <mxCell id="qs_title" parent="1" style="text;html=1;align=left;verticalAlign=middle;fontSize=12;fontStyle=1;fontColor=#B07000;" value="one action, several controlwords" vertex="1">
+      <mxGeometry height="20" width="340" x="668" y="808" as="geometry" />
+    </mxCell>
+    <mxCell id="qs_code" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#D79B00;align=left;spacingLeft=10;verticalAlign=middle;fontFamily=Courier New;fontSize=10;fontColor=#333333;" value="quick_stop&lt;br&gt;&amp;nbsp;&amp;nbsp;-&amp;gt; controlword 0x02&lt;br&gt;&amp;nbsp;&amp;nbsp;-&amp;gt; wait until the drive reports Quick Stop Active&lt;br&gt;&amp;nbsp;&amp;nbsp;-&amp;gt; done" vertex="1">
+      <mxGeometry height="76" width="340" x="668" y="834" as="geometry" />
+    </mxCell>
+    <mxCell id="qs_caption" parent="1" style="text;html=1;align=left;verticalAlign=middle;whiteSpace=wrap;fontSize=11;fontStyle=2;fontColor=#777777;" value="The hardware layer works out the path from wherever the drive&lt;br&gt;currently is: usually several cycles, not a single write." vertex="1">
+      <mxGeometry height="44" width="340" x="668" y="922" as="geometry" />
+    </mxCell>
+    <mxCell id="gl_c" edge="1" parent="1" style="endArrow=block;html=1;rounded=0;strokeColor=#0B7A75;strokeWidth=2;" value="">
+      <mxGeometry relative="1" as="geometry">
+        <mxPoint x="74" y="893" as="sourcePoint" />
+        <mxPoint x="114" y="893" as="targetPoint" />
+      </mxGeometry>
+    </mxCell>
+    <mxCell id="gl_v" edge="1" parent="1" style="endArrow=block;html=1;rounded=0;strokeColor=#9673A6;strokeWidth=2;" value="">
+      <mxGeometry relative="1" as="geometry">
+        <mxPoint x="74" y="1073" as="sourcePoint" />
+        <mxPoint x="114" y="1073" as="targetPoint" />
+      </mxGeometry>
+    </mxCell>
+    <mxCell id="gl_a" edge="1" parent="1" style="endArrow=block;html=1;rounded=0;strokeColor=#D79B00;strokeWidth=2;" value="">
+      <mxGeometry relative="1" as="geometry">
+        <mxPoint x="74" y="833" as="sourcePoint" />
+        <mxPoint x="114" y="833" as="targetPoint" />
+      </mxGeometry>
+    </mxCell>
+    <mxCell id="gl_s" edge="1" parent="1" style="endArrow=block;html=1;rounded=0;strokeColor=#1F6FB2;strokeWidth=2;" value="">
+      <mxGeometry relative="1" as="geometry">
+        <mxPoint x="74" y="953" as="sourcePoint" />
+        <mxPoint x="114" y="953" as="targetPoint" />
+      </mxGeometry>
+    </mxCell>
+    <mxCell id="gl_r" edge="1" parent="1" style="endArrow=block;html=1;rounded=0;strokeColor=#2E8B57;strokeWidth=2;" value="">
+      <mxGeometry relative="1" as="geometry">
+        <mxPoint x="74" y="1013" as="sourcePoint" />
+        <mxPoint x="114" y="1013" as="targetPoint" />
+      </mxGeometry>
+    </mxCell>
+    <mxCell id="bandnote" parent="1" style="text;html=1;align=left;verticalAlign=middle;fontSize=11;fontStyle=2;fontColor=#777777;" value="arrow colours mark what flows. A dashed border marks what the consumer provides, outside this package" vertex="1">
+      <mxGeometry height="22" width="700" x="300" y="774" as="geometry" />
+    </mxCell>
+    <mxCell id="rfh" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#999999;fontSize=11;fontColor=#333333;" value="&lt;b&gt;Robot fault handling&lt;/b&gt;&lt;br&gt;e.g. a supervisor or behaviour tree&lt;br&gt;reacts to a fault with motion on the healthy joints&lt;br&gt;(lower the arm, crouch), decides the recovery, ends the latch" vertex="1">
+      <mxGeometry height="95" width="350" x="835" y="160" as="geometry" />
+    </mxCell>
+    <mxCell id="normal" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#999999;fontSize=11;fontColor=#333333;" value="&lt;b&gt;Normal operation&lt;/b&gt;&lt;br&gt;e.g. a policy, a planner, an operator&lt;br&gt;decides where to go, sends the commands" vertex="1">
+      <mxGeometry height="80" width="350" x="835" y="285" as="geometry" />
+    </mxCell>
+    <mxCell id="e_dec" edge="1" parent="1" style="endArrow=block;html=1;rounded=0;entryX=0.14;entryY=1;entryDx=0;entryDy=0;strokeColor=#0B7A75;strokeWidth=2;" target="policy" value="">
+      <mxGeometry relative="1" as="geometry">
+        <mxPoint x="144" y="400" as="sourcePoint" />
+      </mxGeometry>
+    </mxCell>
+    <mxCell id="dec_lbl" parent="1" style="text;html=1;align=left;verticalAlign=middle;fontSize=10;fontColor=#0B7A75;" value="decoded into conditions, per joint&lt;br&gt;healthy, faulted, unreachable" vertex="1">
+      <mxGeometry height="30" width="220" x="156" y="355" as="geometry" />
+    </mxCell>
+  </root>
+</mxGraphModel></diagram>
+</mxfile>
