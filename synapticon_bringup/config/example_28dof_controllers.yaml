@@ -1,0 +1,43 @@
+# Controllers of the example robot '28dof', made by generate_example_robot.py.
+# The joint lists follow example_28dof.yaml. forward_position_controller takes one position in rad per
+# joint, motor_command_controller takes synapticon_control_msgs/MotorCommand.
+
+controller_manager:
+  ros__parameters:
+    update_rate: 500  # Hz, equal to control_frequency of the robot definition
+    lock_memory: true  # keep the process in RAM, so it never waits for the disk
+    thread_priority: 60  # real-time priority of the control loop
+    cpu_affinity: 1  # the CPU core that runs the control loop
+    hardware_components_initial_state:
+      shutdown_on_initial_state_failure: false  # keep running when the hardware fails to start
+    joint_state_broadcaster:
+      type: joint_state_broadcaster/JointStateBroadcaster
+    drive_controller:  # drive states, drive actions, fault reaction
+      type: synapticon_controllers/DriveController
+    ethercat_bus_monitor_controller:  # bus health on /diagnostics
+      type: synapticon_controllers/EthercatBusMonitorController
+    forward_position_controller:  # commands in CSP
+      type: forward_command_controller/ForwardCommandController
+    motor_command_controller:  # commands in impedance mode
+      type: synapticon_controllers/MotorCommandController
+
+drive_controller:
+  ros__parameters:
+    joints: [joint_1, joint_2, joint_3, joint_4, joint_5, joint_6, joint_7, joint_8, joint_9, joint_10, joint_11,
+              joint_12, joint_13, joint_14, joint_15, joint_16, joint_17, joint_18, joint_19, joint_20,
+              joint_21, joint_22, joint_23, joint_24, joint_25, joint_26, joint_27, joint_28]
+    # fault_reaction:  # quick stop all joints when one fails
+    #   enabled: true
+
+forward_position_controller:
+  ros__parameters:
+    joints: [joint_1, joint_2, joint_3, joint_4, joint_5, joint_6, joint_7, joint_8, joint_9, joint_10, joint_11,
+              joint_12, joint_13, joint_14, joint_15, joint_16, joint_17, joint_18, joint_19, joint_20,
+              joint_21, joint_22, joint_23, joint_24, joint_25, joint_26, joint_27, joint_28]
+    interface_name: position
+
+motor_command_controller:
+  ros__parameters:
+    joints: [joint_1, joint_2, joint_3, joint_4, joint_5, joint_6, joint_7, joint_8, joint_9, joint_10, joint_11,
+              joint_12, joint_13, joint_14, joint_15, joint_16, joint_17, joint_18, joint_19, joint_20,
+              joint_21, joint_22, joint_23, joint_24, joint_25, joint_26, joint_27, joint_28]

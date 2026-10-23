@@ -1,0 +1,47 @@
+# Example robot '28dof' with 28 joint(s), made by generate_example_robot.py.
+# Its controllers are in example_28dof_controllers.yaml.
+#
+# Each joint needs a name. The other keys are optional:
+#   position          ring position of its drive on the bus (default 0)
+#   alias             EtherCAT alias, only 0 works: drives are found by ring position
+#   slave_config      slave_config file of the drive (default: the launch argument slave_config)
+#   max_joint_torque  torque limit in Nm (default: the limit stored on the drive)
+#   energize: false   read and report the drive, but never power it
+#   invert: true      flip position, velocity and effort, for a drive mounted the other way round
+
+bus:
+  control_frequency: 1000  # Hz, equal to the update_rate of the controller manager
+  readiness_timeout_s: 25.0  # the time start() gives every drive to send valid data
+  # network_interface: eth0  # network interface of the drives, for ethercat_soem
+  # quick_stop_hold: false  # tests only: no frozen target after a quick stop in impedance mode
+
+
+joints:
+  - {name: joint_1, position: 0}
+  - {name: joint_2, position: 1}
+  - {name: joint_3, position: 2}
+  - {name: joint_4, position: 3}
+  - {name: joint_5, position: 4}
+  - {name: joint_6, position: 5}
+  - {name: joint_7, position: 6}
+  - {name: joint_8, position: 7}
+  - {name: joint_9, position: 8}
+  - {name: joint_10, position: 9}
+  - {name: joint_11, position: 10}
+  - {name: joint_12, position: 11}
+  - {name: joint_13, position: 12}
+  - {name: joint_14, position: 13}
+  - {name: joint_15, position: 14}
+  - {name: joint_16, position: 15}
+  - {name: joint_17, position: 16}
+  - {name: joint_18, position: 17}
+  - {name: joint_19, position: 18}
+  - {name: joint_20, position: 19}
+  - {name: joint_21, position: 20}
+  - {name: joint_22, position: 21}
+  - {name: joint_23, position: 22}
+  - {name: joint_24, position: 23}
+  - {name: joint_25, position: 24}
+  - {name: joint_26, position: 25}
+  - {name: joint_27, position: 26}
+  - {name: joint_28, position: 27}

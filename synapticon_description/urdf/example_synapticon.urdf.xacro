@@ -1,0 +1,60 @@
+<?xml version="1.0"?>
+<!--
+  SPDX-License-Identifier: MIT
+  Copyright (c) 2025 Elevate Robotics Inc
+  Copyright (c) 2025-2026 Synapticon GmbH
+  Copyright (c) 2026 b-robotized GmbH
+-->
+<!--
+  The example robot: any number of joints, from a robot definition YAML.
+
+  Every joint of the definition's `joints` list gets a motor of its own on a ring around a hub, with a flywheel that
+  shows the joint position in RViz, and a <joint> in the <ros2_control> block. The hardware reads the bus and
+  drive settings from the same YAML.
+
+    xacro example_synapticon.urdf.xacro robot_config:=<robot definition> default_slave_config:=<slave_config>
+-->
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro" name="synapticon_example">
+
+  <!-- The robot definition: bus settings, joints and transmissions. -->
+  <xacro:arg name="robot_config" default=""/>
+  <!-- true: impedance mode (0x6060 = -6) with its command interfaces, which needs a slave_config that maps the
+       impedance objects. false: CSP. -->
+  <xacro:arg name="impedance" default="false"/>
+  <!-- slave_config for the joints whose entry names none. -->
+  <xacro:arg name="default_slave_config" default=""/>
+  <!-- The HAL below the hardware interface: ethercat_soem for drives on EtherCAT, mock (commands come back as
+       states) or mock_cia402 (simulated CiA 402 drives). -->
+  <xacro:arg name="hal" default="ethercat_soem"/>
+  <!-- For ethercat_soem: the network interface of the drives. Empty takes the one of the robot definition. -->
+  <xacro:arg name="network_interface" default=""/>
+
+  <xacro:include filename="$(find synapticon_description)/urdf/example_synapticon.macro.xacro"/>
+
+  <xacro:property name="robot" value="${xacro.load_yaml('$(arg robot_config)')}"/>
+  <xacro:property name="joint_count" value="${len(robot['joints'])}"/>
+
+  <material name="housing"><color rgba="0.35 0.35 0.4 1.0"/></material>
+  <material name="flywheel"><color rgba="0.95 0.6 0.2 1.0"/></material>
+
+  <!-- The hub, root of the model. -->
+  <link name="base_link">
+    <visual>
+      <origin xyz="0 0 -0.03" rpy="0 0 0"/>
+      <geometry><cylinder radius="${max(0.12, 0.012 * joint_count) + 0.08}" length="0.02"/></geometry>
+      <material name="housing"/>
+    </visual>
+  </link>
+
+  <xacro:motor_ring joints="${robot['joints']}" count="${joint_count}"/>
+
+  <xacro:synapticon_hardware
+      name="synapticon"
+      robot="${robot}"
+      robot_config="$(arg robot_config)"
+      impedance="$(arg impedance)"
+      default_slave_config="$(arg default_slave_config)"
+      hal="$(arg hal)"
+      network_interface="$(arg network_interface)"/>
+
+</robot>

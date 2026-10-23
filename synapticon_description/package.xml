@@ -3,7 +3,10 @@
 <package format="3">
   <name>synapticon_description</name>
   <version>0.3.0</version>
-  <description>Robot descriptions of the Synapticon example setups with one and two drives</description>
+  <description>
+    The model of the example robot: xacro macros that make a URDF with its ros2_control block from a
+    robot definition, and the motor and flywheel meshes that RViz shows.
+  </description>
   <maintainer email="jennifer.buehler@b-robotized.com">Jennifer Buehler</maintainer>
   <maintainer email="timotej.gaspar@b-robotized.com">Timotej Gaspar</maintainer>
   <license>MIT</license>

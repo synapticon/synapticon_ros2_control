@@ -1,0 +1,37 @@
+# Controllers of the geared example robot, example_geared.yaml. The command controllers move the output joint_1,
+# the drive controller watches the drive of motor_1. forward_position_controller takes one position in rad,
+# motor_command_controller takes synapticon_control_msgs/MotorCommand.
+
+controller_manager:
+  ros__parameters:
+    update_rate: 500  # Hz, equal to control_frequency of the robot definition
+    lock_memory: true  # keep the process in RAM, so it never waits for the disk
+    thread_priority: 60  # real-time priority of the control loop
+    cpu_affinity: 1  # the CPU core that runs the control loop
+    hardware_components_initial_state:
+      shutdown_on_initial_state_failure: false  # keep running when the hardware fails to start
+    joint_state_broadcaster:
+      type: joint_state_broadcaster/JointStateBroadcaster
+    drive_controller:  # drive states, drive actions, fault reaction
+      type: synapticon_controllers/DriveController
+    ethercat_bus_monitor_controller:  # bus health on /diagnostics
+      type: synapticon_controllers/EthercatBusMonitorController
+    forward_position_controller:  # commands in CSP
+      type: forward_command_controller/ForwardCommandController
+    motor_command_controller:  # commands in impedance mode
+      type: synapticon_controllers/MotorCommandController
+
+drive_controller:
+  ros__parameters:
+    joints: [motor_1]
+    # fault_reaction:  # quick stop all joints when one fails
+    #   enabled: true
+
+forward_position_controller:
+  ros__parameters:
+    joints: [joint_1]
+    interface_name: position
+
+motor_command_controller:
+  ros__parameters:
+    joints: [joint_1]

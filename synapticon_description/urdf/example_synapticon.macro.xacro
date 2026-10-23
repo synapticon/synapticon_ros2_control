@@ -1,0 +1,211 @@
+<?xml version="1.0"?>
+<!--
+  SPDX-License-Identifier: MIT
+  Copyright (c) 2025 Elevate Robotics Inc
+  Copyright (c) 2025-2026 Synapticon GmbH
+  Copyright (c) 2026 b-robotized GmbH
+-->
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro">
+
+  <!--
+    Macros that turn a robot definition into the example robot.
+
+      motor_ring              what RViz shows: one motor with a flywheel per joint, on a ring around a hub
+      synapticon_hardware     the <ros2_control> block: the hardware, a <joint> per joint, the transmissions and the
+                              bus health
+
+    The <ros2_control> block only declares interfaces. The HAL reads the drive settings, such as bus addresses and
+    slave_configs, from the robot definition itself.
+
+    xacro has no loops. A macro that works through a list handles the first item and then calls itself with the rest.
+  -->
+
+  <!-- Interfaces as (name, data_type) pairs. An empty data_type means double. -->
+  <xacro:property name="motion_states" value="${[('position', ''), ('velocity', ''), ('effort', '')]}"/>
+  <!-- Everything else a drive reports. The drive controller reads all of it. -->
+  <xacro:property name="drive_states" value="${[
+      ('status_word', 'uint16'), ('device_state', 'uint8'), ('mode_of_operation', 'int8'), ('error_code', 'uint16'),
+      ('error_report', ''), ('slave_online', 'bool'), ('slave_al_state', 'uint8'), ('dc_link_voltage', ''),
+      ('temperature_inverter', ''), ('temperature_core', ''), ('motor_current', ''), ('joint_torque_demand', '')]}"/>
+  <!-- In impedance mode a joint takes these on top of the position. -->
+  <xacro:property name="impedance_commands" value="${[('velocity', ''), ('effort', ''), ('stiffness', ''), ('damping', '')]}"/>
+  <!-- The health of the bus as a whole, which the bus monitor reads. -->
+  <xacro:property name="bus_states" value="${[
+      ('link_up', 'bool'), ('slaves_responding', 'uint32'), ('al_states', 'uint8'),
+      ('domain_working_counter', 'uint32'), ('domain_wc_state', 'uint8')]}"/>
+
+  <!-- The meshes are in millimetres. At half their real size, 28 of them still fit on the ring. -->
+  <xacro:property name="mesh_path" value="package://synapticon_description/meshes"/>
+  <xacro:property name="mesh_scale" value="0.0005"/>
+  <!-- The motor hangs below its flange, so the flange sits this high above the hub. -->
+  <xacro:property name="flange_height" value="0.05"/>
+
+  <!--
+    declare: one <state_interface> or <command_interface> per (name, data_type) pair.
+
+    @param kind   "state" or "command".
+    @param pairs  The interfaces.
+  -->
+  <xacro:macro name="declare" params="kind pairs">
+    <xacro:if value="${bool(pairs)}">
+      <xacro:if value="${bool(pairs[0][1])}">
+        <xacro:element xacro:name="${kind}_interface" name="${pairs[0][0]}" data_type="${pairs[0][1]}"/>
+      </xacro:if>
+      <xacro:unless value="${bool(pairs[0][1])}">
+        <xacro:element xacro:name="${kind}_interface" name="${pairs[0][0]}"/>
+      </xacro:unless>
+      <xacro:declare kind="${kind}" pairs="${pairs[1:]}"/>
+    </xacro:if>
+  </xacro:macro>
+
+  <!--
+    joint_blocks: one <joint> per entry of the robot definition's `joints`.
+
+    Every joint reports its motion. A joint with a drive also reports the drive and takes drive actions. A joint that
+    takes commands gets the position, and in impedance mode the impedance commands. A motor behind a transmission
+    (`commanded: false`) takes none, and the output of a transmission (`drive: false`) has no drive.
+
+    @param joints     The `joints` list.
+    @param impedance  Whether the joints run in impedance mode.
+  -->
+  <xacro:macro name="joint_blocks" params="joints impedance">
+    <xacro:if value="${bool(joints)}">
+      <xacro:property name="has_drive" value="${str(joints[0].get('drive', True)).lower() == 'true'}"/>
+      <xacro:property name="takes_commands" value="${str(joints[0].get('commanded', True)).lower() == 'true'}"/>
+      <joint name="${joints[0]['name']}">
+        <xacro:declare kind="state" pairs="${motion_states + (drive_states if has_drive else [])}"/>
+        <xacro:if value="${takes_commands}">
+          <xacro:declare kind="command" pairs="${[('position', '')] + (impedance_commands if impedance else [])}"/>
+        </xacro:if>
+        <xacro:if value="${has_drive}">
+          <!-- A drive action request (enable, quick stop, ...) as its code. -->
+          <xacro:declare kind="command" pairs="${[('drive_action', 'uint8')]}"/>
+        </xacro:if>
+      </joint>
+      <xacro:joint_blocks joints="${joints[1:]}" impedance="${impedance}"/>
+    </xacro:if>
+  </xacro:macro>
+
+  <!--
+    transmission_ends: one <actuator> or <joint> per entry, with its role, and its reduction and offset when given.
+
+    @param tag      "actuator" or "joint".
+    @param entries  {name, role, [mechanical_reduction], [offset]}.
+  -->
+  <xacro:macro name="transmission_ends" params="tag entries">
+    <xacro:if value="${bool(entries)}">
+      <xacro:element xacro:name="${tag}" name="${entries[0]['name']}" role="${entries[0]['role']}">
+        <xacro:if value="${'offset' in entries[0]}">
+          <offset>${entries[0]['offset']}</offset>
+        </xacro:if>
+        <xacro:if value="${'mechanical_reduction' in entries[0]}">
+          <mechanical_reduction>${entries[0]['mechanical_reduction']}</mechanical_reduction>
+        </xacro:if>
+      </xacro:element>
+      <xacro:transmission_ends tag="${tag}" entries="${entries[1:]}"/>
+    </xacro:if>
+  </xacro:macro>
+
+  <!--
+    transmission_params: one <param> per (name, value) pair.
+  -->
+  <xacro:macro name="transmission_params" params="pairs">
+    <xacro:if value="${bool(pairs)}">
+      <param name="${pairs[0][0]}">${pairs[0][1]}</param>
+      <xacro:transmission_params pairs="${pairs[1:]}"/>
+    </xacro:if>
+  </xacro:macro>
+
+  <!--
+    transmission_blocks: one <transmission> per entry of the robot definition's `transmissions`. The hardware loads
+    its plugin and puts it between the joints and the drives of its actuators.
+
+    @param transmissions  {name, plugin, actuators, joints, [params]}. The joints come in the order the plugin
+                          expects.
+  -->
+  <xacro:macro name="transmission_blocks" params="transmissions">
+    <xacro:if value="${bool(transmissions)}">
+      <xacro:property name="transmission" value="${transmissions[0]}"/>
+      <transmission name="${transmission['name']}">
+        <plugin>${transmission['plugin']}</plugin>
+        <xacro:transmission_ends tag="joint" entries="${transmission['joints']}"/>
+        <xacro:transmission_ends tag="actuator" entries="${transmission['actuators']}"/>
+        <xacro:transmission_params pairs="${[*transmission['params'].items()] if 'params' in transmission else []}"/>
+      </transmission>
+      <xacro:transmission_blocks transmissions="${transmissions[1:]}"/>
+    </xacro:if>
+  </xacro:macro>
+
+  <!--
+    synapticon_hardware: the <ros2_control> block of a robot definition.
+
+    @param name                  Name of the block.
+    @param robot                 The robot definition, loaded.
+    @param robot_config          Path of the robot definition, which the HAL reads.
+    @param impedance             true: impedance mode (0x6060 = -6) for every joint. false: CSP (8).
+    @param default_slave_config  slave_config of the joints that name none.
+    @param hal                   ethercat_soem for real drives, mock or mock_cia402 for none.
+    @param network_interface     Network interface of the drives. Left out when empty.
+  -->
+  <xacro:macro name="synapticon_hardware"
+      params="name robot robot_config impedance default_slave_config hal network_interface:=''">
+    <ros2_control name="${name}" type="system">
+      <hardware>
+        <plugin>synapticon_ros2_control/SynapticonSystemInterface</plugin>
+        <param name="hal">${hal}</param>
+        <param name="robot_config">${robot_config}</param>
+        <param name="default_slave_config">${default_slave_config}</param>
+        <param name="mode_of_operation">${-6 if impedance else 8}</param>
+        <xacro:if value="${network_interface != ''}">
+          <param name="network_interface">${network_interface}</param>
+        </xacro:if>
+      </hardware>
+      <xacro:joint_blocks joints="${robot['joints']}" impedance="${impedance}"/>
+      <xacro:transmission_blocks transmissions="${robot.get('transmissions', [])}"/>
+      <gpio name="ethercat_bus">
+        <xacro:declare kind="state" pairs="${bus_states}"/>
+      </gpio>
+    </ros2_control>
+  </xacro:macro>
+
+  <!--
+    motor_ring: what RViz shows. Every joint is a motor standing on the hub that turns a flywheel about its own
+    vertical axis. The motors are spread evenly on a ring, so no joint moves another.
+
+    @param joints  The `joints` list.
+    @param count   How many joints there are in total. It sets the spacing and the size of the ring.
+    @param index   The place of the first joint on the ring.
+  -->
+  <xacro:macro name="motor_ring" params="joints count index:=0">
+    <xacro:if value="${bool(joints)}">
+      <xacro:property name="name" value="${joints[0]['name']}"/>
+      <xacro:property name="angle" value="${2.0 * pi * index / count}"/>
+      <xacro:property name="radius" value="${max(0.12, 0.012 * count)}"/>
+      <link name="${name}_motor">
+        <visual>
+          <geometry><mesh filename="${mesh_path}/motor.stl" scale="${mesh_scale} ${mesh_scale} ${mesh_scale}"/></geometry>
+          <material name="housing"/>
+        </visual>
+      </link>
+      <joint name="${name}_mount" type="fixed">
+        <parent link="base_link"/>
+        <child link="${name}_motor"/>
+        <origin xyz="${radius * cos(angle)} ${radius * sin(angle)} ${flange_height}" rpy="0 0 ${angle}"/>
+      </joint>
+      <link name="${name}_link">
+        <visual>
+          <origin xyz="0 0 0.004" rpy="0 0 0"/>
+          <geometry><mesh filename="${mesh_path}/flywheel.stl" scale="${mesh_scale} ${mesh_scale} ${mesh_scale}"/></geometry>
+          <material name="flywheel"/>
+        </visual>
+      </link>
+      <joint name="${name}" type="continuous">
+        <parent link="${name}_motor"/>
+        <child link="${name}_link"/>
+        <axis xyz="0 0 1"/>
+      </joint>
+      <xacro:motor_ring joints="${joints[1:]}" count="${count}" index="${index + 1}"/>
+    </xacro:if>
+  </xacro:macro>
+
+</robot>
