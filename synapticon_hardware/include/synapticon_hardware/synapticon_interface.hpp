@@ -21,6 +21,7 @@
 #include <rclcpp/time.hpp>
 #include <rclcpp_lifecycle/state.hpp>
 
+#include "synapticon_hardware/command_fallback.hpp"
 #include "synapticon_hardware/drive_data.hpp"
 #include "synapticon_hardware/drive_joint_map.hpp"
 #include "synapticon_hardware/ethercat_health.hpp"
@@ -39,8 +40,11 @@ namespace synapticon_hardware
 /// the `<hardware>` parameter `hal` names. Whether a joint runs in CSP or impedance mode is configuration only:
 /// the declared interfaces and the drive's mode of operation.
 ///
-/// The HAL reads all other parameters itself, from the URDF and the robot definition it names.
+/// The HAL reads all other drive parameters itself, from the URDF and the robot definition it names.
 /// URDF transmissions are loaded through pluginlib and sit between the joints and the drives.
+///
+/// Where a command leaves out the stiffness, the damping or the torque limit, this class fills in the joint's
+/// configured value (see UnspecifiedCommandFill), on the joint side and again after the transmissions.
 class SynapticonSystemInterface : public hardware_interface::SystemInterface
 {
 public:
@@ -113,6 +117,7 @@ private:
   InterfaceBinding binding_;
   HandleAccessReport access_report_;
   TransmissionSet transmissions_;
+  UnspecifiedCommandFill command_fill_;
 };
 
 }  // namespace synapticon_hardware

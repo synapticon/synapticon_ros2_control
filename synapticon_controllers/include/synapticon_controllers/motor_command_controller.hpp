@@ -36,8 +36,8 @@ namespace synapticon_controllers
 /// damper. Only with stiffness and damping at 0 is it the joint torque itself.
 ///
 /// A message needs one position, velocity and torque_feedforward per name. stiffness and damping have one value per
-/// name, or none to keep the gains of the drive. A joint that a message does not name holds where it is. A message
-/// with other sizes is ignored, and every joint holds.
+/// name, or none. None writes NaN, for which the hardware puts in the joint's configured default gains. A joint that
+/// a message does not name holds where it is. A message with other sizes is ignored, and every joint holds.
 class MotorCommandController : public controller_interface::ControllerInterface
 {
 public:
@@ -52,7 +52,7 @@ public:
 protected:
   using MotorCommand = synapticon_control_msgs::msg::MotorCommand;
 
-  /// The five values one joint gets in a cycle. NaN means "hold" for a setpoint and "keep" for a gain.
+  /// The five values one joint gets in a cycle. NaN means "hold" for a setpoint and "the default" for a gain.
   struct Setpoint
   {
     double position;
@@ -62,7 +62,7 @@ protected:
     double damping;
   };
 
-  /// Hold every setpoint and keep the gains.
+  /// Hold every setpoint and give no gains, so the defaults apply.
   static constexpr Setpoint HOLD{ std::numeric_limits<double>::quiet_NaN(), std::numeric_limits<double>::quiet_NaN(),
                                   std::numeric_limits<double>::quiet_NaN(), std::numeric_limits<double>::quiet_NaN(),
                                   std::numeric_limits<double>::quiet_NaN() };

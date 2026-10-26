@@ -12,6 +12,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <memory>
+#include <stdexcept>
 #include <string>
 
 #include <pluginlib/class_list_macros.hpp>
@@ -65,6 +66,20 @@ CallbackReturn SynapticonSystemInterface::on_init(const hardware_interface::Hard
   if (!transmissions_.load(info_, drives_))
   {
     return CallbackReturn::ERROR;
+  }
+  try
+  {
+    command_fill_.configure(read_command_fallbacks(info_));
+  }
+  catch (const std::invalid_argument& error)
+  {
+    RCLCPP_ERROR(logger(), "Command defaults: %s", error.what());
+    return CallbackReturn::ERROR;
+  }
+  if (command_fill_.any_configured())
+  {
+    RCLCPP_INFO(logger(), "A command that leaves out stiffness, damping or max_joint_torque gets %s.",
+                command_fill_.keeps_last_given() ? "the last given value" : "the configured default");
   }
   // A joint without a drive reports a healthy link. The others get the HAL's report from configure on.
   joint_link_health_.assign(joints, EthercatSlaveHealth{ al_state::OP, true });
@@ -121,6 +136,7 @@ CallbackReturn SynapticonSystemInterface::on_configure(const rclcpp_lifecycle::S
   {
     return drop_hal("the declared interfaces cannot be bound.");
   }
+  command_fill_.reset();
   // The health and the default states are visible before the first cycle.
   refresh_link_health();
   access_report_.state_writes(binding_.push_states());
@@ -135,6 +151,7 @@ CallbackReturn SynapticonSystemInterface::on_activate(const rclcpp_lifecycle::St
     return CallbackReturn::ERROR;
   }
   access_report_.reset();
+  command_fill_.reset();
   if (!hal_->start())
   {
     RCLCPP_ERROR(logger(), "Activate failed: the HAL did not start the data exchange.");
@@ -216,12 +233,15 @@ void SynapticonSystemInterface::commands_to_drives()
 {
   // A missing position becomes "hold", a missing velocity or effort becomes 0.
   sanitise_commands(joint_commands_, joint_states_, clean_commands_);
+  command_fill_.fill_joints(clean_commands_);
   for (std::size_t drive = 0; drive < drive_commands_.size(); ++drive)
   {
     drive_commands_[drive] = clean_commands_[drives_.drive_to_joint[drive]];
   }
-  // A drive behind a transmission takes the transmission's output instead.
+  // A drive behind a transmission takes the transmission's output instead. What it does not map gets the values of
+  // the drive's own joint.
   transmissions_.apply_commands(clean_commands_, drive_commands_);
+  command_fill_.fill_drives(drive_commands_, drives_.drive_to_joint);
 }
 
 void SynapticonSystemInterface::refresh_link_health()

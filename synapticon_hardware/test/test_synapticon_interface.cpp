@@ -11,6 +11,8 @@
 /// That refusal cannot happen in the sequential read/update/write model, so forcing it is the
 /// only way to check that it is counted and reported rather than silently dropped.
 
+#include <cmath>
+#include <limits>
 #include <memory>
 #include <mutex>
 #include <shared_mutex>
@@ -392,6 +394,63 @@ TEST_F(SynapticonSystemInterfaceTransmissionTest, TheJointCommandIsMappedToTheAc
   cycle();
   ASSERT_EQ(system_.client->last_commands.size(), 1u);
   EXPECT_NEAR(system_.client->last_commands[0].position, (0.5 - OFFSET) * REDUCTION, 1e-9);
+}
+
+/// A transmission that maps no gains leaves the drive with the values of its own joint.
+TEST(SynapticonSystemInterfaceCommandDefaults, ADriveBehindATransmissionGetsItsOwnJointsValues)
+{
+  auto info = make_transmission_hardware_info();
+  info.joints[0].parameters = { { "stiffness", "0.4" }, { "damping", "0.1" }, { "max_joint_torque", "5.0" } };
+  info.joints[1].parameters = { { "stiffness", "1.5" }, { "damping", "0.3" }, { "max_joint_torque", "2.0" } };
+  RecordingSystem system;
+  hardware_interface::HardwareComponentInterfaceParams params;
+  params.hardware_info = info;
+  ASSERT_EQ(system.on_init(params), CallbackReturn::SUCCESS);
+  system.on_export_state_interfaces();
+  system.on_export_command_interfaces();
+  ASSERT_EQ(
+      system.on_configure(lifecycle_state(lifecycle_msgs::msg::State::PRIMARY_STATE_UNCONFIGURED, "unconfigured")),
+      CallbackReturn::SUCCESS);
+  ASSERT_EQ(system.on_activate(lifecycle_state(lifecycle_msgs::msg::State::PRIMARY_STATE_INACTIVE, "inactive")),
+            CallbackReturn::SUCCESS);
+  ASSERT_EQ(system.write(rclcpp::Time(0), rclcpp::Duration(0, 0)), hardware_interface::return_type::OK);
+  const DriveCommand& motor = system.client->last_commands.at(0);
+  EXPECT_DOUBLE_EQ(motor.stiffness, 1.5);
+  EXPECT_DOUBLE_EQ(motor.damping, 0.3);
+  EXPECT_DOUBLE_EQ(motor.max_joint_torque, 5.0) << "the torque limit comes from the output joint";
+  system.on_deactivate(lifecycle_state(lifecycle_msgs::msg::State::PRIMARY_STATE_ACTIVE, "active"));
+}
+
+/// The component with a stiffness command on joint_1, and command defaults on joint_1 only.
+class SynapticonSystemInterfaceCommandDefaultsTest : public SynapticonSystemInterfaceTest
+{
+protected:
+  hardware_interface::HardwareInfo hardware_info() const override
+  {
+    auto info = make_hardware_info();
+    info.joints[0].command_interfaces.push_back(interface_info("stiffness"));
+    info.joints[0].parameters = { { "stiffness", "0.4" }, { "damping", "0.1" }, { "max_joint_torque", "5.0" } };
+    return info;
+  }
+};
+
+/// A stiffness left out gets the default, also right after a command that gave one. A joint without defaults keeps
+/// NaN, so the HAL leaves the drive's value.
+TEST_F(SynapticonSystemInterfaceCommandDefaultsTest, AMissingValueGetsTheDefault)
+{
+  cycle();
+  EXPECT_DOUBLE_EQ(system_.client->last_commands[0].stiffness, 0.4);
+  EXPECT_DOUBLE_EQ(system_.client->last_commands[0].damping, 0.1);
+  EXPECT_DOUBLE_EQ(system_.client->last_commands[0].max_joint_torque, 5.0);
+  EXPECT_TRUE(std::isnan(system_.client->last_commands[1].stiffness));
+
+  const auto stiffness = system_.get_command_interface_handle("joint_1/stiffness");
+  ASSERT_TRUE(stiffness->set_value(2.0));
+  cycle();
+  EXPECT_DOUBLE_EQ(system_.client->last_commands[0].stiffness, 2.0);
+  ASSERT_TRUE(stiffness->set_value(std::numeric_limits<double>::quiet_NaN()));
+  cycle();
+  EXPECT_DOUBLE_EQ(system_.client->last_commands[0].stiffness, 0.4);
 }
 
 /// The actuator state the HAL reports is mapped back to the output joint.

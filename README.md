@@ -215,10 +215,13 @@ the bus.
 Only impedance mode needs this step. CSP and CSV work without it.
 Synapticon still calls impedance mode beta.
 
-In impedance mode, the drive closes a torque loop, so it needs to know its torque sensor.
-Out of the box, and after every firmware flash, the sensor type is 0 (None).
-Enabling such a drive in impedance mode makes it fault right away, with error 0x6320.
-Bring-up therefore refuses an impedance joint whose sensor type is 0.
+| Setting | Where | Why |
+|---|---|---|
+| Torque sensor type | 0x2150:1 = 1 (Analog Input), stored | The torque loop needs it. Type 0 (None), set by every firmware flash, faults with 0x6320 on enable. Bring-up refuses it. |
+| Analog coefficients | 0 without a physical sensor | The drive then works with the motor torque. |
+| Torque limit | `max_joint_torque` in the robot definition, streamed to 0x2054 | Clamps the impedance output. At 0 the joint is powered but limp, and bring-up warns. |
+| Gear ratio | 0x6091 | |
+| Encoders | motor side for commutation and velocity, output side for position | |
 
 Synapticon recommends type 1 (Analog Input). Write 1 to 0x2150:1, for example with OBLAC Drives, and store it on the
 drive.
@@ -293,10 +296,9 @@ joints:
     position: 0             # the drive's place on the bus (ring position)
     alias: 0                # only 0 works: drives are found by their ring position
     slave_config: ""        # empty: the launch argument slave_config
-    max_joint_torque: ""    # Nm, empty: the limit stored on the drive
 ```
 
-Every joint with a drive needs an entry. Three more settings are optional:
+Every joint with a drive needs an entry. More settings are optional:
 
 - `energize: false` keeps a drive unpowered: it is set up and read, and requests to enable it are refused.
   This helps with a broken drive that is still on the bus.
@@ -304,6 +306,18 @@ Every joint with a drive needs an entry. Three more settings are optional:
   Turning the joint axis in the URDF is the cleaner fix.
 - `mode_of_operation` sets this joint's mode, where `impedance` sets it for all.
   CSV (9) needs the `velocity` command, which `impedance:=true` declares.
+- `stiffness`, `damping` and `max_joint_torque` override `command_defaults` for this joint.
+
+`command_defaults` decide what a drive gets where a command leaves a value out, for example a `MotorCommand` with empty
+`stiffness` and `damping`, or the hold at activation.
+Each such value gets the joint's default, never a value from an earlier command, which may have been meant for
+something else.
+With `keep_last_given: true`, a missing value repeats the joint's last given one instead, starting from the default
+at every activation.
+Every impedance joint that may be powered needs all three values, from here or from its own entry.
+Without them bring-up stops, because the drive would run on whatever it stored last.
+A value of 0 is allowed, with a warning.
+Bring-up logs what each drive held and what it starts with.
 
 A `<param>` in the URDF itself wins over the file.
 The `<hardware>` parameters `default_slave_config` and `mode_of_operation` count for the joints whose entry does not
@@ -361,7 +375,7 @@ ros2 topic pub --once /motor_command_controller/commands synapticon_control_msgs
 
 This moves `joint_2` only. A joint that the message does not name holds where it is.
 `position`, `velocity` and `torque_feedforward` need one value per name.
-`stiffness` and `damping` may be empty, which keeps the gains stored on the drive.
+`stiffness` and `damping` may be empty. Then the joints get the `command_defaults` of the robot definition.
 
 ### 6.3. Launch arguments
 
@@ -501,12 +515,12 @@ transmissions:
 
 Launch it with `robot:=geared`. The rules behind it:
 
-- A joint that a transmission names as a joint, but not as an actuator, has no drive.
-  It gets its state from the motors, and its commands go to them.
+- Joints that a transmission lists only under `joints`, never under `actuators`, have no drive.
+  They get their state from the motors, and their commands go to them.
 - An actuator is a joint with a drive, usually the motor shaft. Mark it `commanded: false`, so that no controller
   works against the transmission.
 - Position, velocity and effort always go through the transmission. Stiffness and damping go through only if the
-  plugin supports gains. Otherwise each motor keeps its own.
+  plugin supports gains. Otherwise each motor gets the values of its own joint entry.
 - If a joint without a drive only has state interfaces, it is just measured, and each motor takes the commands of its
   own joint. All joints without a drive in one transmission take commands, or none of them does.
 

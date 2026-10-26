@@ -376,7 +376,7 @@ At the end, on one drive (about 7 minutes), expect this, each line followed by t
 
 ```text
 ===== Summary
-PASS  HIL suite: 50 passed, 4 skipped, skipped: DrivePair.ADisableVoltageOfOneLeavesTheOtherInQuickStop, ...
+PASS  HIL suite: 53 passed, 4 skipped, skipped: DrivePair.ADisableVoltageOfOneLeavesTheOtherInQuickStop, ...
 PASS  path test, CSP: -
 PASS  path test, impedance: -
 PASS  bring-up 1dof, CSP: -

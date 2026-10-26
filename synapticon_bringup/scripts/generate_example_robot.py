@@ -53,18 +53,30 @@ def robot_data(names):
             "tests only: no frozen target after a quick stop in impedance mode",
         ),
     }
+    command_defaults = {
+        "stiffness": (0.4, "Nm/rad"),
+        "damping": (0.1, "Nm s/rad"),
+        "max_joint_torque": (50.0, "Nm, the torque ceiling of the drive"),
+        "keep_last_given": (
+            Hint(True),
+            "repeat the last given value instead of the default",
+        ),
+    }
     joints = [
         {"name": name, "position": position} for position, name in enumerate(names)
     ]
-    return {"bus": bus, "joints": joints}
+    return {"bus": bus, "command_defaults": command_defaults, "joints": joints}
 
 
 JOINT_KEYS_HELP = """\
+command_defaults fills the stiffness, damping and max_joint_torque wherever a command leaves them out.
+Impedance joints need all three, from here or from their own entry.
+
 Each joint needs a name. The other keys are optional:
   position          ring position of its drive on the bus (default 0)
   alias             EtherCAT alias, only 0 works: drives are found by ring position
   slave_config      slave_config file of the drive (default: the launch argument slave_config)
-  max_joint_torque  torque limit in Nm (default: the limit stored on the drive)
+  stiffness         Nm/rad, damping Nm s/rad, max_joint_torque Nm: this joint's own command defaults
   energize: false   read and report the drive, but never power it
   invert: true      flip position, velocity and effort, for a drive mounted the other way round"""
 

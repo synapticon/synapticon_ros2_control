@@ -263,8 +263,8 @@ void TransmissionSet::joints_to_motors(Entry& entry, const std::vector<DriveComm
   {
     entry.gain_warning_given = true;
     RCLCPP_WARN(logger(),
-                "Transmission '%s' passes no stiffness or damping to its motors, so each motor keeps its own gains. "
-                "Either the transmission does not support gains, or a joint gain is NaN. This is shown once.",
+                "Transmission '%s' maps no gains: its motors take the stiffness and damping of their own joints. Its "
+                "type may not support gains, or a joint gain is NaN. Not repeated.",
                 entry.name.c_str());
   }
 }

@@ -30,10 +30,11 @@ find_package(transmission_interface REQUIRED)
 # For the robot definition YAML that the EtherCAT HALs read.
 find_package(yaml-cpp REQUIRED)
 
-set(_sources src/cia402/cia402_hal.cpp src/drive_joint_map.cpp src/ethercat/bus_config.cpp src/ethercat/drive_checks.cpp
-  src/ethercat/drive_units.cpp src/ethercat/ethercat_pdo_hal.cpp src/ethercat/joint_config.cpp
-  src/ethercat/robot_config.cpp src/handle_access_report.cpp src/interface_binding.cpp src/mock/mock_cia402_hal.cpp
-  src/mock/mock_hal.cpp src/mock/simulated_drive.cpp src/synapticon_interface.cpp src/transmission_set.cpp)
+set(_sources src/cia402/cia402_hal.cpp src/command_fallback.cpp src/drive_joint_map.cpp src/ethercat/bus_config.cpp
+  src/ethercat/drive_checks.cpp src/ethercat/drive_units.cpp src/ethercat/ethercat_pdo_hal.cpp
+  src/ethercat/joint_config.cpp src/ethercat/robot_config.cpp src/handle_access_report.cpp src/interface_binding.cpp
+  src/mock/mock_cia402_hal.cpp src/mock/mock_hal.cpp src/mock/simulated_drive.cpp src/synapticon_interface.cpp
+  src/transmission_set.cpp)
 
 # The library: hardware interface, HAL interface and everything the HALs share.
 add_library(${PROJECT_NAME} SHARED ${_sources})
@@ -117,6 +118,7 @@ if(BUILD_TESTING)
   hardware_test(test_hal_bench)
   hardware_test(test_handle_access_report)
   hardware_test(test_drive_joint_map)
+  hardware_test(test_command_fallback)
   hardware_test(test_transmission_set)
   hardware_test(cia402/test_drive_action_walk USES ${synapticon_control_msgs_TARGETS})
   hardware_test(cia402/test_cia402_hal_failures)

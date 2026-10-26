@@ -19,20 +19,20 @@ namespace synapticon_hardware
 {
 
 /// The command that keeps a joint where it is: its measured position, no velocity and no effort. Gains and the
-/// torque limit are NaN, which means "leave them as they are".
+/// torque limit are NaN, "not given", so the configured defaults apply.
 inline DriveCommand hold_command(const DriveState& state)
 {
-  constexpr double KEEP = std::numeric_limits<double>::quiet_NaN();
+  constexpr double NOT_GIVEN = std::numeric_limits<double>::quiet_NaN();
   DriveCommand hold{};
   hold.position = state.position;
-  hold.stiffness = KEEP;
-  hold.damping = KEEP;
-  hold.max_joint_torque = KEEP;
+  hold.stiffness = NOT_GIVEN;
+  hold.damping = NOT_GIVEN;
+  hold.max_joint_torque = NOT_GIVEN;
   return hold;
 }
 
 /// `command` with its gaps (NaN) filled: no position means "stay where you are", no velocity or effort means 0.
-/// Gains and the torque limit keep NaN, which means "leave them as they are".
+/// Gains and the torque limit keep NaN, "not given", which a later step fills with the configured defaults.
 /// An infinite value is no gap but an invalid command. It passes through, so that the HAL refuses it.
 inline DriveCommand filled_in(DriveCommand command, const DriveState& state)
 {
