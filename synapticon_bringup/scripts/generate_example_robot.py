@@ -53,6 +53,11 @@ def robot_data(names):
             Hint(False),
             "tests only: no frozen target after a quick stop in impedance mode",
         ),
+        "sdo_read_attempts": (
+            Hint(5),
+            "tries of a bring-up SDO read that gets no valid answer",
+        ),
+        "sdo_retry_wait_s": (Hint(1.0), "s between those tries"),
     }
     command_defaults = {
         "stiffness": (0.4, "Nm/rad"),

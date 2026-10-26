@@ -17,6 +17,8 @@ bus:
   readiness_timeout_s: 20.0  # the time start() gives every drive to send valid data
   # network_interface: eth0  # network interface of the drives, for ethercat_soem
   # quick_stop_hold: false  # tests only: no frozen target after a quick stop in impedance mode
+  # sdo_read_attempts: 5  # tries of a bring-up SDO read that gets no valid answer
+  # sdo_retry_wait_s: 1.0  # s between those tries
 
 command_defaults:
   stiffness: 0.4  # Nm/rad
