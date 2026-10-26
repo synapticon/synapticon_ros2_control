@@ -247,6 +247,9 @@ Check the drive on its own before you run the ros2_control stack, and whenever y
 Every test below except `read` energises the drive and moves it: clear the joint, keep it free to turn about one
 output revolution, and keep a hand near the power or the e-stop.
 The tests address the drive at alias 0, ring position 0.
+For a drive elsewhere on the bus, give `drive_check` the option `--ring-position N`.
+For the automated tests, describe your bench in a robot definition file, see
+[Your own bench](synapticon_ros2_control/doc/Testing.md#your-own-bench).
 
 The tests take your drive's slave_config (step 2 above).
 Without one, they use the bundled example, which fits only the Circulo Safe Motion it was generated for.

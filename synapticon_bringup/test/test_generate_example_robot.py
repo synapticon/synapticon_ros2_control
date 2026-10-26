@@ -73,3 +73,20 @@ def test_existing_files_are_replaced_only_with_force(tmp_path, monkeypatch, caps
     assert generator.main(command) == 1
     assert "--force" in capsys.readouterr().err
     assert generator.main(command + ["--force"]) == 0
+
+
+def test_out_dir_writes_both_files_there(tmp_path, monkeypatch, capsys):
+    """--out-dir writes the robot and its controllers into that folder and leaves the config folder alone."""
+    config = tmp_path / "config"
+    monkeypatch.setattr(generator, "CONFIG_DIR", config)
+    bench = tmp_path / "bench"
+    assert (
+        generator.main(["--joints", "1", "--robot", "bench", "--out-dir", str(bench)])
+        == 0
+    )
+    assert sorted(path.name for path in bench.iterdir()) == [
+        "example_bench.yaml",
+        "example_bench_controllers.yaml",
+    ]
+    assert not config.exists()
+    assert "--robot" in capsys.readouterr().out

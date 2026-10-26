@@ -31,14 +31,23 @@ import pytest
 from std_msgs.msg import Float64MultiArray
 from synapticon_bringup.testing import (
     env_flag,
+    example_joints,
     example_test_description,
     hil_launch_arguments,
-    StackProbe,
+    hil_robot,
+    hil_test_gains,
+    StackTestCase,
 )
 from synapticon_control_msgs.msg import DriveStatus, MotorCommand
 from synapticon_control_msgs.srv import SetDriveAction
 
-JOINT = "joint_1"
+ROBOT = hil_robot("1dof")
+JOINTS = example_joints(ROBOT)
+if len(JOINTS) != 1:
+    raise ValueError(
+        f"the path test needs a robot with one joint, {ROBOT} has {len(JOINTS)}"
+    )
+JOINT = JOINTS[0]
 IMPEDANCE = env_flag("SYNAPTICON_HIL_IMPEDANCE")
 COMMAND_CONTROLLER = (
     "motor_command_controller" if IMPEDANCE else "forward_position_controller"
@@ -54,16 +63,17 @@ REPORT_TIMEOUT_S = 2.0  # a change reaches /diagnostics within a fraction of a s
 QUICK_STOP_TOLERANCE_RAD = 0.1
 # The watchdog fires when the joint is this far from its commanded target [rad].
 WATCHDOG_RAD = 0.8
-STIFFNESS = 20.0  # Nm/rad, enough to move the joint, soft enough to be safe
-DAMPING = 0.5  # Nm s/rad
+STIFFNESS, DAMPING = hil_test_gains(
+    ROBOT, JOINT
+)  # Nm/rad and Nm s/rad of the impedance moves
 STACK_TIMEOUT_S = 90.0  # must outlast the hardware's readiness_timeout_s
 
 
 @pytest.mark.launch_test
 @launch_testing.markers.keep_alive
 def generate_test_description():
-    """Launch the 1 DOF example on the HAL under test."""
-    return example_test_description(hil_launch_arguments("1dof", IMPEDANCE))
+    """Launch the robot on the HAL under test."""
+    return example_test_description(hil_launch_arguments(ROBOT, IMPEDANCE))
 
 
 class TestRos2ControlPath(StackTestCase):

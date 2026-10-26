@@ -298,9 +298,9 @@ The test ends with the drive disabled and the bus released.
 Settings:
 
 - `SYNAPTICON_HIL_SLAVE_CONFIG` chooses the slave_config for the launch.
-- The joint under test is `joint_1` of the 1 DOF example, at ring position 0.
-  For another drive, change its `position` in the 1 DOF robot definition
-  (`synapticon_bringup/config/example_1dof.yaml`).
+- `SYNAPTICON_HIL_ROBOT` chooses the robot: an example robot with one joint (default `1dof`, its drive at ring
+  position 0), or a robot definition file with one joint. For another drive, use a file, see
+  [Your own bench](#your-own-bench).
 - `SYNAPTICON_HIL_NETWORK_INTERFACE` names the network interface of the drives, and becomes the launch argument
   `network_interface`. The shell of [section 2](#2-before-any-hardware-test) sets it.
 - `SYNAPTICON_HIL_HAL` names the HAL (default `ethercat_soem`).
@@ -348,7 +348,7 @@ So an impedance run doubles as the commissioning check of a multi-drive setup.
 4. Expect `OK` at the end of each run.
    A failed bring-up fails the test at once, and lists its errors and warning blocks.
 
-`SYNAPTICON_HIL_ROBOT` defaults to `1dof`.
+`SYNAPTICON_HIL_ROBOT` defaults to `1dof`, and also takes a robot definition file.
 `SYNAPTICON_HIL_HAL`, `SYNAPTICON_HIL_NETWORK_INTERFACE` and `SYNAPTICON_HIL_SLAVE_CONFIG` work as in the path test.
 `colcon test` runs this test with the 2 DOF example on simulated drives, in both modes.
 
@@ -383,13 +383,43 @@ A watchdog cuts the voltage of every joint and fails the test when one strays mo
 
 2. Run it:
 
-`run_hil_tests.py` runs three things:
+   ```bash
+   SYNAPTICON_HIL_ROBOT=28dof launch_test \
+     "$(ros2 pkg prefix synapticon_bringup)/share/synapticon_bringup/test/hil_multi_joint_test.py"
+   ```
+
+3. Expect `OK` at the end, and a line with the overrun count of the soak, for example
+   `Soak of 60 s with 28 drives: 3 overrun warning(s)`.
+
+To only watch every joint move, run the sweep alone with `SYNAPTICON_HIL_SWEEP_ONLY=1`, or
+`run_hil_tests.py --robot <robot> --only sweep` (about 3 s per joint).
+`SYNAPTICON_HIL_SOAK_S` sets the length of the soak in seconds, `SYNAPTICON_HIL_MAX_OVERRUNS` the number of overrun
+warnings it allows (default 10 per minute of soak).
+The default suits a PC without real-time scheduling, which misses a cycle now and then.
+On a real-time PC, set it to 0 for a strict check.
+Overruns also come from other load on the machine (a build, for example), so run the soak on an otherwise idle machine.
+If the limit is exceeded, launch the 1 DOF example for a minute without power and count its overrun warnings:
+a similar count means the machine, not the number of drives.
+`SYNAPTICON_HIL_ROBOT` defaults to `2dof`, and also takes a robot definition file.
+`SYNAPTICON_HIL_HAL`, `SYNAPTICON_HIL_NETWORK_INTERFACE` and `SYNAPTICON_HIL_SLAVE_CONFIG` work as in the path test.
+`colcon test` runs this test with the 2 DOF example on simulated drives, with a 5 s soak and no overrun limit.
+
+## 7. All automated hardware tests in one run
+
+`run_hil_tests.py` runs the automated hardware tests that fit the robot, waits between the runs, prints a summary,
+and exits with 0 only when every run passed.
+
+With one joint (the default `--robot 1dof`), it runs:
 
 - the suite, in strict mode
 - the path test, in CSP and in impedance mode
 - the bring-up test, in CSP and in impedance mode
 
-It waits between the runs, prints a summary, and exits with 0 only when every run passed.
+With several joints, for example `--robot 2dof` or `--robot 28dof`, it runs only what needs several drives:
+
+- the two-drive tests of the suite, on the robot's first two drives
+- the bring-up test of the whole robot, in CSP and in impedance mode
+- the multi-joint test of [section 6](#6-multi-joint-test)
 
 Prepare the drives as in [section 2](#2-before-any-hardware-test) first.
 Every run moves drives, except the bring-up test.

@@ -10,6 +10,7 @@ Create an example robot with as many joints as you like.
 It writes two files into the config folder of this package: the robot definition example_<name>.yaml and the
 controller configuration example_<name>_controllers.yaml. Joint n sits on the drive at ring position n - 1.
 Rebuild the package afterwards, then launch the robot with robot:=<name>.
+With --out-dir the files go elsewhere, for example a test bench's own robot for run_hil_tests.py --robot <file>.
 
 Examples:
     python3 scripts/generate_example_robot.py --joints 5
@@ -254,6 +255,11 @@ def parse(argv):
     parser.add_argument(
         "--names", help="comma separated joint names (default: joint_1, joint_2, ...)"
     )
+    parser.add_argument(
+        "--out-dir",
+        type=Path,
+        help="write both files here instead of the config folder of this package, for example for a test bench",
+    )
     parser.add_argument("--force", action="store_true", help="replace files that exist")
     return parser.parse_args(argv)
 
@@ -269,23 +275,27 @@ def main(argv=None):
         print(error, file=sys.stderr)
         return 2
     name = args.robot or f"{args.joints}dof"
+    folder = args.out_dir or CONFIG_DIR
+    robot_file = folder / f"example_{name}.yaml"
     try:
+        write(robot_file, robot_definition(name, names), args.force)
         write(
-            CONFIG_DIR / f"example_{name}.yaml",
-            robot_definition(name, names),
-            args.force,
-        )
-        write(
-            CONFIG_DIR / f"example_{name}_controllers.yaml",
+            folder / f"example_{name}_controllers.yaml",
             controller_config(name, names),
             args.force,
         )
     except FileExistsError as error:
         print(error, file=sys.stderr)
         return 1
-    print(
-        f"Rebuild the package, then run: ros2 launch synapticon_bringup example_synapticon.launch.py robot:={name}"
-    )
+    if args.out_dir:
+        print(
+            f"Next: run the hardware tests with run_hil_tests.py --robot {robot_file.resolve()}"
+        )
+    else:
+        print(
+            f"Next: rebuild the package and start the robot with "
+            f"ros2 launch synapticon_bringup example_synapticon.launch.py robot:={name}"
+        )
     return 0
 
 

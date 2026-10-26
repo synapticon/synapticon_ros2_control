@@ -37,6 +37,7 @@ from ament_index_python.packages import (
     get_package_share_directory,
     PackageNotFoundError,
 )
+from synapticon_bringup.testing import example_joints, robot_bus_setting, robot_files
 
 # Time for the master to release the bus between two steps [s].
 BUS_RELEASE_S = 8.0
@@ -72,8 +73,11 @@ def suite_binary(hal):
 
 
 def hal_environment(args):
-    """The environment that selects the HAL in every step."""
-    env = {"SYNAPTICON_HIL_HAL": args.hal}
+    """The environment that selects the HAL and the robot definition in every step."""
+    env = {
+        "SYNAPTICON_HIL_HAL": args.hal,
+        "SYNAPTICON_HIL_ROBOT": robot_files(args.robot)[0],
+    }
     if args.network_interface:
         env["SYNAPTICON_HIL_NETWORK_INTERFACE"] = args.network_interface
     return env
@@ -86,9 +90,11 @@ def build_steps(args):
     bringup_test = os.path.join(test_dir, "hil_bringup_test.py")
     multi_joint_test = os.path.join(test_dir, "hil_multi_joint_test.py")
     hal = hal_environment(args)
+    robot = (
+        pathlib.Path(args.robot).stem if args.robot.endswith(".yaml") else args.robot
+    )
     strict = hal | {"SYNAPTICON_HIL_STRICT": "1"}
     impedance = hal | {"SYNAPTICON_HIL_IMPEDANCE": "1"}
-    robot = hal | {"SYNAPTICON_HIL_ROBOT": args.robot}
     steps = {
         "suite": [
             Step(
@@ -109,13 +115,17 @@ def build_steps(args):
         ],
         "joints": [
             Step(
+                f"multi-joint test {robot}",
                 ["launch_test", multi_joint_test],
+                hal,
                 timeout_s=900.0,
             )
         ],
         "sweep": [
             Step(
+                f"sweep {robot}",
                 ["launch_test", multi_joint_test],
+                hal | {"SYNAPTICON_HIL_SWEEP_ONLY": "1"},
                 timeout_s=600.0,
             )
         ],
@@ -124,11 +134,11 @@ def build_steps(args):
             Step("path test, impedance", ["launch_test", path_test], impedance),
         ],
         "bringup": [
-            Step(f"bring-up {args.robot}, CSP", ["launch_test", bringup_test], robot),
+            Step(f"bring-up {robot}, CSP", ["launch_test", bringup_test], hal),
             Step(
-                f"bring-up {args.robot}, impedance",
+                f"bring-up {robot}, impedance",
                 ["launch_test", bringup_test],
-                robot | impedance,
+                impedance,
             ),
         ],
     }
@@ -225,13 +235,14 @@ def parse_args():
     parser.add_argument(
         "--network-interface",
         default=os.environ.get("SYNAPTICON_HIL_NETWORK_INTERFACE", ""),
-        help="network interface of the drives, needed by ethercat_soem "
-        "(default SYNAPTICON_HIL_NETWORK_INTERFACE)",
+        help="network interface of the drives, for ethercat_soem "
+        "(default SYNAPTICON_HIL_NETWORK_INTERFACE, else the robot definition's)",
     )
     parser.add_argument(
         "--robot",
         default="1dof",
-        help="example robot of the bring-up test, every drive of it must be on the bus",
+        help="example robot (for example 2dof) or robot definition file of every step, every drive of it must be "
+        "on the bus. The suite takes its first two joints as its drives",
     )
     parser.add_argument(
         "--only",
@@ -253,8 +264,17 @@ def parse_args():
 def main():
     """Run the selected steps and print the summary."""
     args = parse_args()
-    if args.hal == "ethercat_soem" and not args.network_interface:
-        sys.exit("ethercat_soem needs --network-interface")
+    if args.hal == "ethercat_soem" and not (
+        args.network_interface or robot_bus_setting(args.robot, "network_interface", "")
+    ):
+        sys.exit(
+            "ethercat_soem needs --network-interface, or network_interface in the robot definition"
+        )
+    if args.only is None:
+        several = len(example_joints(args.robot)) > 1
+        args.only = (
+            ["pairs", "bringup", "joints"] if several else ["suite", "path", "bringup"]
+        )
     steps = build_steps(args)
     if any(not step.command[0] for step in steps):
         switch = (

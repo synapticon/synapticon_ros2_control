@@ -24,6 +24,7 @@ if(BUILD_TESTING)
   # Running without transmissions, and the example robot generator.
   ament_add_pytest_test(test_without_transmissions test/test_without_transmissions.py TIMEOUT 60)
   ament_add_pytest_test(test_generate_example_robot test/test_generate_example_robot.py TIMEOUT 60)
+  ament_add_pytest_test(test_hil_test_gains test/test_hil_test_gains.py TIMEOUT 60)
 
   # The geared example on the mock HAL, with and without its transmission.
   add_launch_test(test/test_transmission_mock.py TIMEOUT 120)

@@ -42,10 +42,34 @@ def hil_hal():
     return os.environ.get("SYNAPTICON_HIL_HAL", "") or "ethercat_soem"
 
 
+def hil_robot(default):
+    """The robot the hardware tests run: SYNAPTICON_HIL_ROBOT, or `default` when it is unset."""
+    return os.environ.get("SYNAPTICON_HIL_ROBOT", "") or default
+
+
+def robot_files(robot):
+    """
+    The robot definition and the controller configuration of `robot`.
+
+    `robot` is the name of an example robot (for example 1dof) or the path of a robot definition YAML.
+    For a path, the controllers are in <name>_controllers.yaml next to it, as generate_example_robot.py writes them.
+    """
+    if robot.endswith(".yaml") or os.sep in robot:
+        path = os.path.abspath(robot)
+        return path, path[: -len(".yaml")] + "_controllers.yaml"
+    config = os.path.join(get_package_share_directory("synapticon_bringup"), "config")
+    return (
+        os.path.join(config, f"example_{robot}.yaml"),
+        os.path.join(config, f"example_{robot}_controllers.yaml"),
+    )
+
+
 def hil_launch_arguments(robot, impedance):
     """The example launch arguments of a hardware test, from its settings and the environment."""
+    robot_config, controllers_file = robot_files(robot)
     arguments = {
-        "robot": robot,
+        "robot_config": robot_config,
+        "controllers_file": controllers_file,
         "hal": hil_hal(),
         "impedance": "true" if impedance else "false",
         "launch_rviz": "false",
@@ -82,19 +106,49 @@ def write_yaml(prefix, content):
     return path
 
 
+def _read_yaml(path):
+    """The content of the YAML file `path`."""
     with open(path, encoding="utf-8") as stream:
         return yaml.safe_load(stream)
 
 
+def robot_bus_setting(robot, key, default):
+    """The entry `key` of the bus section of the robot definition of `robot` (see robot_files), or `default`."""
+    bus = _read_yaml(robot_files(robot)[0]).get("bus") or {}
+    return bus.get(key, default)
+
+
 def example_joints(robot):
-    """Joint names of the example robot definition `robot`, in its order."""
-    path = os.path.join(
-        get_package_share_directory("synapticon_bringup"),
-        "config",
-        f"example_{robot}.yaml",
+    """Joint names of the robot definition of `robot` (see robot_files), in its order."""
+    return [joint["name"] for joint in _read_yaml(robot_files(robot)[0])["joints"]]
+
+
+def hil_test_gains(robot, joint):
+    """
+    Stiffness [Nm/rad] and damping [Nm s/rad] the impedance tests move `joint` of `robot` with.
+
+    They come from the `hil_tests` section of its robot definition: the entry of `joint` under `joints`, else the
+    section's own values. The defaults suit a geared joint. A joint without a gear has far less inertia and needs much
+    smaller values. Raises ValueError when `joints` names a joint the robot does not have.
+    """
+    definition = _read_yaml(robot_files(robot)[0])
+    section = definition.get("hil_tests") or {}
+    per_joint = section.get("joints") or {}
+    unknown = set(per_joint) - {entry["name"] for entry in definition["joints"]}
+    if unknown:
+        raise ValueError(
+            f"hil_tests of {robot} names joints the robot does not have: {sorted(unknown)}"
+        )
+    own = per_joint.get(joint) or {}
+    return (
+        float(own.get("stiffness", section.get("stiffness", 15.0))),
+        float(own.get("damping", section.get("damping", 0.5))),
     )
-    with open(path, encoding="utf-8") as stream:
-        return [joint["name"] for joint in yaml.safe_load(stream)["joints"]]
+
+
+def example_controllers(robot):
+    """The controller configuration of `robot` (see robot_files), as data."""
+    return _read_yaml(robot_files(robot)[1])
 
 
 class StackProbe:

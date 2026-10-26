@@ -11,7 +11,8 @@ definition on the bus. It never enables a drive, so nothing moves:
 
     launch_test $(ros2 pkg prefix synapticon_bringup)/share/synapticon_bringup/test/hil_bringup_test.py
 
-SYNAPTICON_HIL_ROBOT selects the example robot (default 1dof, for example 28dof), and
+SYNAPTICON_HIL_ROBOT selects the example robot (default 1dof, for example 28dof) or names a
+robot definition file, and
 SYNAPTICON_HIL_HAL the HAL (default ethercat_soem, with its network interface in
 SYNAPTICON_HIL_NETWORK_INTERFACE). colcon test runs it on simulated drives (mock_cia402). CSP by
 default, SYNAPTICON_HIL_IMPEDANCE=1 brings the robot up in impedance mode, where the EtherCAT HAL
@@ -25,7 +26,6 @@ and the bus monitor reports a complete domain.
 """
 
 import math
-import os
 import re
 
 from diagnostic_msgs.msg import DiagnosticStatus
@@ -36,11 +36,12 @@ from synapticon_bringup.testing import (
     example_joints,
     example_test_description,
     hil_launch_arguments,
-    StackProbe,
+    hil_robot,
+    StackTestCase,
 )
 from synapticon_control_msgs.msg import DriveStatus
 
-ROBOT = os.environ.get("SYNAPTICON_HIL_ROBOT", "") or "1dof"
+ROBOT = hil_robot("1dof")
 IMPEDANCE = env_flag("SYNAPTICON_HIL_IMPEDANCE")
 EXPECTED_MODE = -6 if IMPEDANCE else 8
 CONTROLLERS = (
