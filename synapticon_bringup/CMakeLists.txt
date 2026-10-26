@@ -41,10 +41,17 @@ if(BUILD_TESTING)
     add_launch_test(test/hil_bringup_test.py TARGET test_bringup_mock_cia402_${mode} TIMEOUT 180)
     set_tests_properties(test_bringup_mock_cia402_${mode} PROPERTIES ENVIRONMENT "${_hil_env};SYNAPTICON_HIL_ROBOT=2dof")
   endforeach()
+  # The multi-joint test on two simulated drives, with a short soak. The overrun limit is off: the timing of a
+  # build machine says nothing about the drives.
+  add_launch_test(test/hil_multi_joint_test.py TARGET test_multi_joint_mock_cia402 TIMEOUT 180)
+  set(_multi_joint_env SYNAPTICON_HIL_HAL=mock_cia402 SYNAPTICON_HIL_ROBOT=2dof SYNAPTICON_HIL_SOAK_S=5
+    SYNAPTICON_HIL_MAX_OVERRUNS=100000)
+  set_tests_properties(test_multi_joint_mock_cia402 PROPERTIES ENVIRONMENT "${_multi_joint_env}")
 
   # For real drives, the same tests and their runner are installed but not run by colcon test: they need drives on
   # the bus, and one of them moves a joint.
-  install(FILES test/hil_ros2_control_test.py test/hil_bringup_test.py DESTINATION share/${PROJECT_NAME}/test)
+  install(FILES test/hil_ros2_control_test.py test/hil_bringup_test.py test/hil_multi_joint_test.py
+    DESTINATION share/${PROJECT_NAME}/test)
   install(PROGRAMS scripts/run_hil_tests.py DESTINATION lib/${PROJECT_NAME})
 endif()
 

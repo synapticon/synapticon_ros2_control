@@ -11,8 +11,8 @@ The tests ENERGISE AND MOVE the drive at the ring position of joint_1 (see the H
 path test). Run it with the joint free to turn about one revolution and the ROS stack not running,
 inside net_raw_shell.sh --interface <if>:
 
-    ros2 run synapticon_bringup run_hil_tests.py --network-interface <if>   # one drive
-    ros2 run synapticon_bringup run_hil_tests.py --network-interface <if> --two-drives --robot 28dof
+    ros2 run synapticon_bringup run_hil_tests.py --network-interface <if>                  # one drive
+    ros2 run synapticon_bringup run_hil_tests.py --network-interface <if> --robot 28dof    # many drives
 
 Steps: the HIL suite of the EtherCAT HAL in strict mode, the ros2_control path test in CSP and in
 impedance mode, and the bring-up test of the example robot in both modes. Every step runs on the HAL
@@ -84,7 +84,9 @@ def build_steps(args):
     test_dir = os.path.join(get_package_share_directory("synapticon_bringup"), "test")
     path_test = os.path.join(test_dir, "hil_ros2_control_test.py")
     bringup_test = os.path.join(test_dir, "hil_bringup_test.py")
+    multi_joint_test = os.path.join(test_dir, "hil_multi_joint_test.py")
     hal = hal_environment(args)
+    strict = hal | {"SYNAPTICON_HIL_STRICT": "1"}
     impedance = hal | {"SYNAPTICON_HIL_IMPEDANCE": "1"}
     robot = hal | {"SYNAPTICON_HIL_ROBOT": args.robot}
     steps = {
@@ -93,8 +95,28 @@ def build_steps(args):
                 "HIL suite" + (", two drives" if args.two_drives else ""),
                 [suite_binary(args.hal)]
                 + (["--two-drives"] if args.two_drives else []),
-                hal | {"SYNAPTICON_HIL_STRICT": "1"},
+                strict,
                 timeout_s=900.0,
+            )
+        ],
+        "pairs": [
+            Step(
+                "HIL suite, two-drive tests",
+                [suite_binary(args.hal), "--two-drives", "--gtest_filter=DrivePair.*"],
+                strict,
+                timeout_s=300.0,
+            )
+        ],
+        "joints": [
+            Step(
+                ["launch_test", multi_joint_test],
+                timeout_s=900.0,
+            )
+        ],
+        "sweep": [
+            Step(
+                ["launch_test", multi_joint_test],
+                timeout_s=600.0,
             )
         ],
         "path": [
@@ -214,9 +236,9 @@ def parse_args():
     parser.add_argument(
         "--only",
         nargs="+",
-        choices=["suite", "path", "bringup"],
-        default=["suite", "path", "bringup"],
-        help="run only these steps",
+        choices=["suite", "path", "bringup", "pairs", "joints", "sweep"],
+        help="run only these steps (default: suite path bringup with one joint, pairs bringup joints with several). "
+        "sweep moves one joint after the other, to watch them; joints includes it",
     )
     default_log_dir = pathlib.Path.home() / ".ros" / "log" / "hil"
     parser.add_argument(

@@ -83,6 +83,9 @@ def write_yaml(prefix, content):
 
 
     with open(path, encoding="utf-8") as stream:
+        return yaml.safe_load(stream)
+
+
 def example_joints(robot):
     """Joint names of the example robot definition `robot`, in its order."""
     path = os.path.join(

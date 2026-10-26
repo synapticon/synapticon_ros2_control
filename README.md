@@ -271,6 +271,8 @@ SYNAPTICON_HIL_SLAVE_CONFIG="$CFG" ros2 run synapticon_bringup run_hil_tests.py 
 
 The summary at the end shows PASS or FAIL for each step.
 The impedance steps need the drive commissioned for impedance (step 3 above).
+With several drives on the bus, add `--robot <robot>` (for example `2dof` or `28dof`): the run then covers what needs
+several drives, such as drive actions, motion and the fault reaction across joints.
 [doc/Testing.md](synapticon_ros2_control/doc/Testing.md) describes each test, what to expect, the settings and the tests without hardware.
 
 ## 5. Describe your robot

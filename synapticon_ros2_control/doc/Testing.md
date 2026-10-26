@@ -9,9 +9,10 @@ It starts with tests that need no hardware and ends with tests that move a real 
 | Hardware-in-the-loop suite | one drive, two for the two-drive tests | yes | [3](#3-hardware-in-the-loop-suite) |
 | ros2_control path test | one drive | yes | [4](#4-ros2_control-path-test) |
 | Robot bring-up test | every drive of the robot | no | [5](#5-robot-bring-up-test) |
-| Sections 3, 4 and 5 in one run | as above | yes | [6](#6-all-automated-hardware-tests-in-one-run) |
-| Drive check | one drive | only `hold` and `move` | [7](#7-drive-check) |
-| Manual tests | a person, one drive | yes | [8](#8-manual-tests) |
+| Multi-joint test | every drive of a robot with two or more | yes | [6](#6-multi-joint-test) |
+| Sections 3 to 6 in one run | as above | yes | [7](#7-all-automated-hardware-tests-in-one-run) |
+| Drive check | one drive | only `hold` and `move` | [8](#8-drive-check) |
+| Manual tests | a person, one drive | yes | [9](#9-manual-tests) |
 
 `colcon test` runs only section 1.
 The hardware tests are built together with the unit tests, but `colcon test` never starts them.
@@ -113,7 +114,7 @@ It needs a shell with the raw socket capability.
    CFG="$(ros2 pkg prefix synapticon_hardware)/share/synapticon_hardware/config/example_somanet_circulo_safe_motion.yaml"
    ```
 
-When a step fails, see [Troubleshooting](#9-troubleshooting).
+When a step fails, see [Troubleshooting](#10-troubleshooting).
 
 ## 3. Hardware-in-the-loop suite
 
@@ -351,7 +352,36 @@ So an impedance run doubles as the commissioning check of a multi-drive setup.
 `SYNAPTICON_HIL_HAL`, `SYNAPTICON_HIL_NETWORK_INTERFACE` and `SYNAPTICON_HIL_SLAVE_CONFIG` work as in the path test.
 `colcon test` runs this test with the 2 DOF example on simulated drives, in both modes.
 
-## 6. All automated hardware tests in one run
+## 6. Multi-joint test
+
+`hil_multi_joint_test.py` checks what only a robot with several drives shows, through the running stack.
+Everything that one drive covers stays with the suite and the path test.
+The robot runs in impedance mode, with the fault reaction of the drive controller switched on.
+Each joint moves about 0.2 rad.
+
+It runs these steps on one launch:
+
+1. The control loop with every drive on the bus, without power, for 60 s.
+   The bus report on `/diagnostics` stays OK with a complete domain, and the controller manager prints at most 10
+   overrun warnings per minute.
+2. Drive actions on one named joint: the first joint is enabled and quick stopped, the others stay without power.
+3. One command moves all joints at once, and back.
+   Then a sweep moves one joint after the other by 0.3 rad and back, while the others hold.
+   You can watch every joint move, and the test checks that each command moves its own joint and no other.
+4. The fault reaction across joints: an injected `emergency_stop` holds every joint, latched.
+   An enable is refused until the reaction is cleared. After the clear, an enable brings every joint back without a
+   jump.
+5. All joints are disabled.
+
+A watchdog cuts the voltage of every joint and fails the test when one strays more than 0.8 rad from its target.
+
+### Steps
+
+1. Choose the example robot whose drives are all on the bus, for example `2dof` or `28dof`.
+   Every joint must be free to turn by about 1 rad.
+   The bring-up test of [section 5](#5-robot-bring-up-test) in impedance mode checks the commissioning first.
+
+2. Run it:
 
 `run_hil_tests.py` runs three things:
 
@@ -362,14 +392,13 @@ So an impedance run doubles as the commissioning check of a multi-drive setup.
 It waits between the runs, prints a summary, and exits with 0 only when every run passed.
 
 Prepare the drives as in [section 2](#2-before-any-hardware-test) first.
-The suite and the path test move the drive at ring position 0.
-With `--two-drives`, the suite also moves the one at ring position 1.
+Every run moves drives, except the bring-up test.
 
 Run it in the shell of [section 2](#2-before-any-hardware-test):
 
 ```bash
-ros2 run synapticon_bringup run_hil_tests.py --network-interface <interface>   # one drive
-ros2 run synapticon_bringup run_hil_tests.py --network-interface <interface> --two-drives --robot 28dof
+ros2 run synapticon_bringup run_hil_tests.py --network-interface <interface>                   # one drive
+ros2 run synapticon_bringup run_hil_tests.py --network-interface <interface> --robot 28dof     # 28 drives
 ```
 
 At the end, on one drive (about 7 minutes), expect this, each line followed by the path of its log:
@@ -385,7 +414,19 @@ PASS  bring-up 1dof, impedance: -
 
 On a multi-drive setup with `--two-drives`, the suite has no skips.
 
-`--only suite path bringup` runs a subset.
+On a robot with several joints, expect:
+
+```text
+===== Summary
+PASS  HIL suite, two-drive tests: 4 passed
+PASS  bring-up 28dof, CSP: -
+PASS  bring-up 28dof, impedance: -
+PASS  multi-joint test 28dof: -
+```
+
+`--only` runs a subset, from `suite`, `path`, `bringup`, `pairs` (the two-drive tests), `joints` (the
+multi-joint test) and `sweep` (the sweep of the multi-joint test alone, to watch every joint move).
+`--two-drives` adds the two-drive tests to the full suite of a one joint run.
 Each run logs to a directory under `~/.ros/log/hil`, which the summary names.
 Ctrl-C or SIGTERM passes on to the running step, which stops as on its own Ctrl-C.
 No later step runs, and the summary marks the step as interrupted.
@@ -472,7 +513,7 @@ It runs at the real-time priority 60 of the example controller manager, `--rt-pr
 It needs root.
 `drive_check --help` lists every option.
 
-## 8. Manual tests
+## 9. Manual tests
 
 ### Holding against a load
 
@@ -564,13 +605,14 @@ Use a slave_config that sets `0x605A = 6`, as the example config does.
     ros2 service call /drive_controller/set_drive_action synapticon_control_msgs/srv/SetDriveAction "{action: disable, dof_names: []}"
     ```
 
-Two automated tests cover several real drives:
+On a robot with several drives, hold against a load on one joint, and on every joint whose drive model,
+slave_config or mechanics differ.
+The automated tests cover what several drives add: the two-drive tests of the suite
+([section 3](#3-hardware-in-the-loop-suite), step 3), the bring-up of every drive
+([section 5](#5-robot-bring-up-test)), and drive actions, motion and the fault reaction across joints
+([section 6](#6-multi-joint-test)).
 
-- The two-drive tests of the suite ([section 3](#3-hardware-in-the-loop-suite), step 3) check that an action on one
-  drive leaves the other alone.
-- The robot bring-up test ([section 5](#5-robot-bring-up-test)) brings up every drive of a robot definition.
-
-## 9. Troubleshooting
+## 10. Troubleshooting
 
 Problems show up at one of four moments. Find the moment first, then your symptom.
 
