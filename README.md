@@ -205,8 +205,10 @@ ros2 run synapticon_hardware esi_to_slave_config.py --esi SOMANET_CiA_402_v5.6.1
 
 If you pick the wrong ones, bring-up tells you the product code of the drive it found.
 
-One file serves CSP and impedance mode. It also maps the impedance gains, and its `sdo:` block starts with
-conservative values that you adapt to your drive.
+One file serves CSP and impedance mode, with the impedance gains in the map.
+Its `sdo:` block writes a few settings at every bring-up. Check each one for your drive, the comments explain them.
+A setting whose unit depends on the drive goes into the `sdo_si:` block instead, in SI units: bring-up converts it
+with the units it reads from the drive.
 With many drives on one bus, `--csp-only` gives a smaller map without the impedance objects, which leaves more room on
 the bus.
 

@@ -461,7 +461,55 @@ Each run logs to a directory under `~/.ros/log/hil`, which the summary names.
 Ctrl-C or SIGTERM passes on to the running step, which stops as on its own Ctrl-C.
 No later step runs, and the summary marks the step as interrupted.
 
-## 7. Drive check
+### Your own bench
+
+The examples expect their drives at ring position 0 and up, each on the example slave_config.
+For any other bench, describe it in a robot definition file of your own and pass that file with `--robot`.
+Every step then takes the drives from it, so a different bench never needs a code change.
+
+Make the two files with the robot generator, outside the package:
+
+```bash
+python3 synapticon_bringup/scripts/generate_example_robot.py --joints 1 --robot my_bench --out-dir ~/bench
+```
+
+Then edit `~/bench/example_my_bench.yaml`:
+
+- `position`: the drive's ring position, as `ethercat slaves` lists it
+- `slave_config`: the drive's own slave_config, as an absolute path
+- under `bus`: `master_id` (ICube HAL) or `network_interface` (SOEM HAL) of your bench.
+  Every step takes the bus settings from here, only the suite always runs at 500 Hz.
+- `max_joint_torque` under `command_defaults`: a torque ceiling in Nm that suits the drive and the test gains below.
+  A joint with its own test gains needs one, or the impedance tests of the suite fail.
+- a section `hil_tests` with the `stiffness` and `damping` the impedance tests move the joint with.
+  Without it they use 15 Nm/rad and 0.5 Nm s/rad, which suit a geared joint.
+  A motor without a gear has far less inertia, so these values make it chatter loudly.
+  Start well below them, for example 2.5 Nm/rad and 0.03 Nm s/rad, and lower the `damping` under
+  `command_defaults` too.
+  When the joints need different values, give each its own under `joints`.
+  A joint without an entry there takes the section's values:
+
+  ```yaml
+  hil_tests:
+    stiffness: 15.0  # Nm/rad, every joint without an entry below
+    damping: 0.5  # Nm s/rad
+    joints:
+      joint_2: {stiffness: 2.5, damping: 0.03}  # the gearless motor
+  ```
+
+The torque ceiling holds in impedance mode. In CSP the drive's own limit applies. For a low limit there, add the
+drive's max torque in Nm at the motor to the `sdo_si:` list of its slave_config, for example
+`- { index: 0x6072, sub_index: 0, type: uint16, si_value: 0.96 }`.
+
+```bash
+ros2 run synapticon_bringup run_hil_tests.py --network-interface <interface> --robot ~/bench/example_my_bench.yaml
+```
+
+With two joints in the file, the two-drive tests use them as the pair, each with its own slave_config.
+So two drives of different models work too: the suite learns the units, the position increment and the brake
+delay of each drive on its own.
+
+## 8. Drive check
 
 `drive_check` talks to one drive through a HAL, with no ros2_control in between.
 Use it first on a new drive or a new slave_config.
