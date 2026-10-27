@@ -437,6 +437,15 @@ def test_the_output_carries_the_types_of_the_esi_file_and_factors_only_where_sca
     assert all("command_interface" not in c for c in channels_of(config, "tpdo"))
 
 
+@pytest.mark.parametrize("extra", [(), ("--csp-only",)])
+def test_the_driver_never_resets_faults_or_powers_the_drive_on_its_own(
+    tmp_path, esi_file, extra
+):
+    config = yaml.safe_load(generate(tmp_path, esi_file, *extra))
+    assert config["auto_fault_reset"] is False
+    assert config["auto_state_transitions"] is False
+
+
 def test_the_csp_only_file_has_no_impedance_objects(tmp_path, esi_file):
     config = yaml.safe_load(generate(tmp_path, esi_file, "--csp-only"))
     commands = {c.get("command_interface"): c for c in channels_of(config, "rpdo")}

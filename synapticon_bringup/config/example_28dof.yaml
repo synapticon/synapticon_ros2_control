@@ -13,8 +13,8 @@
 #   invert: true      flip position, velocity and effort, for a drive mounted the other way round
 
 bus:
-  control_frequency: 500  # Hz, equal to the update_rate of the controller manager
-  readiness_timeout_s: 20.0  # the time start() gives every drive to send valid data
+  control_frequency: 1000  # Hz, equal to the update_rate of the controller manager
+  readiness_timeout_s: 25.0  # the time start() gives every drive to send valid data
   # network_interface: eth0  # network interface of the drives, for ethercat_soem
   # quick_stop_hold: false  # tests only: no frozen target after a quick stop in impedance mode
   # sdo_read_attempts: 5  # tries of a bring-up SDO read that gets no valid answer
