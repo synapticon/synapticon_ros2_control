@@ -31,6 +31,8 @@ refuse "$1" --stiffness 5x
 refuse "$1" --damping inf
 refuse "$1" --rt-priority 100
 refuse "$1" --rt-priority 50.5
+refuse "$1" --master-id -1
+refuse "$1" --master-id 1x
 "$1" read --hal mock_cia402 --ring-position 65535 --duration 0.2 --travel-deg -10 >/dev/null 2>&1 \
   || { echo "valid options refused"; failed=1; }
 exit "$failed"
