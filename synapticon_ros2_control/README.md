@@ -8,6 +8,7 @@ It installs these packages:
 | `synapticon_hardware` | `SynapticonSystemInterface` (the hardware interface), the HAL interface `SynapticonHalI`, the CiA 402 helpers, the code the EtherCAT HALs share, the slave_config generator, `MockHal` and `drive_check` |
 | `synapticon_ethercat_soem` | `EthercatSoemHal`, the `SynapticonHalI` implementation on the SOEM EtherCAT master |
 | `soem_source` | The vendored [SOEM](https://github.com/OpenEtherCATsociety/SOEM) EtherCAT master library |
+| `synapticon_ethercat_icube` | `EthercatIcubeHal`, the `SynapticonHalI` implementation on the IgH EtherCAT master, through ICube's `ethercat_driver_ros2` |
 | `synapticon_controllers` | `DriveController` (drive states and actions, fault reaction), `MotorCommandController` (impedance commands), `EthercatBusMonitorController` (bus health) |
 | `synapticon_bringup` | The example launch file, robot definitions and controller configurations |
 | `synapticon_description` | The example URDF and its xacro macros, with the motor and flywheel meshes |
