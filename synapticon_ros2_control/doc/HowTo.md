@@ -13,13 +13,13 @@ source install/setup.bash
 
 ## The bus
 
-The SOEM HAL has no command line tool for the bus.
-The bring-up log names a drive that is missing or of another model, and `/diagnostics` shows the bus health and the
-drives while the stack runs.
+The `ethercat` command line tool comes with the IgH master and works with the `ethercat_icube` HAL only.
+With `ethercat_soem` there is no such tool: the bring-up log names a drive that is missing or of another model, and
+`/diagnostics` shows the bus health and the drives while the stack runs.
 
 **Are the drives on the bus?**
 
-With the stack stopped, in a shell with the raw socket capability (see
+With the SOEM HAL and the stack stopped, in a shell with the raw socket capability (see
 [Testing.md](Testing.md#2-before-any-hardware-test)):
 
 ```bash
@@ -28,6 +28,26 @@ ros2 run synapticon_hardware drive_check read --config <slave_config> --network-
 
 It brings the bus up, prints the drive state for 10 seconds and never energises the drive.
 A drive that does not answer is a cabling or power problem, not a software one.
+
+**Is the master up and are the drives on the bus?** (IgH master)
+
+```bash
+ethercat master
+ethercat slaves
+```
+
+`ethercat master` shows `Link: UP` for the network card and the number of slaves it found.
+`ethercat slaves` lists one line per drive, with its ring position, alias, state and name:
+
+```text
+0  0:0  OP  +  SOMANET Circulo CiA402 Drive safe motion
+```
+
+While the stack runs, every drive is in `OP`.
+`PREOP` without the stack running is normal: nobody has taken the drives to `OP`.
+A drive missing from the list is a cabling or power problem, not a software one.
+If `ethercat` itself fails with a permission error on `/dev/EtherCAT0`, your user is not in the group that owns the device.
+After adding it, log in again, or run `newgrp <group>` in the terminal.
 
 **Is the bus healthy while running?**
 
@@ -91,6 +111,17 @@ ros2 run rqt_robot_monitor rqt_robot_monitor
 The tree has `Synapticon/EtherCAT bus` and `Synapticon/Drives` with one entry per joint.
 Each branch takes the worst state of its entries, so a single faulted drive turns `Drives` red.
 
+**What does the drive itself report?** (IgH master)
+These reads go straight to the drive over the mailbox, so they also work while the stack runs on the IgH master.
+Replace `-p0` with the ring position of the drive.
+
+```bash
+ethercat upload -p0 --type string 0x100a 0   # firmware version, for example v5.6.11
+ethercat upload -p0 --type uint16 0x603f 0   # error code of the last fault, 0x0000 when none
+ethercat upload -p0 --type int16 0x605a 0    # quick stop option code, 6 or 2 are supported
+ethercat upload -p0 --type uint8 0x2150 1    # torque sensor type, 1 (Analog Input) for impedance
+```
+
 ## ros2_control
 
 **Are the controllers loaded and active?**
@@ -135,13 +166,14 @@ Its title line starts with `!!`.
 
 | Block | Meaning | What to do |
 |---|---|---|
-| `FIRMWARE UPDATE NEEDED: SOMANET 5.6.11 OR NEWER` | A drive runs older firmware, or its version is unreadable | Impedance joints refuse to start. Update the drive firmware |
+| `FIRMWARE UPDATE NEEDED: SOMANET 5.6.11 OR NEWER` | A drive runs older firmware, or its version is unreadable | Impedance joints refuse to start. See [FirmwareUpdate.md](FirmwareUpdate.md) |
 | `UNITS OF A DRIVE UNKNOWN` | An SDO read of the encoder resolution, the velocity unit, the rated torque or the gear ratio failed | Joints that may be energised refuse to start. Check the warnings above it, then bring up again |
 | `IMPEDANCE JOINTS WITHOUT A TORQUE SENSOR` | An impedance joint has no torque sensor type in 0x2150:1 | Commission the drive for impedance, see the README |
 | `NO CONTROLLED QUICK STOP: 0x605A IS NOT 6 OR 2` | 0x605A is neither 6 nor 2, so `quick_stop` falls back to `disable` | Set 0x605A, see [QuickStop.md](QuickStop.md) |
 | `INTERFACES WITHOUT DRIVE DATA` | The URDF declares interfaces this hardware does not know | Check the listed names for a typo |
 
-The hardware logs as `SynapticonSystemInterface` and `EthercatSoemHal` in the launch output.
+The hardware logs as `SynapticonSystemInterface` and, depending on the HAL, `EthercatSoemHal` or `EthercatIcubeHal`
+in the launch output.
 The logs of past runs are in `~/.ros/log`.
 
 ## Drive actions

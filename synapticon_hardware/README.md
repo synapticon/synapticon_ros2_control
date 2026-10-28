@@ -3,8 +3,9 @@
 The ros2_control hardware for Synapticon SOMANET drives, and everything the drive layers share.
 
 The hardware interface `SynapticonSystemInterface` is what ros2_control loads, one for every mode.
-It talks to the drives through a HAL, which the `<hardware>` parameter `hal` chooses:
-`ethercat_soem` for real drives (the default, from `synapticon_ethercat_soem`), `mock` or `mock_cia402` without them.
+It talks to the drives through a HAL, which the `<hardware>` parameter `hal` chooses: `ethercat_soem` (the default,
+from `synapticon_ethercat_soem`) or `ethercat_icube` (from `synapticon_ethercat_icube`) for real drives, `mock` or
+`mock_cia402` without them.
 
 What else is in the package:
 
