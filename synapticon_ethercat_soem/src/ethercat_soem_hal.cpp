@@ -600,8 +600,8 @@ bool EthercatSoemHal::start()
     }
   }
 
-  // SYNC0 at the control frequency, for every drive whose slave_config sets assign_activate. The drives check it in
-  // the transition to SAFE-OP, which is requested only afterwards.
+  // SYNC0 at the control frequency, as the EtherCAT ICube HAL sets it from the slave_config's assign_activate. The
+  // drives check it in the transition to SAFE-OP, which is requested only afterwards.
   bus_->capture_realtime_offset();
   ecx_configdc(&context);
   const auto cycle_ns = static_cast<uint32>(1e9 / config_.control_frequency);

@@ -31,9 +31,10 @@ struct MappedChannel
 ///
 /// The PDOs of the slave_config follow each other in mapping order, each entry right after the one before. A channel
 /// reads as factor * raw + offset into its buffer slot. A command channel writes factor * command + offset while its
-/// command is a number, else its raw default, else leaves the bytes as they are. The mode of operation (0x6060)
-/// carries the joint's mode when that is a standard one, and the target position (0x607A) carries the actual position
-/// unless the drive runs CSP or impedance mode and the command is a number.
+/// command is a number, else its raw default, else leaves the bytes as they are. Like the generic CiA 402 drive of the
+/// EtherCAT ICube HAL, the mode of operation (0x6060) carries the joint's mode when that is a standard one, and the
+/// target position (0x607A) carries the actual position unless the drive runs CSP or impedance mode and the command
+/// is a number.
 class ProcessImage
 {
 public:

@@ -65,8 +65,8 @@ public:
   /// Typed configuration, for direct use. Call once before connect(). The HalConfig overload ends here.
   bool setup(SoemConfig config, std::vector<JointConfig> joints);
 
-  /// Configuration from the description's parameters. The hardware parameter `network_interface` names the network
-  /// interface the drives are wired to.
+  /// Configuration from the description's parameters, as for the EtherCAT ICube HAL, with the hardware parameter
+  /// `network_interface` in place of the IgH master index.
   bool setup(const HalConfig& config) override;
 
   bool connect() override;
