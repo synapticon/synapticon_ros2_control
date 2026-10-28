@@ -211,7 +211,9 @@ Ctrl-C or SIGTERM fails the running test the same way, then the suite releases t
    Expect the same, with 52 passed: the SOEM HAL has one bring-up test more.
    A test stuck in the bus activation of the EtherCAT driver ignores SIGINT and SIGTERM, so keep `-s KILL`.
 
-3. With a second drive of the same model on the bus, also run the two-drive tests:
+3. With a second drive on the bus, also run the two-drive tests.
+   A drive of another model needs its own slave_config, given in a robot definition (see
+   [Your own bench](#your-own-bench)):
 
    ```bash
    timeout -s KILL 900 "$(ros2 pkg prefix synapticon_ethercat_soem)/lib/synapticon_ethercat_soem/ethercat_soem_hil_test" \
@@ -238,10 +240,10 @@ Write it down, and look into it when it comes back.
 
 | Variable | Default | Meaning |
 |---|---|---|
-| `SYNAPTICON_HIL_ROBOT` | unset | robot definition of the bench: its first joint is the bench drive, its second the second drive |
-| `SYNAPTICON_HIL_SLAVE_CONFIG` | the installed example slave_config | base slave_config |
-| `SYNAPTICON_HIL_NETWORK_INTERFACE` | unset | network interface of the drives, required by `ethercat_soem_hil_test` |
-| `SYNAPTICON_HIL_MASTER` | `0` | IgH master index, `ethercat_icube_hil_test` only |
+| `SYNAPTICON_HIL_ROBOT` | unset | robot definition file of the bench, see [Your own bench](#your-own-bench). Its first joint is the drive under test, its second the second drive. Its `bus` section sets the bus, except `control_frequency`: the suite always runs at 500 Hz |
+| `SYNAPTICON_HIL_SLAVE_CONFIG` | the installed example slave_config | base slave_config of a drive that names none |
+| `SYNAPTICON_HIL_NETWORK_INTERFACE` | the robot file's `network_interface` | network interface of the drives, needed by `ethercat_soem_hil_test` |
+| `SYNAPTICON_HIL_MASTER` | the robot file's `master_id`, or `0` | IgH master index, `ethercat_icube_hil_test` only |
 | `SYNAPTICON_HIL_ALIAS` | `0` | slave alias, only `0` is supported |
 | `SYNAPTICON_HIL_POSITION` | `0`, or the robot file's | ring position, overrides the robot file |
 | `SYNAPTICON_HIL_POSITION_2` | the robot file's second joint, or `SYNAPTICON_HIL_POSITION` + 1 | ring position of the second drive, for `--two-drives` |

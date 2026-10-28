@@ -12,7 +12,7 @@
 ///   ros2 run synapticon_ethercat_icube ethercat_icube_hil_test [--two-drives]
 ///
 /// Besides the variables of the shared EtherCAT HIL tests, it reads (optional):
-///   SYNAPTICON_HIL_MASTER        IgH master index (default 0)
+///   SYNAPTICON_HIL_MASTER        IgH master index (default: the robot definition's master_id, else 0)
 
 #include <string>
 #include <vector>
@@ -25,14 +25,20 @@
 namespace synapticon_hardware::testing
 {
 using EthercatHalUnderTest = synapticon_ethercat_icube::EthercatIcubeHal;
+}  // namespace synapticon_hardware::testing
 
-/// The bench's bus on the IgH master `SYNAPTICON_HIL_MASTER`.
+#include "synapticon_hardware/testing/ethercat_hal_tests.hpp"
+
+namespace synapticon_hardware::testing
+{
+/// The bench's bus on the IgH master `SYNAPTICON_HIL_MASTER`, else the robot definition's `master_id`, else 0.
 bool set_up_hal(EthercatHalUnderTest& hal, const ethercat::BusConfig& bus,
                 const std::vector<ethercat::JointConfig>& joints)
 {
   synapticon_ethercat_icube::EthercatConfig config;
   static_cast<ethercat::BusConfig&>(config) = bus;
-  config.master_id = static_cast<unsigned>(std::stoul(env_or("SYNAPTICON_HIL_MASTER", "0")));
+  config.master_id =
+      static_cast<unsigned>(std::stoul(env_or("SYNAPTICON_HIL_MASTER", robot_bus_parameter("master_id", "0"))));
   std::vector<synapticon_ethercat_icube::EthercatJointConfig> icube_joints;
   for (const auto& joint : joints)
   {
@@ -41,8 +47,6 @@ bool set_up_hal(EthercatHalUnderTest& hal, const ethercat::BusConfig& bus,
   return hal.setup(config, icube_joints);
 }
 }  // namespace synapticon_hardware::testing
-
-#include "synapticon_hardware/testing/ethercat_hal_tests.hpp"
 
 int main(int argc, char** argv)
 {
