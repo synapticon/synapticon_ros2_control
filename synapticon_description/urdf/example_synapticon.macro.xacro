@@ -144,7 +144,7 @@
     @param robot_config          Path of the robot definition, which the HAL reads.
     @param impedance             true: impedance mode (0x6060 = -6) for every joint. false: CSP (8).
     @param default_slave_config  slave_config of the joints that name none.
-    @param hal                   ethercat_soem for real drives, mock or mock_cia402 for none.
+    @param hal                   ethercat_soem or ethercat_icube for real drives, mock or mock_cia402 for none.
     @param network_interface     Network interface of the drives. Left out when empty.
   -->
   <xacro:macro name="synapticon_hardware"

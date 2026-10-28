@@ -12,8 +12,8 @@ about 0.3 rad. Run it on purpose, with the joint free to turn and nothing else h
     launch_test $(ros2 pkg prefix synapticon_bringup)/share/synapticon_bringup/test/hil_ros2_control_test.py
 
 The 1 DOF example is brought up through the example launch on the HAL that SYNAPTICON_HIL_HAL
-names (default ethercat_soem, with its network interface in SYNAPTICON_HIL_NETWORK_INTERFACE).
-colcon test runs it on simulated drives (mock_cia402). CSP by default, SYNAPTICON_HIL_IMPEDANCE=1
+names (default ethercat_soem, with its network interface in SYNAPTICON_HIL_NETWORK_INTERFACE, or
+ethercat_icube). colcon test runs it on simulated drives (mock_cia402). CSP by default, SYNAPTICON_HIL_IMPEDANCE=1
 runs the same steps in impedance mode through the MotorCommandController.
 SYNAPTICON_HIL_SLAVE_CONFIG selects the slave_config (default: the installed example config).
 

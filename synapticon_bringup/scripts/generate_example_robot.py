@@ -37,6 +37,7 @@ class Hint:
 def robot_data(names):
     """The robot definition as data, with a note per key."""
     bus = {
+        "master_id": (0, "IgH master, for ethercat_icube"),
         "control_frequency": (
             500,
             "Hz, equal to the update_rate of the controller manager",
