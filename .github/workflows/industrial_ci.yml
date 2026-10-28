@@ -9,10 +9,34 @@ on:
 
 jobs:
   industrial_ci:
+    name: ${{ matrix.name }}
     strategy:
+      fail-fast: false
       matrix:
-        env:
-          - {ROS_DISTRO: jazzy, ROS_REPO: main, UPSTREAM_WORKSPACE: synapticon_ros2_control.repos}
+        include:
+          # The plain build: everything but the EtherCAT ICube HAL, without the IgH master.
+          - name: jazzy
+            env:
+              ROS_DISTRO: jazzy
+              ROS_REPO: main
+              UPSTREAM_WORKSPACE: synapticon_ros2_control.repos
+          # With the EtherCAT ICube HAL. industrial_ci forwards only its own variables into its container, so the
+          # build switch goes through DOCKER_RUN_OPTS. Building it needs only the IgH user-space library, not the kernel
+          # module. The driver stack is an upstream workspace, so only this repository's packages are tested.
+          # Its build also runs a Python script that needs lxml, which its manifests do not declare.
+          - name: jazzy, EtherCAT ICube HAL
+            env:
+              ROS_DISTRO: jazzy
+              ROS_REPO: main
+              UPSTREAM_WORKSPACE: synapticon_ros2_control.repos ethercat_icube.repos
+              DOCKER_RUN_OPTS: -e SYNAPTICON_HAL_ETHERCAT_ICUBE=ON
+              BEFORE_INIT: >-
+                export DEBIAN_FRONTEND=noninteractive &&
+                apt-get update -qq &&
+                apt-get install -qq -y autoconf automake libtool git build-essential pkg-config python3-lxml &&
+                git clone --depth 1 --branch 1.6.9 https://gitlab.com/etherlab.org/ethercat.git /tmp/igh &&
+                (cd /tmp/igh && ./bootstrap && ./configure --prefix=/usr --disable-kernel &&
+                make -j"$(nproc)" && make install) && ldconfig
     runs-on: ubuntu-latest
     timeout-minutes: 60
     steps:
