@@ -797,6 +797,9 @@ Problems show up at one of four moments. Find the moment first, then your sympto
   It refuses an index or a type in the PDO mapping of its slave_config. On the IgH master, `dmesg` and
   `ethercat slaves` tell why.
   Generate the slave_config from the drive's ESI file.
+- Settings reads (SDO) fail at random with `Input/output error`, on a drive with Ethernet over EtherCAT such as the
+  Integro. NetworkManager sends traffic through the drive's `eoe` interface.
+  See [NewDriveModel.md](NewDriveModel.md#ethernet-over-ethercat).
 - Bring-up warns `No valid answer to the SDO read` and tries again, or refuses with `UNITS OF A DRIVE UNKNOWN`.
   After a rescan of the bus, the IgH master reads each drive's object dictionary, and meanwhile the drive answers no
   other read. A rescan can follow when a program releases the master.

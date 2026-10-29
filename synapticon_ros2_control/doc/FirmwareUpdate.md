@@ -22,6 +22,26 @@ With several drives, repeat the steps for each position.
   ethercat upload -p0 --type string 0x100a 0   # for example v5.6.6
   ```
 
+Some drives, for example the SOMANET Integro, also speak Ethernet over EtherCAT (EoE).
+For each of them, the master creates a network interface on the PC, named like `eoe0s1`.
+If NetworkManager takes it over, its traffic blocks the drive's message channel.
+Reads and file transfers then fail at random.
+
+Nothing here needs these interfaces, so tell NetworkManager once to ignore them:
+
+```bash
+printf '[keyfile]\nunmanaged-devices+=interface-name:eoe*\n' | sudo tee /etc/NetworkManager/conf.d/99-ethercat-eoe.conf
+sudo nmcli general reload
+```
+
+If a drive has already stopped answering, bring its interface down and restart the drive's communication:
+
+```bash
+sudo ip link set eoe0s1 down
+ethercat states -p0 INIT
+ethercat states -p0 PREOP
+```
+
 ## 1. Identify the drive
 
 The firmware package is selected by the drive's **identifier**.
@@ -43,21 +63,37 @@ The output is JSON. Shortened example:
  "components": [...]}}
 ```
 
-Only three fields matter, and they make up the identifier `<id>-<version>-<keyId>`:
+The identifier is made of three numbers, four on an Integro. The firmware bundle page shows them as columns:
 
-| Field     | Example |
-|-----------|---------|
-| `id`      | `8604`  |
-| `version` | `02`    |
-| `keyId`   | `2332`  |
+| Page column | Field | Circulo 7 | ACTILINK-S |
+|---|---|---|---|
+| Firmware ID | `id` | `8604` | `6000` |
+| Rev. | `version` | `02` | `05` |
+| Enc. Key | `keyId` | `2332` | `2423` |
+| Protocol | Integro only | none | `1` |
 
-Here the identifier is `8604-02-2332`.
+So the identifiers are `8604-02-2332` and `6000-05-2423-1`.
+Go by these numbers, not by the product names on the page.
+
+A drive built into a product, like the ACTILINK-S, has a second block named `assembly` next to `device`.
+Then `id` and `version` come from `assembly`. The `keyId` still comes from `device`.
+
+Integro packages exist once per fieldbus. The fourth number picks it: `0` EtherNet/IP, `1` EtherCAT, `2` PROFINET.
 
 ## 2. Back up the drive configuration
 
 The drive stores its configuration (for example the commutation offset `0x2001` and the quick stop settings)
-in `config.csv`. Save it, together with the other files you may need later.
-`foe_read` prints the file, so redirect it into a local file.
+in files. Save all of them. First list them:
+
+```bash
+ethercat foe_read -p0 fs-getlist
+```
+
+Usually the list has `config.csv` and `plant_model.csv`.
+A drive whose configuration was never saved has neither. Its setup is then in protected factory files,
+such as `.factory_config`.
+
+`foe_read` prints a file, so redirect it into a local file. Do this for every file in the list.
 All later steps run from the directory that contains `drive_backup`, so do not change into it:
 
 ```bash
@@ -74,16 +110,21 @@ Keep the backup in a permanent place, one directory per drive.
 
 Download the package for your identifier from the [Synapticon firmware bundles](https://bundles.synapticon.com/latest/latest/packages),
 under "Browse SOMANET Firmwares".
-The package is named after the identifier, for example `package_SOMANET-Circulo-7_8604-02-2332_motion-drive_v5.6.11.zip`.
-Unzip it. It contains:
+The package is named after the identifier, for example `package_SOMANET-Circulo-7_8604-02-2332_motion-drive_v5.6.11.zip`
+or `package_ACTILINK_6000-05-2423-1_motion-drive_v5.6.11.zip`.
+Unzip it. Depending on the drive, it contains:
 
 - the firmware binary, for example `app_8604-02_motion-drive_v5.6.11_2332.bin`
-- the SII (EEPROM) file, `somanet_cia402.sii`
+- the SII (EEPROM) file, `somanet_cia402.sii`. Integro packages have none.
 - the ESI as a nested zip, `SOMANET_CiA_402.xml.zip`. Unzip it too, you need it later to generate the slave_config.
-- possibly a communication firmware, `com_<...>.bin`
+- possibly a communication firmware, `com_<...>.bin`. Integro packages have one.
+
+Also download the package of the version the drive runs now.
+The firmware cannot be read back from the drive, so this package is your way back.
 
 ## 4. Write the SII
 
+Skip this step if the package has no SII file.
 The SII must be written in **INIT**, not in BOOT:
 
 ```bash
@@ -157,6 +198,21 @@ ethercat foe_write -p0 drive_backup/config.csv
   see "Commission the drive for impedance" in the README.
 - Check that bring-up no longer complains about the firmware version.
 
+The drive also keeps its own copy of the ESI, and the update does not replace it.
+The HALs never read that copy, only tools that take the ESI from the drive do. So updating it is optional.
+
+To update it, split the new `SOMANET_CiA_402.xml.zip` into parts of 9000 bytes, the size the drive uses,
+and write them in BOOT:
+
+```bash
+split -b 9000 -d -a 3 SOMANET_CiA_402.xml.zip SOMANET_CiA_402.xml.zip.part
+ethercat states -p0 BOOT
+for part in SOMANET_CiA_402.xml.zip.part*; do ethercat foe_write -p0 "$part"; done
+ethercat states -p0 INIT
+ethercat states -p0 PREOP
+```
+
+Compare with `fs-getlist` first: if the drive holds more parts than you write, the extra old parts stay behind.
 
 ## Sources
 

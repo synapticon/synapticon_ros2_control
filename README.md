@@ -51,7 +51,10 @@ This HAL sits below the ros2_control hardware interface, which ros2_control itse
 
 ### 2.1. Hardware
 
-Configure the drives with [OBLAC Drives](https://www.synapticon.com/en/products/oblac-drives) before the first use.
+Commission each drive with a commissioning tool, for example
+[OBLAC Drives](https://www.synapticon.com/en/products/oblac-drives), before the first use.
+The stack reads what it needs from the drive, its units among them, and never changes its commissioning (see
+[Commissioning and units](synapticon_ros2_control/doc/NewDriveModel.md#commissioning-and-units)).
 Detailed instructions and wiring diagrams for all the devices are in the
 [Synapticon documentation](https://www.synapticon.com/en/support/dokumentation).
 The drives can be daisy chained in any order, as the figure shows.
@@ -224,6 +227,9 @@ EtherCAT bus
 ## 3. Prepare a drive
 
 Do these steps once per drive before the first run on hardware.
+For a drive model other than the Circulo Safe Motion, read
+[doc/NewDriveModel.md](synapticon_ros2_control/doc/NewDriveModel.md) first: wiring, network setup, units and gains
+can differ.
 
 ### 3.1. Check the firmware
 
@@ -647,6 +653,7 @@ This needs as many joints as motors in each transmission.
 |---|---|
 | [doc/HowTo.md](synapticon_ros2_control/doc/HowTo.md) | Diagnostics on a running system |
 | [doc/Testing.md](synapticon_ros2_control/doc/Testing.md) | Unit tests, hardware-in-the-loop tests, manual tests |
+| [doc/NewDriveModel.md](synapticon_ros2_control/doc/NewDriveModel.md) | What to check on a drive model other than the Circulo |
 | [doc/FirmwareUpdate.md](synapticon_ros2_control/doc/FirmwareUpdate.md) | Updating the drive firmware over EtherCAT |
 | [doc/QuickStop.md](synapticon_ros2_control/doc/QuickStop.md) | Quick stop options and behaviour |
 | [doc/ControlLayers.md](synapticon_ros2_control/doc/ControlLayers.md) | Motion controller, fault reaction and drive, and who stops what |
