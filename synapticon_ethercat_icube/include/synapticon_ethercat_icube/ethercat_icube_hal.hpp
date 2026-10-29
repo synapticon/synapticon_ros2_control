@@ -98,6 +98,10 @@ protected:
   /// drive instead.
   int upload(uint16_t position, uint16_t index, uint8_t sub_index, std::vector<uint8_t>& bytes, std::size_t& size,
              uint32_t& abort_code) const override;
+  /// One SDO download through the master, only while the bus is configured and not active. A test can take it
+  /// instead of the drive.
+  int download(uint16_t position, uint16_t index, uint8_t sub_index, const std::vector<uint8_t>& bytes,
+               uint32_t& abort_code) const override;
   /// Bring the configured slaves to OP and start the cyclic exchange. Virtual so a test can stand in for the master.
   virtual bool activate_bus();
   /// Whether the master reports a complete working counter and every joint's drive online and in OP. Virtual so a test

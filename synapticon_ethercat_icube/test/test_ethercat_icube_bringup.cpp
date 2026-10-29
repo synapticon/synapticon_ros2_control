@@ -10,6 +10,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
+#include <fstream>
 #include <limits>
 #include <map>
 #include <optional>
@@ -38,13 +39,27 @@ constexpr int IMPEDANCE = ec::mode::IMPEDANCE;
 constexpr double RAD_PER_RPM = 2.0 * M_PI / 60.0;
 constexpr uint32_t ABORT_NO_OBJECT = 0x06020000;
 
+/// A slave_config with `content` after its identity and the measured velocity, which a joint that gets power needs,
+/// written to a temporary file. Bring-up reads only its unit sections and the velocity channel, since the master that
+/// would read the rest is scripted. Returns its path.
+std::string slave_config(const std::string& content = "")
+{
+  static int count = 0;
+  const std::string path = ::testing::TempDir() + "icube_bringup_" + std::to_string(count++) + ".yaml";
+  std::ofstream(path) << "vendor_id: 0x22d2\nproduct_id: 0x302\n"
+                      << "tpdo:\n  - index: 0x1a00\n    channels:\n"
+                         "      - { index: 0x606c, sub_index: 0, type: int32, state_interface: velocity }\n"
+                      << content;
+  return path;
+}
+
 /// One joint at ring position `position` in `mode`.
 EthercatJointConfig joint(uint16_t position = 0, int mode = CSP)
 {
   EthercatJointConfig config;
   config.name = "joint_" + std::to_string(position + 1);
   config.position = position;
-  config.slave_config_file = "unused.yaml";
+  config.slave_config_file = slave_config();
   config.mode_of_operation = mode;
   return config;
 }
@@ -101,6 +116,22 @@ public:
   void drop(CoeAddress object, uint16_t position = 0)
   {
     objects_.erase({ position, object.index, object.subindex });
+  }
+
+  /// What the drive at `position` holds in `object`, as an unsigned value.
+  std::optional<uint32_t> held(CoeAddress object, uint16_t position = 0) const
+  {
+    const auto found = objects_.find({ position, object.index, object.subindex });
+    if (found == objects_.end())
+    {
+      return std::nullopt;
+    }
+    uint32_t value = 0;
+    for (std::size_t i = 0; i < found->second.size() && i < 4; ++i)
+    {
+      value |= static_cast<uint32_t>(found->second[i]) << (8 * i);
+    }
+    return value;
   }
 
   void fail_bus_configuration()
@@ -179,6 +210,13 @@ protected:
     return 0;
   }
 
+  int download(uint16_t position, uint16_t index, uint8_t sub_index, const std::vector<uint8_t>& bytes,
+               uint32_t& /*abort_code*/) const override
+  {
+    objects_[{ position, index, sub_index }] = bytes;
+    return 0;
+  }
+
   bool exchange_read() override
   {
     return exchanges_;
@@ -190,7 +228,7 @@ protected:
   }
 
 private:
-  std::map<std::tuple<uint16_t, uint16_t, uint8_t>, std::vector<uint8_t>> objects_;
+  mutable std::map<std::tuple<uint16_t, uint16_t, uint8_t>, std::vector<uint8_t>> objects_;
   bool configures_{ true };
   bool activates_{ true };
   bool exchanges_{ true };
@@ -517,6 +555,28 @@ TEST_F(BringUp, ReadsTheQuickStopDecelerationInTheVelocityUnit)
   set_up({ joint() });
   ASSERT_TRUE(hal_.connect());
   EXPECT_NEAR(hal_.quick_stop_deceleration(0), 3000.0 * RAD_PER_RPM, 1e-9);
+}
+
+/// An sdo_si entry reaches the drive in its unit, written after the units were read and before the ramp is read.
+TEST_F(BringUp, WritesAnSdoSiEntryInTheDrivesUnit)
+{
+  EthercatJointConfig configured = joint();
+  configured.slave_config_file =
+      slave_config("sdo_si:\n  - { index: 0x6085, sub_index: 0, type: uint32, si_value: 1000.0 }\n");
+  set_up({ configured });
+  ASSERT_TRUE(hal_.connect());
+  EXPECT_EQ(hal_.held(ec::coe::QUICK_STOP_DECELERATION), 9549u);  // 1000 rad/s^2 in rev/min per s
+  EXPECT_NEAR(hal_.quick_stop_deceleration(0), 1000.0, 0.1);
+}
+
+/// A slave_config that breaks a unit rule stops the bring-up before the bus is configured.
+TEST_F(BringUp, StopsOnARawValueOfAUnitDependentObject)
+{
+  EthercatJointConfig configured = joint();
+  configured.slave_config_file = slave_config("sdo:\n  - { index: 0x6085, sub_index: 0, type: uint32, value: 5000 }\n");
+  set_up({ configured });
+  EXPECT_FALSE(hal_.connect());
+  EXPECT_EQ(hal_.held(ec::coe::QUICK_STOP_DECELERATION), 3000u) << "nothing may be written";
 }
 
 }  // namespace

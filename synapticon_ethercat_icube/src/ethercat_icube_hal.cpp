@@ -90,10 +90,9 @@ bool EthercatIcubeHal::connect()
     return false;
   }
   bus_ = std::make_unique<ethercat_driver::EthercatBusManager>();
-  // Allocated once: the slave plugins keep pointers into the buffers.
-  set_up_drives(drives(), config_.quick_stop_hold, config_.control_frequency);
-
-  if (!configure_bus() || !check_drives(drives()))
+  // Sized here and never resized, because the slave plugins point into these buffers.
+  if (!set_up_drives(drives(), config_.quick_stop_hold, config_.control_frequency) || !configure_bus() ||
+      !check_drives(drives(), { config_.sdo_read_attempts, config_.sdo_retry_wait_s }))
   {
     bus_.reset();
     return false;
@@ -259,6 +258,16 @@ int EthercatIcubeHal::upload(uint16_t position, uint16_t index, uint8_t sub_inde
     return -1;
   }
   return bus_->readSlaveSdo(position, index, sub_index, bytes.data(), bytes.size(), &size, &abort_code);
+}
+
+int EthercatIcubeHal::download(uint16_t position, uint16_t index, uint8_t sub_index, const std::vector<uint8_t>& bytes,
+                               uint32_t& abort_code) const
+{
+  if (!bus_)
+  {
+    return -1;
+  }
+  return bus_->writeSlaveSdo(position, index, sub_index, bytes.data(), bytes.size(), &abort_code);
 }
 
 bool EthercatIcubeHal::activate_bus()

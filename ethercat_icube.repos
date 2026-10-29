@@ -7,4 +7,4 @@ repositories:
   ethercat_driver_ros2:
     type: git
     url: https://github.com/synapticon/ethercat_driver_ros2.git
-    version: a9ef092666cb9f858dbae7b192ddb7e891be2be6
+    version: 0902983f286833608f16301263edbfa6fc3576d9

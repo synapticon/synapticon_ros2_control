@@ -167,7 +167,7 @@ Its title line starts with `!!`.
 | Block | Meaning | What to do |
 |---|---|---|
 | `FIRMWARE UPDATE NEEDED: SOMANET 5.6.11 OR NEWER` | A drive runs older firmware, or its version is unreadable | Impedance joints refuse to start. See [FirmwareUpdate.md](FirmwareUpdate.md) |
-| `UNITS OF A DRIVE UNKNOWN` | An SDO read of the encoder resolution, the velocity unit, the rated torque or the gear ratio failed | Joints that may be energised refuse to start. Check the warnings above it, then bring up again |
+| `UNITS OF A DRIVE UNKNOWN` | A drive's velocity unit, position resolution, rated torque, gear ratio or feed constant could not be read or understood, or contradicts the `units:` section of its slave_config | Joints that may be energised refuse to start. The warnings above it name the value. See [Commissioning and units](NewDriveModel.md#commissioning-and-units) |
 | `IMPEDANCE JOINTS WITHOUT A TORQUE SENSOR` | An impedance joint has no torque sensor type in 0x2150:1 | Commission the drive for impedance, see the README |
 | `NO CONTROLLED QUICK STOP: 0x605A IS NOT 6 OR 2` | 0x605A is neither 6 nor 2, so `quick_stop` falls back to `disable` | Set 0x605A, see [QuickStop.md](QuickStop.md) |
 | `INTERFACES WITHOUT DRIVE DATA` | The URDF declares interfaces this hardware does not know | Check the listed names for a typo |
