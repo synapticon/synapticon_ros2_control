@@ -7,4 +7,4 @@ repositories:
   ethercat_driver_ros2:
     type: git
     url: https://github.com/synapticon/ethercat_driver_ros2.git
-    version: 0902983f286833608f16301263edbfa6fc3576d9
+    version: feat/write-slave-sdo
