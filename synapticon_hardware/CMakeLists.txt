@@ -26,10 +26,11 @@ endforeach()
 add_library(${PROJECT_NAME} SHARED src/synapticon_interface.cpp)
 target_include_directories(${PROJECT_NAME} PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
-  $<INSTALL_INTERFACE:include>
+  $<INSTALL_INTERFACE:include/${PROJECT_NAME}>
 )
-ament_target_dependencies(${PROJECT_NAME} ${_deps})
-target_link_libraries(${PROJECT_NAME} soem_source::soem)
+target_link_libraries(${PROJECT_NAME} PUBLIC
+  hardware_interface::hardware_interface pluginlib::pluginlib rclcpp::rclcpp rclcpp_lifecycle::rclcpp_lifecycle
+  soem_source::soem)
 
 pluginlib_export_plugin_description_file(hardware_interface synapticon_interface_plugin.xml)
 
@@ -37,7 +38,7 @@ pluginlib_export_plugin_description_file(hardware_interface synapticon_interface
 add_executable(torque_control_executable test/drive_check.cpp)
 target_link_libraries(torque_control_executable soem_source::soem)
 
-install(DIRECTORY include/ DESTINATION include)
+install(DIRECTORY include/ DESTINATION include/${PROJECT_NAME})
 install(
   TARGETS ${PROJECT_NAME} torque_control_executable
   EXPORT export_${PROJECT_NAME}

@@ -18,7 +18,7 @@ if(BUILD_TESTING)
   # The controller manager comes up with the 2 DOF configuration on a dummy network interface.
   install(PROGRAMS test/setup_test_environment.sh DESTINATION share/${PROJECT_NAME}/test)
   ament_add_gtest_executable(test_controller_manager_integration test/test_controller_manager_integration.cpp)
-  ament_target_dependencies(test_controller_manager_integration rclcpp)
+  target_link_libraries(test_controller_manager_integration rclcpp::rclcpp)
   add_ros_test(test/simple_test_with_virtual_eth.launch.py
     TIMEOUT 30 ARGS "test_binary_dir:=${CMAKE_CURRENT_BINARY_DIR}")
 endif()
