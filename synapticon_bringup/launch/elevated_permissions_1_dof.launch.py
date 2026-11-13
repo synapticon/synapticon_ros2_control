@@ -18,7 +18,7 @@ def generate_launch_description():
         [
             FindPackageShare("synapticon_bringup"),
             "config",
-            "example_1dof_controllers.yaml",
+            "single_dof_controllers.yaml",
         ]
     )
 

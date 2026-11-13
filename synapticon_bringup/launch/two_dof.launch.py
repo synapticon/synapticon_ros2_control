@@ -57,7 +57,7 @@ def generate_launch_description():
         [
             FindPackageShare("synapticon_bringup"),
             "config",
-            "example_2dof_controllers.yaml",
+            "two_dof_controllers.yaml",
         ]
     )
     rviz_config_file = PathJoinSubstitution(

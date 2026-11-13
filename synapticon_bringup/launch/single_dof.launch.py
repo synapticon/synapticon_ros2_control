@@ -43,7 +43,7 @@ def generate_launch_description():
                 [
                     FindPackageShare("synapticon_description"),
                     "urdf",
-                    "example_synapticon.urdf.xacro",
+                    "single_dof_in_world.urdf.xacro",
                 ]
             ),
             " eth_device:=",
@@ -57,11 +57,11 @@ def generate_launch_description():
         [
             FindPackageShare("synapticon_bringup"),
             "config",
-            "example_1dof_controllers.yaml",
+            "single_dof_controllers.yaml",
         ]
     )
     rviz_config_file = PathJoinSubstitution(
-        [FindPackageShare("synapticon_bringup"), "rviz", "example_synapticon.rviz"]
+        [FindPackageShare("synapticon_bringup"), "rviz", "single_dof.rviz"]
     )
 
     robot_state_pub_node = Node(

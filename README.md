@@ -191,7 +191,7 @@ ros2 launch synapticon_bringup elevated_permissions_2_dof.launch.py
 
 If you are running the demo with one motor:
 ```bash
-ros2 launch synapticon_bringup example_synapticon.launch.py eth_device:=YOUR_ETHERNET_DEVICE
+ros2 launch synapticon_bringup single_dof.launch.py eth_device:=YOUR_ETHERNET_DEVICE
 ```
 If you are running the demo with two motors:
 ```bash
@@ -323,7 +323,7 @@ sudo systemctl restart ros2_control_node.service
 ```
 and, if running the demo with one motor:
 ```bash
-ros2 launch synapticon_bringup example_synapticon.launch.py eth_device:=YOUR_ETHERNET_DEVICE
+ros2 launch synapticon_bringup single_dof.launch.py eth_device:=YOUR_ETHERNET_DEVICE
 ```
 If you are running the demo with two motors:
 ```bash
