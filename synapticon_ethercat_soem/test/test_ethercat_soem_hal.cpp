@@ -135,6 +135,29 @@ TEST(EthercatSoemHalBringUp, IsRefusedBeforeSetup)
   EXPECT_FALSE(hal.start());
 }
 
+TEST(EthercatSoemHalBringUp, StartIsRefusedBeforeConnect)
+{
+  EthercatSoemHal hal;
+  ASSERT_TRUE(hal.setup(bus("eth_test"), { joint(example_slave_config()) }));
+  EXPECT_FALSE(hal.start());
+  EXPECT_FALSE(hal.is_streaming());
+}
+
+TEST(EthercatSoemHalBringUp, StepsDownFromRungsItIsNotOn)
+{
+  EthercatSoemHal hal;
+  EXPECT_TRUE(hal.stop());
+  EXPECT_TRUE(hal.disable());
+  EXPECT_TRUE(hal.disconnect());
+  ASSERT_TRUE(hal.setup(bus("eth_test"), { joint(example_slave_config()) }));
+  EXPECT_TRUE(hal.stop());
+  EXPECT_TRUE(hal.disable());
+  EXPECT_TRUE(hal.disconnect());
+  EXPECT_FALSE(hal.is_connected());
+  EXPECT_FALSE(hal.is_streaming());
+  EXPECT_FALSE(hal.is_enabled());
+}
+
 TEST(EthercatSoemHalBringUp, FailsOnAMissingSlaveConfig)
 {
   EthercatSoemHal hal;

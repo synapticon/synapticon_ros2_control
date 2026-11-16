@@ -430,11 +430,13 @@ bool EthercatSoemHal::setup(const HalConfig& description)
 
 bool EthercatSoemHal::connect()
 {
-  if (!set_up_ || bus_)
+  if (bus_)
   {
-    RCLCPP_ERROR(logger(), "%s",
-                 set_up_ ? "connect(): the bus is up already, disconnect() first." :
-                           "connect(): no configuration, setup() has to come first.");
+    return true;  // connected already
+  }
+  if (!set_up_)
+  {
+    RCLCPP_ERROR(logger(), "connect(): no configuration, setup() has to come first.");
     return false;
   }
   bus_ = std::make_unique<Bus>();
@@ -517,10 +519,13 @@ bool EthercatSoemHal::connect()
 
 bool EthercatSoemHal::start()
 {
-  if (!bus_ || streaming_)
+  if (streaming_)
   {
-    RCLCPP_ERROR(logger(), "%s",
-                 streaming_ ? "start() refused: already streaming." : "start() refused: connect() has not run yet.");
+    return true;  // streaming already
+  }
+  if (!bus_)
+  {
+    RCLCPP_ERROR(logger(), "start() refused: connect() has not run yet.");
     return false;
   }
   ecx_contextt& context = bus_->context;
@@ -606,7 +611,7 @@ bool EthercatSoemHal::start()
   streaming_ = true;
   if (!wait_for_streaming(joints_, config_.control_frequency, config_.readiness_timeout_s))
   {
-    stop();
+    leave_op();  // no drive has power yet
     return false;
   }
   RCLCPP_INFO(logger(), "Bus in OP: %zu drive(s) exchange valid data, all unpowered.", joints_.size());
@@ -630,13 +635,16 @@ bool EthercatSoemHal::read(std::vector<DriveState>& states)
 
 bool EthercatSoemHal::stop()
 {
-  if (streaming_)
+  if (!streaming_)
   {
-    streaming_ = false;
-    enabled_ = false;  // a drive leaving OP de-energises
-    back_to_pre_op();
-    RCLCPP_INFO(logger(), "Drives back in PRE-OP.");
+    return true;
   }
+  // Switch the drives off under control before they leave OP. A drive action may have powered one without enable().
+  if (!disable())
+  {
+    RCLCPP_WARN(logger(), "stop(): not every drive switched off under control. Leaving OP takes their power.");
+  }
+  leave_op();
   return true;
 }
 
@@ -945,6 +953,14 @@ void EthercatSoemHal::exchange_for(std::chrono::milliseconds duration)
     exchange_read();
     std::this_thread::sleep_for(period);
   }
+}
+
+void EthercatSoemHal::leave_op()
+{
+  streaming_ = false;
+  enabled_ = false;  // a drive leaving OP de-energises
+  back_to_pre_op();
+  RCLCPP_INFO(logger(), "Drives back in PRE-OP.");
 }
 
 void EthercatSoemHal::back_to_pre_op()

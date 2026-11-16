@@ -70,6 +70,7 @@ public:
   bool connect() override;
   bool start() override;
   bool read(std::vector<DriveState>& states) override;
+  /// Switch the drives off with disable() first, then bring them back to PRE-OP.
   bool stop() override;
   bool disconnect() override;
   bool is_connected() const override;
@@ -104,6 +105,8 @@ private:
   bool count_bad_cycles();
   /// Exchange process data at the control frequency for `duration`.
   void exchange_for(std::chrono::milliseconds duration);
+  /// End the exchange without switching the drives off first, and bring them back to PRE-OP.
+  void leave_op();
   /// Bring the drives back to PRE-OP and switch their SYNC0 off.
   void back_to_pre_op();
 
