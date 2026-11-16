@@ -506,10 +506,13 @@ bool EthercatSoemHal::start()
   }
   bus_->io_map.assign(bytes + IO_MAP_RESERVE_PER_SLAVE * static_cast<std::size_t>(bus_->slave_count), 0);
   bus_->mapping_failed = false;
+  // Mapping requests SAFE-OP for every slave, so each failure from here on goes back to PRE-OP, where the PDO mapping
+  // can be written again.
   const int mapped = ecx_config_map_group(&context, bus_->io_map.data(), 0);
   if (bus_->mapping_failed)
   {
     RCLCPP_ERROR(logger(), "start(): writing the PDO mapping of the slave_config failed.");
+    back_to_pre_op();
     return false;
   }
   if (mapped < 0 || static_cast<std::size_t>(mapped) > bus_->io_map.size())
@@ -517,6 +520,7 @@ bool EthercatSoemHal::start()
     RCLCPP_ERROR(logger(),
                  "start(): the %d slave(s) on the bus map %d bytes of process data, more than the %zu reserved.",
                  bus_->slave_count, mapped, bus_->io_map.size());
+    back_to_pre_op();
     return false;
   }
   for (std::size_t j = 0; j < joints_.size(); ++j)
@@ -529,6 +533,7 @@ bool EthercatSoemHal::start()
                    "Joint '%s': the drive maps %u output and %u input bytes, its slave_config %zu and %zu. Check the "
                    "slave_config against the drive's ESI.",
                    joints_[j].name.c_str(), slave.Obytes, slave.Ibytes, image.output_bytes(), image.input_bytes());
+      back_to_pre_op();
       return false;
     }
   }
