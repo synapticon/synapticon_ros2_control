@@ -40,12 +40,12 @@ add_library(${PROJECT_NAME} SHARED
 target_include_directories(${PROJECT_NAME}
   PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
-    $<INSTALL_INTERFACE:include>
+    $<INSTALL_INTERFACE:include/${PROJECT_NAME}>
   PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src
 )
-ament_target_dependencies(${PROJECT_NAME} ${_deps})
-target_link_libraries(${PROJECT_NAME} soem_source::soem yaml-cpp::yaml-cpp)
+target_link_libraries(${PROJECT_NAME} PUBLIC
+  pluginlib::pluginlib rclcpp::rclcpp synapticon_hardware::synapticon_hardware soem_source::soem yaml-cpp::yaml-cpp)
 
 # The HAL, loaded by SynapticonSystemInterface as `ethercat_soem`.
 pluginlib_export_plugin_description_file(synapticon_hardware ethercat_soem_hal_plugin.xml)
@@ -57,7 +57,7 @@ install(
   ARCHIVE DESTINATION lib
   RUNTIME DESTINATION bin
 )
-install(DIRECTORY include/ DESTINATION include)
+install(DIRECTORY include/ DESTINATION include/${PROJECT_NAME})
 
 # Starts a shell or a command with the raw socket capability the HAL needs.
 install(PROGRAMS scripts/net_raw_shell.sh DESTINATION lib/${PROJECT_NAME})
@@ -70,15 +70,13 @@ if(BUILD_TESTING)
   foreach(test_name test_slave_config test_process_image test_process_data_mapping test_coe_encoding
                     test_ethercat_soem_hal)
     ament_add_gmock(${test_name} test/${test_name}.cpp)
-    target_link_libraries(${test_name} ${PROJECT_NAME})
+    target_link_libraries(${test_name} ${PROJECT_NAME} ament_index_cpp::ament_index_cpp)
     target_include_directories(${test_name} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
-    ament_target_dependencies(${test_name} ${_deps} ament_index_cpp)
   endforeach()
 
   # Hardware-in-the-loop suite, installed but not registered with ctest: it needs a drive and moves it.
   ament_add_gmock_executable(ethercat_soem_hil_test test/ethercat_soem_hil_test.cpp SKIP_LINKING_MAIN_LIBRARIES)
-  target_link_libraries(ethercat_soem_hil_test ${PROJECT_NAME})
-  ament_target_dependencies(ethercat_soem_hil_test ${_deps} ament_index_cpp)
+  target_link_libraries(ethercat_soem_hil_test ${PROJECT_NAME} ament_index_cpp::ament_index_cpp)
   install(TARGETS ethercat_soem_hil_test DESTINATION lib/${PROJECT_NAME})
 endif()
 

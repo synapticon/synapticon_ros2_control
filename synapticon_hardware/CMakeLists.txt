@@ -35,20 +35,20 @@ set(_sources src/cia402/cia402_hal.cpp src/ethercat/bus_config.cpp src/ethercat/
   src/ethercat/ethercat_pdo_hal.cpp src/ethercat/joint_config.cpp src/ethercat/robot_config.cpp
   src/interface_binding.cpp src/mock/mock_cia402_hal.cpp src/mock/mock_hal.cpp src/mock/simulated_drive.cpp
   src/synapticon_interface.cpp)
-set(_base_deps hardware_interface pluginlib rclcpp rclcpp_lifecycle)
 
 # The library: hardware interface, HAL interface and everything the HALs share.
 add_library(${PROJECT_NAME} SHARED ${_sources})
 target_include_directories(${PROJECT_NAME}
   PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
-    $<INSTALL_INTERFACE:include>
+    $<INSTALL_INTERFACE:include/${PROJECT_NAME}>
   PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src
 )
-ament_target_dependencies(${PROJECT_NAME} ${_base_deps})
 # SynapticonSystemInterface runs its drives on the SOEM master.
-target_link_libraries(${PROJECT_NAME} soem_source::soem yaml-cpp::yaml-cpp)
+target_link_libraries(${PROJECT_NAME} PUBLIC
+  hardware_interface::hardware_interface pluginlib::pluginlib rclcpp::rclcpp rclcpp_lifecycle::rclcpp_lifecycle
+  soem_source::soem yaml-cpp::yaml-cpp)
 
 # The plugins: the hardware interface for ros2_control, and the HALs loaded by name.
 pluginlib_export_plugin_description_file(
@@ -64,7 +64,7 @@ install(
   RUNTIME DESTINATION bin
 )
 
-install(DIRECTORY include/ DESTINATION include)
+install(DIRECTORY include/ DESTINATION include/${PROJECT_NAME})
 
 # The slave_config generator, and the example slave_config it made.
 install(PROGRAMS scripts/esi_to_slave_config.py DESTINATION lib/${PROJECT_NAME})
@@ -72,12 +72,11 @@ install(DIRECTORY config DESTINATION share/${PROJECT_NAME})
 
 # drive_check: try one drive through any HAL, without ros2_control.
 add_executable(drive_check test/drive_check.cpp)
-target_link_libraries(drive_check ${PROJECT_NAME})
-ament_target_dependencies(drive_check ${_base_deps} ament_index_cpp)
+target_link_libraries(drive_check ${PROJECT_NAME} ament_index_cpp::ament_index_cpp)
 install(TARGETS drive_check DESTINATION lib/${PROJECT_NAME})
 
 ament_export_targets(export_${PROJECT_NAME} HAS_LIBRARY_TARGET)
-ament_export_include_directories(include)
+ament_export_include_directories(include/${PROJECT_NAME})
 ament_export_dependencies(
   hardware_interface
   pluginlib
@@ -93,7 +92,7 @@ if(BUILD_TESTING)
   find_package(synapticon_control_msgs REQUIRED)
 
   # Add test/<path>.cpp as a gmock test with the file's name. HEADERS: it needs only the headers, not the library.
-  # USES: the other packages it needs.
+  # USES: the other targets it needs.
   function(hardware_test path)
     cmake_parse_arguments(test "HEADERS" "" "USES" ${ARGN})
     get_filename_component(name ${path} NAME)
@@ -104,7 +103,7 @@ if(BUILD_TESTING)
       target_link_libraries(${name} ${PROJECT_NAME})
     endif()
     if(test_USES)
-      ament_target_dependencies(${name} ${test_USES})
+      target_link_libraries(${name} ${test_USES})
     endif()
   endfunction()
 
@@ -116,10 +115,10 @@ if(BUILD_TESTING)
   # The parts in the library.
   hardware_test(test_interface_binding)
   hardware_test(test_link_health)
-  hardware_test(cia402/test_drive_action_walk USES ${_base_deps} synapticon_control_msgs)
-  hardware_test(cia402/test_cia402_hal_failures USES ${_base_deps})
+  hardware_test(cia402/test_drive_action_walk USES ${synapticon_control_msgs_TARGETS})
+  hardware_test(cia402/test_cia402_hal_failures)
   hardware_test(ethercat/test_bus_config)
-  hardware_test(ethercat/test_drive_checks USES rclcpp)
+  hardware_test(ethercat/test_drive_checks)
   hardware_test(ethercat/test_drive_units)
   hardware_test(ethercat/test_joint_config)
   hardware_test(ethercat/test_robot_config)
@@ -139,7 +138,6 @@ if(BUILD_TESTING)
   ament_add_gmock(test_mock_cia402_drive_actions test/test_mock_cia402_drive_actions.cpp
     SKIP_LINKING_MAIN_LIBRARIES TIMEOUT 600)
   target_link_libraries(test_mock_cia402_drive_actions ${PROJECT_NAME})
-  ament_target_dependencies(test_mock_cia402_drive_actions ${_base_deps})
 endif()
 
 ament_package()
