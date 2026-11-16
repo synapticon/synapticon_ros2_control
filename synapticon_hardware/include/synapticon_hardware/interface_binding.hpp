@@ -85,8 +85,9 @@ public:
   };
 
   /// Link every joint and gpio interface of `info` to its handle in `component` and to its value in `states`,
-  /// `commands`, `slave_health` or `bus_health`. Those buffers must not move afterwards.
-  /// False, with the reason logged, when a handle is missing or declares a data_type that does not fit.
+  /// `commands`, `slave_health` or `bus_health`. Those buffers must not move afterwards, and the first three need one
+  /// entry per joint. False, with the reason logged, when a buffer has the wrong size, a handle is missing or a handle
+  /// declares a data_type that does not fit.
   bool bind(const hardware_interface::HardwareInfo& info, hardware_interface::HardwareComponentInterface& component,
             std::vector<DriveState>& states, std::vector<DriveCommand>& commands,
             std::vector<EthercatSlaveHealth>& slave_health, EthercatBusHealth& bus_health);
@@ -97,8 +98,8 @@ public:
   /// Publish every linked state value on its handle. Returns the number of handles that refused the value.
   std::size_t push_states() const;
 
-  /// Copy every command handle into its field. When a drive action cannot be read, the field becomes NONE: the
-  /// request is dropped, not kept for the next cycle.
+  /// Copy every command handle into its field. A handle that cannot be read leaves its field as it was, for a drive
+  /// action too, so a held request does not look like a new one in the next cycle.
   RefusedReads pull_commands() const;
 
   /// Put the current command fields on their handles, so that a controller which reads a command back starts from

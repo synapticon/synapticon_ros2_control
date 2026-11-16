@@ -198,8 +198,16 @@ bool InterfaceBinding::bind(const hardware_interface::HardwareInfo& info,
                             EthercatBusHealth& bus_health)
 {
   clear();
+  const std::size_t joints = info.joints.size();
+  if (states.size() != joints || commands.size() != joints || slave_health.size() != joints)
+  {
+    RCLCPP_ERROR(rclcpp::get_logger(LOGGER_NAME),
+                 "Cannot bind %zu joint(s) to %zu state(s), %zu command(s) and %zu drive health entries.", joints,
+                 states.size(), commands.size(), slave_health.size());
+    return false;
+  }
   bool ok = true;
-  for (std::size_t j = 0; j < info.joints.size(); ++j)
+  for (std::size_t j = 0; j < joints; ++j)
   {
     ok = bind_joint_states(info.joints[j], component, states[j], slave_health[j]) && ok;
     ok = bind_joint_commands(info.joints[j], component, commands[j]) && ok;
@@ -380,7 +388,8 @@ InterfaceBinding::RefusedReads InterfaceBinding::pull_commands() const
       ++refused.setpoints;
     }
   }
-  // Read fresh in every cycle, so a HAL sees a new request in the cycle the controller sets it.
+  // Read fresh in every cycle, so a HAL sees a new request in the cycle the controller sets it. A refused read keeps
+  // the last value, since a change of value is what starts a request.
   for (const auto& source : command_sources_action_)
   {
     if (const auto value = source.handle->get_optional<uint8_t>())
@@ -389,7 +398,6 @@ InterfaceBinding::RefusedReads InterfaceBinding::pull_commands() const
     }
     else
     {
-      *source.destination = DriveAction::NONE;
       ++refused.actions;
     }
   }
