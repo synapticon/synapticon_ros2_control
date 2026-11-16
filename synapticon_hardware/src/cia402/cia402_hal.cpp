@@ -51,6 +51,7 @@ Cia402Hal::Cia402Hal(std::string logger_name) : logger_name_(std::move(logger_na
 /// 3. Let setpoints through again for the joints that get power.
 /// 4. Step every drive with energize up to Operation Enabled, one state per cycle. Nobody else writes setpoints
 ///    while this blocks, so each drive is told to stay where it is. Monitored drives are kept without power.
+/// 5. On a failure or timeout, take every drive down again, also those that already got power.
 bool Cia402Hal::enable()
 {
   if (!streaming_)
@@ -116,6 +117,10 @@ bool Cia402Hal::enable()
       disable();
       return false;
     case Outcome::FAILED:
+      // Drives that got to Operation Enabled before the failure must not keep their power. If the bus failed, this
+      // is a best effort.
+      RCLCPP_ERROR(log(), "enable() failed. All drives go back to Switch On Disabled.");
+      disable();
       break;
   }
   return false;

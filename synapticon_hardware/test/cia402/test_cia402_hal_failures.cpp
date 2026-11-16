@@ -11,6 +11,7 @@
 
 #include <chrono>
 #include <cstdint>
+#include <optional>
 #include <string>
 #include <thread>
 #include <vector>
@@ -30,6 +31,7 @@ using Clock = std::chrono::steady_clock;
 
 constexpr uint16_t SWITCH_ON_DISABLED = 0x40;
 constexpr uint16_t SWITCHED_ON = 0x23;
+constexpr uint16_t OPERATION_ENABLED = 0x27;
 constexpr uint16_t ENABLE_OPERATION_BIT = 0x08;
 constexpr uint16_t QUICK_STOP_ACTIVE = 0x07;
 constexpr uint16_t FAULT = 0x08;
@@ -94,10 +96,16 @@ public:
   {
     statuswords_.assign(statuswords_.size(), statusword);
   }
-  /// Report Fault from the next read on, after a first read in the present state.
-  void fault_after_one_read()
+  /// The statusword `joint` reports from the next read on.
+  void report(std::size_t joint, uint16_t statusword)
+  {
+    statuswords_[joint] = statusword;
+  }
+  /// Report Fault from the next read on, after a first read in the present state. Only on `joint` when given.
+  void fault_after_one_read(std::optional<std::size_t> joint = std::nullopt)
   {
     fault_after_reads_ = reads_ + 1;
+    faulting_joint_ = joint;
   }
   void fail_reads()
   {
@@ -135,7 +143,14 @@ protected:
     ++reads_;
     if (fault_after_reads_ > 0 && reads_ > fault_after_reads_)
     {
-      report(FAULT);
+      if (faulting_joint_)
+      {
+        report(*faulting_joint_, FAULT);
+      }
+      else
+      {
+        report(FAULT);
+      }
     }
     return !reads_fail_;
   }
@@ -179,6 +194,7 @@ private:
   std::vector<uint16_t> controlwords_;
   int reads_{ 0 };
   int fault_after_reads_{ 0 };
+  std::optional<std::size_t> faulting_joint_;
   bool reads_fail_{ false };
   bool writes_fail_{ false };
   double speed_{ 0.0 };
@@ -262,6 +278,20 @@ TEST(Cia402HalFailures, EnableFailsWhenADriveFaultsOnTheWay)
   const auto start = Clock::now();
   EXPECT_FALSE(drives.enable());
   EXPECT_LT(since(start), 1.0);  // at once, not at the timeout
+  EXPECT_FALSE(drives.is_enabled());
+}
+
+/// A drive that already got power is taken down again when another one faults during enable(). It stays in
+/// Operation Enabled here, so the way down ends at the timeout.
+TEST(Cia402HalFailures, AFailedEnableTakesThePoweredDrivesDownAgain)
+{
+  ScriptedDrives drives({ true, true });
+  ASSERT_TRUE(drives.start());
+  drives.report(0, OPERATION_ENABLED);
+  drives.fault_after_one_read(1);
+  EXPECT_FALSE(drives.enable());
+  EXPECT_EQ(drives.controlword(0) & ENABLE_OPERATION_BIT, 0);
+  EXPECT_FALSE(drives.forwarding_setpoints(0));
   EXPECT_FALSE(drives.is_enabled());
 }
 
