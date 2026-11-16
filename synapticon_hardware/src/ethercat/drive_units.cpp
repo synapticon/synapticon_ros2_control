@@ -416,4 +416,21 @@ std::vector<uint8_t> raw_bytes(int64_t raw, const std::string& type)
   return bytes;
 }
 
+int64_t raw_value(const std::vector<uint8_t>& bytes, const std::string& type)
+{
+  const auto layout = integer_type(type);
+  if (!layout)
+  {
+    throw std::invalid_argument("not an integer type: " + type);
+  }
+  const auto size = static_cast<std::size_t>(layout->first);
+  uint64_t bits = 0;
+  for (std::size_t i = 0; i < std::min(size, bytes.size()); ++i)
+  {
+    bits |= static_cast<uint64_t>(bytes[i]) << (8 * i);
+  }
+  const auto shift = static_cast<int>(64 - 8 * size);
+  return layout->second ? static_cast<int64_t>(bits << shift) >> shift : static_cast<int64_t>(bits);
+}
+
 }  // namespace synapticon_hardware::ethercat

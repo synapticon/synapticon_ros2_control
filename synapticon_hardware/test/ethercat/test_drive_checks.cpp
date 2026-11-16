@@ -112,9 +112,29 @@ public:
   int download(uint16_t position, uint16_t index, uint8_t sub_index, const std::vector<uint8_t>& bytes,
                uint32_t& /*abort_code*/) const override
   {
-    written[{ position, index, sub_index }] = bytes;
-    objects_[{ position, index, sub_index }] = bytes;
+    const std::tuple<uint16_t, uint16_t, uint8_t> key{ position, index, sub_index };
+    ++downloads[key];
+    written[key] = bytes;
+    if (ignored_writes_[key] > 0)
+    {
+      --ignored_writes_[key];  // acknowledged, but not applied
+      return 0;
+    }
+    objects_[key] = bytes;
     return 0;
+  }
+
+  /// Acknowledge the next `count` writes of `object` without applying them.
+  void ignore_writes(CoeAddress object, int count, uint16_t position = 0)
+  {
+    ignored_writes_[{ position, object.index, object.subindex }] = count;
+  }
+
+  /// How often `object` was written.
+  int download_count(CoeAddress object, uint16_t position = 0) const
+  {
+    const auto found = downloads.find({ position, object.index, object.subindex });
+    return found == downloads.end() ? 0 : found->second;
   }
 
   /// What was written to the drive at `position`, as an integer of the written size. Empty when nothing was.
@@ -135,9 +155,11 @@ public:
   }
 
   mutable std::map<std::tuple<uint16_t, uint16_t, uint8_t>, std::vector<uint8_t>> written;
+  mutable std::map<std::tuple<uint16_t, uint16_t, uint8_t>, int> downloads;
 
 private:
   mutable std::map<std::tuple<uint16_t, uint16_t, uint8_t>, std::vector<uint8_t>> objects_;
+  mutable std::map<std::tuple<uint16_t, uint16_t, uint8_t>, int> ignored_writes_;
 };
 
 /// Healthy drives for the joints a test checks.
@@ -732,6 +754,31 @@ TEST_F(DriveChecks, WritesAnSdoSiEntryInAFinerUnit)
   units_[0].si_sdo = { { { 0x6085, 0 }, "uint32", 1000.0, SiQuantity::ACCELERATION } };
   ASSERT_TRUE(check({ joint() }, false));
   EXPECT_EQ(drives_.written_value({ 0x6085, 0 }), 9549297);
+}
+
+/// Every sdo_si entry is read back after the write. One the drive acknowledged but did not apply is written once more.
+TEST_F(DriveChecks, WritesAnSdoSiEntryAgainThatTheDriveDidNotApply)
+{
+  drives_.healthy_drive();
+  drives_.ignore_writes({ 0x6065, 0 }, 1);
+  units_.resize(1);
+  units_[0].si_sdo = { { { 0x6065, 0 }, "uint32", 0.1, SiQuantity::POSITION },
+                       { { 0x6085, 0 }, "uint32", 1000.0, SiQuantity::ACCELERATION } };
+  ASSERT_TRUE(check({ joint() }, false));
+  EXPECT_EQ(drives_.download_count({ 0x6065, 0 }), 2);
+  EXPECT_EQ(drives_.download_count({ 0x6085, 0 }), 1);
+  EXPECT_EQ(read_u32(drives_, rclcpp::get_logger("test_drive_checks"), 0, { 0x6065, 0 }), 65u);
+}
+
+/// A drive that keeps another value after the second write stops the bring-up.
+TEST_F(DriveChecks, StopsTheBringUpWhenTheDriveKeepsAnotherSdoSiValue)
+{
+  drives_.healthy_drive();
+  drives_.ignore_writes(coe::QUICK_STOP_DECELERATION, 2);
+  units_.resize(1);
+  units_[0].si_sdo = { { coe::QUICK_STOP_DECELERATION, "uint32", 1000.0, SiQuantity::ACCELERATION } };
+  EXPECT_FALSE(check({ joint() }, false));
+  EXPECT_EQ(drives_.download_count(coe::QUICK_STOP_DECELERATION), 2);
 }
 
 /// A joint with unknown units is never powered, so its sdo_si entries are not written.

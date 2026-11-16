@@ -194,4 +194,14 @@ TEST(RawBytes, AreLittleEndianOfTheTypeSize)
   EXPECT_THROW(raw_bytes(1, "real32"), std::invalid_argument);
 }
 
+TEST(RawValue, ReversesRawBytes)
+{
+  EXPECT_EQ(raw_value({ 0x4D, 0x25, 0x00, 0x00 }, "uint32"), 9549);
+  EXPECT_EQ(raw_value({ 0x74, 0xFD, 0xFF, 0xFF }, "int32"), -652);
+  EXPECT_EQ(raw_value({ 0xFF, 0xFF }, "uint16"), 65535);
+  EXPECT_EQ(raw_value({ 0xFF, 0xFF }, "int16"), -1);
+  EXPECT_EQ(raw_value({ 0xC0 }, "uint16"), 0xC0) << "missing bytes count as 0";
+  EXPECT_THROW(raw_value({ 0x01 }, "real32"), std::invalid_argument);
+}
+
 }  // namespace

@@ -116,13 +116,15 @@ std::optional<uint32_t> read_u32(const SdoReader& sdo, const rclcpp::Logger& log
 ///
 /// `units` holds one SlaveConfigUnits per joint. The drive's units are read and must be understood completely; the
 /// `units:` section of a slave_config only stands in for what the drive cannot report. Then each `sdo_si:` entry is
-/// converted with them and written through `writer`. `readback` gets one DriveReadback per joint. Everything learned
+/// converted with them, written through `writer` and read back through `sdo`. A value that reads back different is
+/// written once more. `readback` gets one DriveReadback per joint. Everything learned
 /// is logged to `logger`. A problem that the user must fix gets a framed block in the log.
 ///
 /// Bring-up stops (false) in these cases:
 /// - an impedance joint that may be powered has no stiffness, damping or max_joint_torque configured,
 /// - a joint that may be powered has units the stack cannot read or understand, or that contradict its slave_config,
-/// - an `sdo_si:` entry cannot be converted or the drive refuses it,
+/// - an `sdo_si:` entry cannot be converted, the drive refuses it, it cannot be read back, or the drive keeps another
+///   value after the second write,
 /// - an impedance joint's drive has no torque sensor type, or it cannot be read,
 /// - an impedance joint's drive runs firmware older than MINIMUM_FIRMWARE, or its version cannot be read.
 ///

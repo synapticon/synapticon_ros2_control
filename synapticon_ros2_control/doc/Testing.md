@@ -458,5 +458,7 @@ These observations explain why some tests retry, wait or allow for things.
 - **Right after the bus is released, the drive's mailbox may not be ready.**
   Then either the first config SDO of the next bring-up gets lost, or every SDO read fails and bring-up refuses.
   The SOEM HAL writes a lost SDO once more, and refuses the bring-up when that fails too.
+  Every `sdo_si` entry is read back after the write, written once more when the drive kept another value, and the
+  bring-up is refused when the second write does not take either.
   The suite waits after every release and writes `0x605A` first.
   It repeats a bring-up that failed, or whose read-back shows that a value did not take.

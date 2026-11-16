@@ -610,11 +610,58 @@ bool firmware_recent_enough(const SdoReader& sdo, const rclcpp::Logger& logger, 
   return true;
 }
 
-/// Write the `sdo_si:` entries of every joint, converted with its unit factors, and log each with both values. A joint
-/// with unknown units is never powered, so its entries are left out with a warning. False when an entry cannot be
-/// converted or the drive refuses it.
-bool write_si_entries(const SdoWriter& writer, const rclcpp::Logger& logger, const std::vector<JointConfig>& joints,
-                      const std::vector<SlaveConfigUnits>& units, const std::vector<DriveReadback>& readback)
+/// Write one `sdo_si:` entry of `joint` as `raw` and read it back. A drive may acknowledge a write without applying
+/// it, so a value that reads back different is written once more. False, logged, when the drive refuses the write,
+/// the value cannot be read back, or the drive still keeps another value.
+bool write_si_entry(const SdoReader& reader, const SdoWriter& writer, const rclcpp::Logger& logger,
+                    const JointConfig& joint, const SiSdo& entry, int64_t raw)
+{
+  const char* name = joint.name.c_str();
+  const CoeAddress object = entry.object;
+  const std::vector<uint8_t> bytes = raw_bytes(raw, entry.type);
+  const auto value = static_cast<long long>(raw);
+  for (int attempt = 1; attempt <= 2; ++attempt)
+  {
+    uint32_t abort_code = 0;
+    if (writer.download(joint.position, object.index, object.subindex, bytes, abort_code) != 0)
+    {
+      RCLCPP_ERROR(logger, "Joint '%s': the drive refused 0x%04X:%u = %lld (sdo_si), abort code 0x%08X.", name,
+                   object.index, object.subindex, value, abort_code);
+      return false;
+    }
+    const auto read = upload(reader, logger, joint.position, object, bytes.size(), &abort_code);
+    if (!read)
+    {
+      RCLCPP_ERROR(logger, "Joint '%s': 0x%04X:%u = %lld (sdo_si) cannot be read back, abort code 0x%08X.", name,
+                   object.index, object.subindex, value, abort_code);
+      return false;
+    }
+    if (*read == bytes)
+    {
+      return true;
+    }
+    const auto kept = static_cast<long long>(raw_value(*read, entry.type));
+    if (attempt == 1)
+    {
+      RCLCPP_WARN(logger,
+                  "Joint '%s': the drive keeps 0x%04X:%u at %lld after writing %lld (sdo_si). Writing it once more.",
+                  name, object.index, object.subindex, kept, value);
+    }
+    else
+    {
+      RCLCPP_ERROR(logger, "Joint '%s': the drive keeps 0x%04X:%u at %lld after writing %lld (sdo_si) twice.", name,
+                   object.index, object.subindex, kept, value);
+    }
+  }
+  return false;
+}
+
+/// Write the `sdo_si:` entries of every joint, converted with its unit factors, read each back and log it with both
+/// values. A joint with unknown units is never powered, so its entries are left out with a warning. False when an
+/// entry cannot be converted, or write_si_entry() fails.
+bool write_si_entries(const SdoReader& reader, const SdoWriter& writer, const rclcpp::Logger& logger,
+                      const std::vector<JointConfig>& joints, const std::vector<SlaveConfigUnits>& units,
+                      const std::vector<DriveReadback>& readback)
 {
   bool written = true;
   for (std::size_t j = 0; j < joints.size(); ++j)
@@ -630,18 +677,13 @@ bool write_si_entries(const SdoWriter& writer, const rclcpp::Logger& logger, con
     {
       std::string error;
       const auto raw = si_to_raw(entry, readback[j].si_factors, error);
-      uint32_t abort_code = 0;
       if (!raw)
       {
         RCLCPP_ERROR(logger, "Joint '%s': sdo_si entry %s.", joints[j].name.c_str(), error.c_str());
         written = false;
       }
-      else if (writer.download(joints[j].position, entry.object.index, entry.object.subindex,
-                               raw_bytes(*raw, entry.type), abort_code) != 0)
+      else if (!write_si_entry(reader, writer, logger, joints[j], entry, *raw))
       {
-        RCLCPP_ERROR(logger, "Joint '%s': the drive refused 0x%04X:%u = %lld (sdo_si), abort code 0x%08X.",
-                     joints[j].name.c_str(), entry.object.index, entry.object.subindex, static_cast<long long>(*raw),
-                     abort_code);
         written = false;
       }
       else
@@ -726,7 +768,7 @@ bool check_drives(const SdoReader& sdo, const SdoWriter& writer, const std::vect
     scaled[j] = read_scaling(sdo, logger, joints[j], units.at(j).overrides, readback[j]);
     readback[j].units_known = scaled[j];
   }
-  if (!scaling_usable(logger, joints, scaled) || !write_si_entries(writer, logger, joints, units, readback) ||
+  if (!scaling_usable(logger, joints, scaled) || !write_si_entries(sdo, writer, logger, joints, units, readback) ||
       !impedance_sensors_ready(sdo, logger, joints))
   {
     return false;

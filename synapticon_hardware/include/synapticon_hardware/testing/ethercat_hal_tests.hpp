@@ -457,8 +457,8 @@ private:
     return { "0x6085", 0, "uint32", std::to_string(rad_per_s2), true };
   }
 
-  /// The SDO entries for `drive`, the quick stop option code first: the first config SDO of a bring-up is occasionally
-  /// lost, and this one's read-back shows whether it was. Bring-up converts the SI entries into each drive's units.
+  /// The SDO entries for `drive`, the quick stop option code first. Bring-up converts the SI entries into each
+  /// drive's units.
   static std::vector<Sdo> overrides(const DriveSettings& drive)
   {
     std::vector<Sdo> sdo{ quick_stop_option_code(drive.quick_stop_option_code) };
@@ -482,7 +482,8 @@ private:
     return sdo;
   }
 
-  /// Bring the drives up with their SDO entries, retrying a failed bring-up or a lost first SDO.
+  /// Bring the drives up with their SDO entries, retrying a failed bring-up. A bring-up that reports another quick
+  /// stop option code than asked for counts as failed.
   std::shared_ptr<ProbedHal> connect_with_sdo(const std::vector<DriveSettings>& drives,
                                               const std::vector<std::vector<Sdo>>& sdo)
   {
@@ -570,7 +571,7 @@ protected:
   }
 
   /// Bring up `joint` with its base slave_config and `sdo`, started when `start` is set. Nothing when the bring-up
-  /// fails. 0x605A = 6 goes first, as in the suite, so a lost first SDO does not hide one a test asked for.
+  /// fails. 0x605A = 6 goes first, as in the suite.
   static std::shared_ptr<ProbedHal> connected_hal(JointConfig joint, const std::vector<Sdo>& sdo = {},
                                                   bool start = false)
   {
@@ -799,15 +800,13 @@ TEST_F(EthercatBringUp, ImpedanceWithoutATorqueSensorIsRefused)
   JointConfig impedance = bench_joint(ec::mode::IMPEDANCE);
   impedance.slave_config_file = write_config({ { "0x605a", 0, "int16", "6" }, { "0x2150", 1, "uint8", "0" } },
                                              test_name(), impedance.slave_config_file);
-  bool refused = false;
-  for (int attempt = 0; attempt < 3 && !refused; ++attempt)
+  // Bring-up reads every startup SDO back, so the sensor type is None when the impedance check runs.
   {
     auto hal = std::make_shared<ProbedHal>();
     ASSERT_TRUE(set_up_hal(*hal, bench_bus(), { impedance }));
-    refused = !hal->connect();  // a lost SDO leaves the sensor configured and the bring-up passes
+    EXPECT_FALSE(hal->connect());
     release(hal);
   }
-  EXPECT_TRUE(refused);
 
   auto hal = connected_hal(bench_joint(), { { "0x2150", 1, "uint8", std::to_string(*found) } });
   ASSERT_TRUE(hal);

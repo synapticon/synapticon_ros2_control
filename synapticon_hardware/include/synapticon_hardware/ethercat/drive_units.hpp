@@ -95,4 +95,8 @@ std::optional<int64_t> si_to_raw(const SiSdo& entry, const SiFactors& factors, s
 /// The little-endian bytes of `raw` for the integer `type` of a slave_config (`int8` to `uint32`).
 std::vector<uint8_t> raw_bytes(int64_t raw, const std::string& type);
 
+/// The value of the little-endian `bytes` of the integer `type`, the reverse of raw_bytes(). Bytes beyond the type's
+/// size are ignored, missing ones count as 0.
+int64_t raw_value(const std::vector<uint8_t>& bytes, const std::string& type);
+
 }  // namespace synapticon_hardware::ethercat
