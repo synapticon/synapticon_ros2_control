@@ -62,12 +62,20 @@ constexpr std::chrono::milliseconds SAFE_OP_EXCHANGE{ 200 };
 constexpr std::size_t IO_MAP_RESERVE_PER_SLAVE = 512;
 /// Buffer size for reading a startup SDO back: the widest value type, 64 bits.
 constexpr std::size_t SDO_READ_BACK_BYTES = 8;
-/// Seconds from the Unix epoch to 2000-01-01, the EtherCAT epoch.
-constexpr time_t EPOCH_OFFSET_S = 946684800;
+/// Nanoseconds from the Unix epoch to 2000-01-01, the EtherCAT epoch.
+constexpr int64_t EPOCH_OFFSET_NS = 946684800LL * 1000000000LL;
 
 rclcpp::Logger logger()
 {
   return rclcpp::get_logger(LOGGER_NAME);
+}
+
+/// The time of `clock` in nanoseconds.
+int64_t clock_ns(clockid_t clock)
+{
+  timespec now{};
+  clock_gettime(clock, &now);
+  return static_cast<int64_t>(now.tv_sec) * 1000000000LL + now.tv_nsec;
 }
 
 /// Why a raw socket on `interface` cannot be opened, for the log: SOEM's own error is lost by the time it returns.
@@ -230,18 +238,22 @@ struct EthercatSoemHal::Bus
     {
       return;
     }
-    timespec now{};
-    clock_gettime(CLOCK_REALTIME, &now);
-    // ecx_configdc() set the clocks to the host's real time since 2000-01-01, the EtherCAT epoch. The register
-    // takes the low 32 bits.
-    const uint64_t time =
-        static_cast<uint64_t>(now.tv_sec - EPOCH_OFFSET_S) * 1000000000ULL + static_cast<uint64_t>(now.tv_nsec);
+    // ecx_configdc() set the clocks to the host's real time since 2000-01-01, the EtherCAT epoch. The monotonic
+    // clock carries that time on, so a step of the real time does not reach the drives. The register takes the low
+    // 32 bits.
+    const auto time = static_cast<uint64_t>(clock_ns(CLOCK_MONOTONIC) + realtime_offset_ns - EPOCH_OFFSET_NS);
     uint32 low_bits = htoel(static_cast<uint32>(time));
     const uint8 index = ecx_getindex(&port);
     ecx_setupdatagram(&port, &port.txbuf[index], EC_CMD_FPWR, index, slaves[slaves[0].DCnext].configadr,
                       ECT_REG_DCSYSTIME, sizeof(low_bits), &low_bits);
     ecx_outframe_red(&port, index);
     clock_sync_index = index;
+  }
+
+  /// Note how far the real time is ahead of the monotonic clock. Call it when ecx_configdc() sets the clocks.
+  void capture_realtime_offset()
+  {
+    realtime_offset_ns = clock_ns(CLOCK_REALTIME) - clock_ns(CLOCK_MONOTONIC);
   }
 
   /// Free the buffer of the last reference clock write. A frame that returns later is dropped by SOEM.
@@ -303,6 +315,7 @@ struct EthercatSoemHal::Bus
   int bad_cycles{ 0 };                    ///< cycles in a row without a complete exchange
   bool states_unknown{ false };           ///< no frame came back since the slave states were last read
   std::optional<uint8> clock_sync_index;  ///< the frame buffer of the last reference clock write
+  int64_t realtime_offset_ns{ 0 };        ///< real time minus monotonic time when the clocks were set up
 };
 
 EthercatSoemHal::EthercatSoemHal() : EthercatPdoHal(LOGGER_NAME)
@@ -566,6 +579,7 @@ bool EthercatSoemHal::start()
   }
 
   // SYNC0 at the control frequency, for every drive whose slave_config sets assign_activate.
+  bus_->capture_realtime_offset();
   ecx_configdc(&context);
   const auto cycle_ns = static_cast<uint32>(1e9 / config_.control_frequency);
   for (std::size_t j = 0; j < joints_.size(); ++j)
