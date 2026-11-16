@@ -4,7 +4,7 @@
 // Copyright (c) 2026 b-robotized GmbH
 
 /// @file
-/// @brief The bytes of startup SDO values and PDO mapping entries.
+/// @brief The bytes of startup SDO values and PDO mapping entries, and object values as log text.
 
 #include <cstdint>
 #include <cstring>
@@ -76,6 +76,26 @@ TEST(SdoBytes, AnIntegerTooWideForTheObjectThrows)
   EXPECT_THROW(sdo_bytes(sdo("uint16", "-32769")), std::out_of_range);
   EXPECT_EQ(sdo_bytes(sdo("uint8", "255")), (Bytes{ 0xFF }));
   EXPECT_EQ(sdo_bytes(sdo("int8", "-128")), (Bytes{ 0x80 }));
+}
+
+TEST(CoeValueText, ShowsIntegersInDecimalAndHex)
+{
+  EXPECT_EQ(coe_value_text(*value_type("int16"), Bytes{ 0x06, 0x00 }), "6 (0x0006)");
+  EXPECT_EQ(coe_value_text(*value_type("int16"), Bytes{ 0xFE, 0xFF }), "-2 (0xFFFE)");
+  EXPECT_EQ(coe_value_text(*value_type("uint32"), Bytes{ 0xFF, 0xFF, 0xFF, 0xFF }), "4294967295 (0xFFFFFFFF)");
+  EXPECT_EQ(coe_value_text(*value_type("uint8"), Bytes{ 0x01 }), "1 (0x01)");
+}
+
+TEST(CoeValueText, ShowsReals)
+{
+  EXPECT_EQ(coe_value_text(*value_type("real32"), sdo_bytes(sdo("real32", "1.5"))), "1.5");
+  EXPECT_EQ(coe_value_text(*value_type("real64"), sdo_bytes(sdo("real64", "-2.25"))), "-2.25");
+}
+
+TEST(CoeValueText, ListsBytesOfAnotherSize)
+{
+  EXPECT_EQ(coe_value_text(*value_type("uint16"), Bytes{ 0x01, 0x02, 0xAB, 0x00 }), "4 byte(s): 01 02 AB 00");
+  EXPECT_EQ(coe_value_text(*value_type("uint16"), Bytes{}), "0 byte(s):");
 }
 
 TEST(PdoEntryBytes, HoldIndexSubIndexAndBitLength)

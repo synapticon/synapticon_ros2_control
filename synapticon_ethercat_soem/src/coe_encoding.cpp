@@ -8,6 +8,8 @@
 
 #include "coe_encoding.hpp"
 
+#include <cinttypes>
+#include <cstdio>
 #include <cstring>
 #include <stdexcept>
 #include <string>
@@ -81,6 +83,55 @@ std::vector<uint8_t> sdo_bytes(const StartupSdo& sdo)
     return bytes;
   }
   return little_endian(parse_integer(sdo.value, sdo.type), sdo.type.bits / 8);
+}
+
+std::string coe_value_text(const ValueType& type, const std::vector<uint8_t>& bytes)
+{
+  char text[64];
+  if (bytes.empty() || bytes.size() != type.bits / 8U)
+  {
+    std::string listed = std::to_string(bytes.size()) + " byte(s):";
+    for (const uint8_t byte : bytes)
+    {
+      std::snprintf(text, sizeof(text), " %02X", byte);
+      listed += text;
+    }
+    return listed;
+  }
+  uint64_t raw = 0;
+  for (std::size_t i = bytes.size(); i-- > 0;)
+  {
+    raw = (raw << 8) | bytes[i];
+  }
+  if (type.kind == ValueKind::REAL)
+  {
+    double value = 0.0;
+    if (type.bits == 32)
+    {
+      float single = 0.0F;
+      std::memcpy(&single, bytes.data(), sizeof(single));
+      value = single;
+    }
+    else
+    {
+      std::memcpy(&value, bytes.data(), sizeof(value));
+    }
+    std::snprintf(text, sizeof(text), "%.9g", value);
+    return text;
+  }
+  const int digits = type.bits / 4;
+  if (type.kind == ValueKind::SIGNED)
+  {
+    // Sign extension from the object's width.
+    const int unused = 64 - type.bits;
+    const auto value = static_cast<int64_t>(raw << unused) >> unused;
+    std::snprintf(text, sizeof(text), "%" PRId64 " (0x%0*" PRIX64 ")", value, digits, raw);
+  }
+  else
+  {
+    std::snprintf(text, sizeof(text), "%" PRIu64 " (0x%0*" PRIX64 ")", raw, digits, raw);
+  }
+  return text;
 }
 
 std::vector<uint8_t> pdo_entry_bytes(const PdoChannel& channel)

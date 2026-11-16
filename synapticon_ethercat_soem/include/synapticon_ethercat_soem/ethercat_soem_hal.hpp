@@ -29,6 +29,8 @@ using synapticon_hardware::HalConfig;
 using synapticon_hardware::LinkHealth;
 using synapticon_hardware::ethercat::JointConfig;
 
+struct StartupSdo;
+
 /// @brief Bus-wide settings for a Synapticon drive segment on a SOEM master.
 struct SoemConfig : synapticon_hardware::ethercat::BusConfig
 {
@@ -86,8 +88,11 @@ private:
 
   /// Find each joint's drive and check its identity. False, logged, when one is missing or another device.
   bool find_drives();
-  /// Write each drive's startup SDOs. False, logged, at the first one a drive refuses twice.
+  /// Write each drive's startup SDOs. False, logged, at the first one that fails.
   bool write_startup_sdos();
+  /// Write one startup SDO of `joint` and read it back, with one more attempt when it is refused or reads back
+  /// another value. False, logged, when the second attempt fails as well.
+  bool write_startup_sdo(std::size_t joint, const StartupSdo& sdo);
   /// Request `state` of every drive and wait for it, exchanging process data while waiting when `cycling`. The
   /// request is repeated until it takes.
   bool reach_state(uint16_t state, bool cycling);

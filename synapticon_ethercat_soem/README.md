@@ -20,6 +20,10 @@ ros2 run synapticon_hardware drive_check read --hal ethercat_soem --network-inte
 
 Optional: `state_timeout_s` [5.0] bounds the wait for the drives to reach SAFE-OP and OP.
 
+Bring-up reads every startup SDO of the slave_config (its `sdo:` list) back after writing it.
+When a drive refuses one or keeps another value, the HAL writes it once more.
+If that fails as well, bring-up stops with an error that names the joint, the object, and the written and read value.
+
 ## The raw socket capability
 
 SOEM sends and receives Ethernet frames through a raw socket.

@@ -59,6 +59,8 @@ constexpr std::chrono::milliseconds STATE_REQUEST_INTERVAL{ 100 };
 constexpr std::chrono::milliseconds SAFE_OP_EXCHANGE{ 200 };
 /// Process data bytes reserved for each slave on the bus, beyond the joints' own, for slaves without a joint.
 constexpr std::size_t IO_MAP_RESERVE_PER_SLAVE = 512;
+/// Buffer size for reading a startup SDO back: the widest value type, 64 bits.
+constexpr std::size_t SDO_READ_BACK_BYTES = 8;
 /// Seconds from the Unix epoch to 2000-01-01, the EtherCAT epoch.
 constexpr time_t EPOCH_OFFSET_S = 946684800;
 
@@ -176,6 +178,24 @@ struct EthercatSoemHal::Bus
     ec_errort error{};
     const uint32_t abort_code = ecx_poperror(&context, &error) ? static_cast<uint32_t>(error.AbortCode) : 0;
     RCLCPP_ERROR(logger(), "SDO download 0x%04X:%u to slave %u failed (abort=0x%08X).", index, sub_index, slave,
+                 abort_code);
+    return false;
+  }
+
+  /// One SDO upload into `bytes`, resized to what the drive sent. Logged when it fails. True when it answered.
+  bool upload(uint16_t slave, uint16_t index, uint8_t sub_index, std::vector<uint8_t>& bytes)
+  {
+    bytes.assign(SDO_READ_BACK_BYTES, 0);
+    int size = static_cast<int>(bytes.size());
+    const int wkc = ecx_SDOread(&context, slave, index, sub_index, FALSE, &size, bytes.data(), EC_TIMEOUTRXM);
+    if (wkc > 0)
+    {
+      bytes.resize(static_cast<std::size_t>(size));
+      return true;
+    }
+    ec_errort error{};
+    const uint32_t abort_code = ecx_poperror(&context, &error) ? static_cast<uint32_t>(error.AbortCode) : 0;
+    RCLCPP_ERROR(logger(), "SDO upload 0x%04X:%u from slave %u failed (abort=0x%08X).", index, sub_index, slave,
                  abort_code);
     return false;
   }
@@ -745,19 +765,53 @@ bool EthercatSoemHal::write_startup_sdos()
   {
     for (const auto& sdo : bus_->slave_configs[j].sdo)
     {
-      // The value was checked at load. One retry, since right after a bus release the drive's mailbox may drop the
-      // first SDO.
-      const uint16_t slave = bus_->slave_of_joint[j];
-      if (!bus_->download(slave, sdo.index, sdo.sub_index, sdo_bytes(sdo)) &&
-          !bus_->download(slave, sdo.index, sdo.sub_index, sdo_bytes(sdo)))
+      if (!write_startup_sdo(j, sdo))
       {
-        RCLCPP_ERROR(logger(), "Joint '%s': the drive refused the startup SDO 0x%04X:%u of its slave_config.",
-                     joints_[j].name.c_str(), sdo.index, sdo.sub_index);
         return false;
       }
     }
   }
   return true;
+}
+
+bool EthercatSoemHal::write_startup_sdo(std::size_t joint, const StartupSdo& sdo)
+{
+  // The value was checked at load. Two attempts, since right after a bus release the drive's mailbox may drop an SDO,
+  // or acknowledge it without applying it.
+  const uint16_t slave = bus_->slave_of_joint[joint];
+  const std::vector<uint8_t> written = sdo_bytes(sdo);
+  std::vector<uint8_t> read;
+  bool taken = false;
+  bool answered = false;
+  for (int attempt = 0; attempt < 2; ++attempt)
+  {
+    taken = bus_->download(slave, sdo.index, sdo.sub_index, written);
+    answered = taken && bus_->upload(slave, sdo.index, sdo.sub_index, read);
+    if (answered && read == written)
+    {
+      return true;
+    }
+  }
+  const char* name = joints_[joint].name.c_str();
+  const std::string value = coe_value_text(sdo.type, written);
+  if (!taken)
+  {
+    RCLCPP_ERROR(logger(), "Joint '%s': the drive refused the startup SDO 0x%04X:%u = %s of its slave_config.", name,
+                 sdo.index, sdo.sub_index, value.c_str());
+  }
+  else if (!answered)
+  {
+    RCLCPP_ERROR(logger(), "Joint '%s': the startup SDO 0x%04X:%u = %s of its slave_config cannot be read back.", name,
+                 sdo.index, sdo.sub_index, value.c_str());
+  }
+  else
+  {
+    RCLCPP_ERROR(logger(),
+                 "Joint '%s': the drive keeps 0x%04X:%u at %s after writing the startup SDO %s of its slave_config "
+                 "twice.",
+                 name, sdo.index, sdo.sub_index, coe_value_text(sdo.type, read).c_str(), value.c_str());
+  }
+  return false;
 }
 
 bool EthercatSoemHal::reach_state(uint16_t state, bool cycling)
