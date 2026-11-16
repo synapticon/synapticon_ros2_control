@@ -12,6 +12,7 @@
 #include <cstdint>
 #include <limits>
 #include <optional>
+#include <set>
 #include <vector>
 
 #include <rclcpp/logger.hpp>
@@ -58,8 +59,8 @@ struct SdoRetry
 
 /// @brief SDO access that tries a read or write again while the master gets no valid answer from the drive.
 ///
-/// An answer of the drive, an abort too, is final. Once a transfer has used up its tries, the later ones get one try
-/// each, so a drive that never answers delays the bring-up only once.
+/// An answer of the drive, an abort too, is final. Once a transfer has used up its tries, the later ones to the same
+/// drive get one try each, so a drive that never answers delays the bring-up only once. Other drives keep their tries.
 class RetryingSdo : public SdoReader, public SdoWriter
 {
 public:
@@ -82,8 +83,8 @@ private:
   const SdoWriter& writer_;
   SdoRetry retry_;
   rclcpp::Logger logger_;
-  /// Set once a transfer has used up its tries.
-  mutable bool given_up_{ false };
+  /// Ring positions of the drives for which a transfer has used up its tries.
+  mutable std::set<uint16_t> given_up_;
 };
 
 /// @brief One drive's results of check_drives(), which the HAL keeps for the cyclic exchange.

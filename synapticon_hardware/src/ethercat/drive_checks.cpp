@@ -667,7 +667,7 @@ template <typename Transfer>
 int RetryingSdo::with_retries(const char* what, uint16_t position, uint16_t index, uint8_t sub_index,
                               uint32_t& abort_code, const Transfer& transfer) const
 {
-  const int attempts = given_up_ ? 1 : std::max(retry_.attempts, 1);
+  const int attempts = given_up_.count(position) != 0 ? 1 : std::max(retry_.attempts, 1);
   int error = 0;
   for (int attempt = 1; attempt <= attempts; ++attempt)
   {
@@ -686,7 +686,7 @@ int RetryingSdo::with_retries(const char* what, uint16_t position, uint16_t inde
       std::this_thread::sleep_for(std::chrono::duration<double>(retry_.wait_s));
     }
   }
-  given_up_ = true;
+  given_up_.insert(position);
   return error;
 }
 

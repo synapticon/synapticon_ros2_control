@@ -569,6 +569,19 @@ TEST(RetryingSdo, TriesOnceAfterAReadGaveUp)
   EXPECT_EQ(drive.calls, 4);
 }
 
+/// A drive that never answers uses up only its own tries: the next drive still gets all of them.
+TEST(RetryingSdo, GivingUpOnOneDriveKeepsTheTriesOfTheOthers)
+{
+  BusyMailbox drive(100);
+  const RetryingSdo reader(drive, drive, QUICK_RETRY, rclcpp::get_logger("test_drive_checks"));
+  EXPECT_FALSE(read_u32(reader, rclcpp::get_logger("test_drive_checks"), 0, coe::RATED_TORQUE));
+  EXPECT_EQ(drive.calls, 3);
+  EXPECT_FALSE(read_u32(reader, rclcpp::get_logger("test_drive_checks"), 1, coe::RATED_TORQUE));
+  EXPECT_EQ(drive.calls, 6);
+  EXPECT_FALSE(read_u32(reader, rclcpp::get_logger("test_drive_checks"), 0, coe::VELOCITY_UNIT));
+  EXPECT_EQ(drive.calls, 7);
+}
+
 // Units read from the drive, the units: section of the slave_config, and the sdo_si entries.
 
 constexpr double RAD_PER_RPS = 2.0 * M_PI;
