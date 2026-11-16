@@ -111,6 +111,21 @@ TEST(EthercatSoemHalSetup, ChecksTheSharedParameters)
   EXPECT_FALSE(invalid_timeout.setup(config));
 }
 
+TEST(EthercatSoemHalSetup, TakesAWholeNumberOfAtLeastOneAsMaxBadCycles)
+{
+  for (const char* refused : { "0", "-3", "2.5", "many", "" })
+  {
+    EthercatSoemHal hal;
+    HalConfig config = description("eth_test");
+    config.hardware_parameters["max_bad_cycles"] = refused;
+    EXPECT_FALSE(hal.setup(config)) << "max_bad_cycles '" << refused << "'";
+  }
+  EthercatSoemHal hal;
+  HalConfig config = description("eth_test");
+  config.hardware_parameters["max_bad_cycles"] = "1";
+  EXPECT_TRUE(hal.setup(config));
+}
+
 // --- Bring-up without a drive --------------------------------------------------------------------
 
 TEST(EthercatSoemHalBringUp, IsRefusedBeforeSetup)

@@ -38,6 +38,9 @@ struct SoemConfig : synapticon_hardware::ethercat::BusConfig
   std::string network_interface;
   /// Max time [s] start() waits for every drive to reach SAFE-OP and then OP.
   double state_timeout_s{ 5.0 };
+  /// Cycles in a row without a complete exchange (no frame back, or a short working counter) after which read()
+  /// fails, until a complete exchange comes back. Fewer are bridged with the last data received.
+  int max_bad_cycles{ 10 };
 };
 
 /// @brief SynapticonHalI over a direct EtherCAT bus, with the SOEM master library and no kernel module.
@@ -96,6 +99,9 @@ private:
   /// Request `state` of every drive and wait for it, exchanging process data while waiting when `cycling`. The
   /// request is repeated until it takes.
   bool reach_state(uint16_t state, bool cycling);
+  /// Count the cycles in a row without a complete exchange while streaming, up to max_bad_cycles. False once that
+  /// many came in a row.
+  bool count_bad_cycles();
   /// Exchange process data at the control frequency for `duration`.
   void exchange_for(std::chrono::milliseconds duration);
   /// Bring the drives back to PRE-OP and switch their SYNC0 off.

@@ -15,6 +15,7 @@
 #include <ctime>
 #include <exception>
 #include <optional>
+#include <stdexcept>
 #include <string>
 #include <thread>
 #include <utility>
@@ -299,6 +300,7 @@ struct EthercatSoemHal::Bus
   int expected_wkc{ 0 };
   int wkc{ EC_NOFRAME };
   unsigned cycles{ 0 };
+  int bad_cycles{ 0 };                    ///< cycles in a row without a complete exchange
   bool states_unknown{ false };           ///< no frame came back since the slave states were last read
   std::optional<uint8> clock_sync_index;  ///< the frame buffer of the last reference clock write
 };
@@ -340,6 +342,18 @@ bool EthercatSoemHal::setup(SoemConfig config, std::vector<JointConfig> joints)
 
 namespace
 {
+/// The whole number in `text`, when it is at least 1. Throws std::invalid_argument otherwise.
+int positive_count(const std::string& text)
+{
+  std::size_t used = 0;
+  const int number = std::stoi(text, &used);
+  if (used != text.size() || number < 1)
+  {
+    throw std::invalid_argument(text + " is not a whole number of at least 1");
+  }
+  return number;
+}
+
 /// The bus settings of the SOEM HAL from the hardware parameters. Logs and returns nothing for a rejected value.
 std::optional<SoemConfig> soem_bus_from(const synapticon_hardware::ParameterMap& hardware)
 {
@@ -351,6 +365,10 @@ std::optional<SoemConfig> soem_bus_from(const synapticon_hardware::ParameterMap&
     if (const auto timeout = hardware.find("state_timeout_s"); timeout != hardware.end())
     {
       bus.state_timeout_s = ec::positive(timeout->second);
+    }
+    if (const auto bad_cycles = hardware.find("max_bad_cycles"); bad_cycles != hardware.end())
+    {
+      bus.max_bad_cycles = positive_count(bad_cycles->second);
     }
     return bus;
   }
@@ -561,6 +579,7 @@ bool EthercatSoemHal::start()
     back_to_pre_op();
     return false;
   }
+  bus_->bad_cycles = 0;
   streaming_ = true;
   if (!wait_for_streaming(joints_, config_.control_frequency, config_.readiness_timeout_s))
   {
@@ -673,7 +692,7 @@ bool EthercatSoemHal::exchange_read()
     ecx_readstate(&bus_->context);
     bus_->states_unknown = false;
   }
-  return true;
+  return count_bad_cycles();
 }
 
 bool EthercatSoemHal::exchange_write()
@@ -865,6 +884,32 @@ bool EthercatSoemHal::reach_state(uint16_t state, bool cycling)
                  ec_ALstatuscode2string(slave.ALstatuscode));
   }
   return false;
+}
+
+bool EthercatSoemHal::count_bad_cycles()
+{
+  const int limit = config_.max_bad_cycles;
+  if (!streaming_)
+  {
+    return true;  // in SAFE-OP and on the way to OP the working counter is short by design
+  }
+  if (bus_->wkc == bus_->expected_wkc)
+  {
+    if (bus_->bad_cycles >= limit)
+    {
+      RCLCPP_INFO(logger(), "Process data complete again, read() delivers fresh data.");
+    }
+    bus_->bad_cycles = 0;
+    return true;
+  }
+  if (bus_->bad_cycles < limit && ++bus_->bad_cycles == limit)
+  {
+    RCLCPP_ERROR(logger(),
+                 "No complete process data for %d cycles in a row (working counter %d, expected %d). read() "
+                 "fails until it is complete again.",
+                 limit, bus_->wkc, bus_->expected_wkc);
+  }
+  return bus_->bad_cycles < limit;
 }
 
 void EthercatSoemHal::exchange_for(std::chrono::milliseconds duration)
