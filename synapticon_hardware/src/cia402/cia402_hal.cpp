@@ -46,11 +46,12 @@ Cia402Hal::Cia402Hal(std::string logger_name) : logger_name_(std::move(logger_na
 /// Order of the work:
 /// 1. Refuse while any drive with energize is faulted, before anything changes, so that a running reset_fault goes
 ///    on. enabled_ is no help here, since a drive can fault after an earlier enable() without clearing it.
-/// 2. Cancel every action other than enable, also when enabled_ is set, since actions do not touch enabled_.
-///    A stop left running would take the drives down again right after.
+/// 2. Cancel every action other than enable. A stop left running would take the drives down again right after.
 /// 3. Let setpoints through again for the joints that get power.
 /// 4. Step every drive with energize up to Operation Enabled, one state per cycle. Nobody else writes setpoints
 ///    while this blocks, so each drive is told to stay where it is. Monitored drives are kept without power.
+///    Skipped when the HAL is enabled and every drive with energize is in Operation Enabled, so a repeated
+///    enable() leaves the setpoints alone.
 /// 5. On a failure or timeout, take every drive down again, also those that already got power.
 bool Cia402Hal::enable()
 {
@@ -64,10 +65,6 @@ bool Cia402Hal::enable()
     return false;
   }
   cancel_walks([](DriveAction walking) { return walking != DriveAction::ENABLE; });
-  if (enabled_)
-  {
-    return true;
-  }
 
   const std::size_t energisable = energisable_count();
   if (energisable == 0)
@@ -80,6 +77,10 @@ bool Cia402Hal::enable()
     {
       refresh_feed(j, DriveAction::ENABLE, current_state(j));
     }
+  }
+  if (is_enabled())
+  {
+    return true;
   }
 
   const Outcome result = walk_all("enable()", [this](std::size_t j) {
@@ -115,12 +116,14 @@ bool Cia402Hal::enable()
       RCLCPP_ERROR(log(), "Powering the drives took longer than %ld s. All of them go back to Switch On Disabled.",
                    static_cast<long>(WALK_TIMEOUT.count()));
       disable();
+      enabled_ = false;
       return false;
     case Outcome::FAILED:
       // Drives that got to Operation Enabled before the failure must not keep their power. If the bus failed, this
       // is a best effort.
       RCLCPP_ERROR(log(), "enable() failed. All drives go back to Switch On Disabled.");
       disable();
+      enabled_ = false;
       break;
   }
   return false;
@@ -227,7 +230,18 @@ bool Cia402Hal::is_streaming() const
 
 bool Cia402Hal::is_enabled() const
 {
-  return enabled_;
+  if (!enabled_)
+  {
+    return false;
+  }
+  for (std::size_t j = 0; j < drives_.size(); ++j)
+  {
+    if (drives_[j].settings.energize && current_state(j) != cia402::DeviceState::OPERATION_ENABLED)
+    {
+      return false;
+    }
+  }
+  return true;
 }
 
 DriveAction Cia402Hal::active_drive_action(std::size_t joint) const
@@ -256,23 +270,19 @@ cia402::DeviceState Cia402Hal::current_state(std::size_t joint) const
   return cia402::device_state(statusword(joint));
 }
 
-/// Checks in order: reset_fault needs a drive in Fault, NONE starts nothing (a running action goes on to its end),
-/// the HAL must support the action, enable needs a drive without fault, actions that power the drive need energize,
-/// and quick_stop falls back to disable when the drive has no quick stop. Asking again for the running action keeps
-/// its deadline.
+/// Checks in order: reset_fault needs a drive in Fault or Fault Reaction Active, NONE starts nothing (a running action
+/// goes on to its end), the HAL must support the action, enable needs a drive without fault, actions that power the
+/// drive need energize, and quick_stop falls back to disable when the drive has no quick stop. Asking again for the
+/// running action keeps its deadline. A reset_fault taken in Fault Reaction Active sends the reset once the drive is in
+/// Fault.
 DriveAction Cia402Hal::accept_request(std::size_t j, DriveAction action)
 {
   const char* name = drives_[j].settings.name.c_str();
 
-  if (action == DriveAction::RESET_FAULT)
+  if (action == DriveAction::RESET_FAULT && !is_fault_state(current_state(j)))
   {
-    const uint16_t sw = statusword(j);
-    if (cia402::device_state(sw) != cia402::DeviceState::FAULT)
-    {
-      RCLCPP_WARN(log(), "Joint '%s': no fault to reset (statusword 0x%04X), reset_fault ignored.", name, sw);
-      return DriveAction::NONE;
-    }
-    enabled_ = false;  // the drive has no power after the reset, so enable() has to run again
+    RCLCPP_WARN(log(), "Joint '%s': no fault to reset (statusword 0x%04X), reset_fault ignored.", name, statusword(j));
+    return DriveAction::NONE;
   }
 
   if (action == DriveAction::NONE)

@@ -52,6 +52,7 @@ public:
   bool disable() override;
   std::size_t joint_count() const override;
   bool is_streaming() const override;
+  /// True after a successful enable() and before disable(), while every joint with energize is in Operation Enabled.
   bool is_enabled() const override;
 
   /// The drive action that `joint` is still carrying out, NONE when idle.
@@ -112,7 +113,7 @@ protected:
   }
 
   bool streaming_{ false };
-  bool enabled_{ false };  ///< Set when enable() got every drive with energize to Operation Enabled.
+  bool enabled_{ false };  ///< Set by a successful enable(), cleared by disable() and stop().
 
 private:
   /// What the drive logic keeps for one joint.

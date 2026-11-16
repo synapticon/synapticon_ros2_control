@@ -34,7 +34,9 @@ constexpr uint16_t SWITCHED_ON = 0x23;
 constexpr uint16_t OPERATION_ENABLED = 0x27;
 constexpr uint16_t ENABLE_OPERATION_BIT = 0x08;
 constexpr uint16_t QUICK_STOP_ACTIVE = 0x07;
+constexpr uint16_t FAULT_REACTION_ACTIVE = 0x0F;
 constexpr uint16_t FAULT = 0x08;
+constexpr uint16_t FAULT_RESET_BIT = 0x80;
 
 /// The walk timeout of Cia402Hal, with a margin.
 constexpr auto WALK_TIMEOUT = std::chrono::milliseconds(5200);
@@ -383,6 +385,58 @@ TEST(Cia402HalFailures, AFaultResetOutsideFaultIsIgnored)
   ASSERT_TRUE(drives.start());
   ASSERT_TRUE(drives.cycle(DriveAction::RESET_FAULT));
   EXPECT_EQ(drives.active_drive_action(0), DriveAction::NONE);
+}
+
+/// A reset_fault that arrives during the fault reaction is kept, and sends the reset once the drive is in Fault.
+TEST(Cia402HalFailures, AFaultResetDuringTheFaultReactionWaitsForFault)
+{
+  ScriptedDrives drives({ true });
+  ASSERT_TRUE(drives.start());
+  drives.report(FAULT_REACTION_ACTIVE);
+  ASSERT_TRUE(drives.cycle(DriveAction::RESET_FAULT));
+  EXPECT_EQ(drives.active_drive_action(0), DriveAction::RESET_FAULT);
+  EXPECT_EQ(drives.controlword(0) & FAULT_RESET_BIT, 0);
+  ASSERT_TRUE(drives.cycle(DriveAction::RESET_FAULT));
+  EXPECT_EQ(drives.controlword(0) & FAULT_RESET_BIT, 0);
+  drives.report(FAULT);
+  ASSERT_TRUE(drives.cycle(DriveAction::RESET_FAULT));
+  EXPECT_NE(drives.controlword(0) & FAULT_RESET_BIT, 0);
+  drives.report(SWITCH_ON_DISABLED);
+  ASSERT_TRUE(drives.cycle(DriveAction::RESET_FAULT));
+  EXPECT_EQ(drives.active_drive_action(0), DriveAction::NONE);
+}
+
+/// is_enabled() follows the drives: it turns false when a powered drive leaves Operation Enabled by itself, and
+/// a monitored drive does not count.
+TEST(Cia402HalFailures, IsEnabledFollowsTheDrives)
+{
+  ScriptedDrives drives({ true, false });
+  ASSERT_TRUE(drives.start());
+  drives.report(0, OPERATION_ENABLED);
+  ASSERT_TRUE(drives.enable());
+  EXPECT_TRUE(drives.is_enabled());
+  drives.report(0, FAULT);
+  ASSERT_TRUE(drives.cycle(DriveAction::NONE));
+  EXPECT_FALSE(drives.is_enabled());
+  drives.report(0, OPERATION_ENABLED);
+  ASSERT_TRUE(drives.cycle(DriveAction::NONE));
+  EXPECT_TRUE(drives.is_enabled());
+}
+
+/// A repeated enable() walks the drives again: it cancels a running stop and lets the setpoints through again.
+TEST(Cia402HalFailures, ARepeatedEnableWalksTheDrivesAgain)
+{
+  ScriptedDrives drives({ true });
+  ASSERT_TRUE(drives.start());
+  drives.report(OPERATION_ENABLED);
+  ASSERT_TRUE(drives.enable());
+  ASSERT_TRUE(drives.cycle(DriveAction::DISABLE));
+  ASSERT_EQ(drives.active_drive_action(0), DriveAction::DISABLE);
+  ASSERT_FALSE(drives.forwarding_setpoints(0));
+  EXPECT_TRUE(drives.enable());
+  EXPECT_EQ(drives.active_drive_action(0), DriveAction::NONE);
+  EXPECT_TRUE(drives.forwarding_setpoints(0));
+  EXPECT_TRUE(drives.is_enabled());
 }
 
 /// disable() cancels an enable action still walking, so it does not resume afterwards.

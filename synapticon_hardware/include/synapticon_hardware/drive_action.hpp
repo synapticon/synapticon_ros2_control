@@ -29,7 +29,7 @@ enum class DriveAction : uint8_t
   QUICK_STOP,       ///< Walk to Quick Stop Active and stay energised.
   DISABLE,          ///< Walk to Switch-on-Disabled, via the drive's quick stop ramp.
   DISABLE_VOLTAGE,  ///< Walk to Switch-on-Disabled directly, without a ramp.
-  RESET_FAULT,      ///< Clear a Fault (Fault to Switch-on-Disabled). Nothing else.
+  RESET_FAULT,      ///< Clear a Fault (Fault to Switch-on-Disabled). In Fault Reaction Active it waits for Fault.
   // Codes >= 128 are reserved for vendor actions declared in the drive's slave_config.
 };
 
