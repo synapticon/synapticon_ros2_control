@@ -827,11 +827,15 @@ bool EthercatSoemHal::reach_state(uint16_t state, bool cycling)
       std::chrono::steady_clock::now() + std::chrono::duration_cast<std::chrono::steady_clock::duration>(
                                              std::chrono::duration<double>(config_.state_timeout_s));
   auto next_request = std::chrono::steady_clock::now();
+  ecx_statecheck(&context, 0, state, 0);  // the AL status of the bus, with its error bit, into slavelist[0]
   while (std::chrono::steady_clock::now() < deadline)
   {
     if (std::chrono::steady_clock::now() >= next_request)
     {
-      context.slavelist[0].state = state;  // ecx_statecheck() overwrites it with the state read back
+      // A drive whose error bit is set follows a state request only with the error acknowledged. ecx_statecheck()
+      // overwrites the request with the AL status read back.
+      const bool error = (context.slavelist[0].state & EC_STATE_ERROR) != 0;
+      context.slavelist[0].state = error ? static_cast<uint16_t>(state | EC_STATE_ACK) : state;
       ecx_writestate(&context, 0);
       next_request += STATE_REQUEST_INTERVAL;
     }
@@ -855,9 +859,10 @@ bool EthercatSoemHal::reach_state(uint16_t state, bool cycling)
   for (std::size_t j = 0; j < joints_.size(); ++j)
   {
     const ec_slavet& slave = bus_->slaves[bus_->slave_of_joint[j]];
-    RCLCPP_ERROR(logger(), "Joint '%s' did not reach %s within %.1fs: it is in %s (AL status 0x%04X, %s).",
+    RCLCPP_ERROR(logger(), "Joint '%s' did not reach %s within %.1fs: it is in %s%s (AL status 0x%04X, %s).",
                  joints_[j].name.c_str(), state_name(state), config_.state_timeout_s, state_name(slave.state),
-                 slave.ALstatuscode, ec_ALstatuscode2string(slave.ALstatuscode));
+                 (slave.state & EC_STATE_ERROR) != 0 ? "+ERROR" : "", slave.ALstatuscode,
+                 ec_ALstatuscode2string(slave.ALstatuscode));
   }
   return false;
 }
