@@ -82,13 +82,17 @@ bool MockCia402Hal::setup(const HalConfig& config)
     RCLCPP_ERROR(rclcpp::get_logger(LOGGER_NAME), "setup() refused: the HAL is brought up, disconnect() first.");
     return false;
   }
+  configured_ = false;
+  joints_.clear();
+  double control_frequency = 0.0;
+  bool quick_stop_hold = true;
+  std::vector<JointConfig> joints;
   try
   {
     const auto& hw = config.hardware_parameters;
-    control_frequency_ = std::stod(param_or(hw, "control_frequency", "500"));
-    quick_stop_hold_ = read_flag(param_or(hw, "quick_stop_hold", "true"));
+    control_frequency = std::stod(param_or(hw, "control_frequency", "500"));
+    quick_stop_hold = read_flag(param_or(hw, "quick_stop_hold", "true"));
     const std::string default_mode = param_or(hw, "mode_of_operation", "8");
-    joints_.clear();
     for (const auto& spec : config.joints)
     {
       const auto& p = spec.parameters;
@@ -99,7 +103,7 @@ bool MockCia402Hal::setup(const HalConfig& config)
       joint.drive.quick_stop_option_code = std::stoi(param_or(p, "quick_stop_option_code", "6"));
       joint.drive.quick_stop_deceleration = std::stod(param_or(p, "quick_stop_deceleration", "20.0"));
       joint.drive.following_error = parse_following_error(param_or(p, "following_error", "off"));
-      joints_.push_back(std::move(joint));
+      joints.push_back(std::move(joint));
     }
   }
   catch (const std::exception& e)
@@ -107,20 +111,27 @@ bool MockCia402Hal::setup(const HalConfig& config)
     RCLCPP_ERROR(rclcpp::get_logger(LOGGER_NAME), "setup(): invalid parameter: %s", e.what());
     return false;
   }
-  if (joints_.empty() || !(control_frequency_ > 0.0))
+  if (joints.empty() || !(control_frequency > 0.0))
   {
     RCLCPP_ERROR(rclcpp::get_logger(LOGGER_NAME), "setup(): needs at least one joint and a positive frequency.");
     return false;
   }
+  control_frequency_ = control_frequency;
+  quick_stop_hold_ = quick_stop_hold;
+  joints_ = std::move(joints);
   configured_ = true;
   return true;
 }
 
 bool MockCia402Hal::connect()
 {
-  if (!configured_ || connected_)
+  if (connected_)
   {
-    RCLCPP_ERROR(rclcpp::get_logger(LOGGER_NAME), "connect() needs setup() and must not be called twice.");
+    return true;
+  }
+  if (!configured_)
+  {
+    RCLCPP_ERROR(rclcpp::get_logger(LOGGER_NAME), "connect() needs setup().");
     return false;
   }
   std::vector<JointSettings> settings;
@@ -141,9 +152,13 @@ bool MockCia402Hal::connect()
 
 bool MockCia402Hal::start()
 {
-  if (!connected_ || streaming_)
+  if (streaming_)
   {
-    RCLCPP_ERROR(rclcpp::get_logger(LOGGER_NAME), "start() needs connect() and must not be called twice.");
+    return true;
+  }
+  if (!connected_)
+  {
+    RCLCPP_ERROR(rclcpp::get_logger(LOGGER_NAME), "start() needs connect().");
     return false;
   }
   streaming_ = true;
@@ -168,6 +183,12 @@ bool MockCia402Hal::read(std::vector<DriveState>& states)
 
 bool MockCia402Hal::stop()
 {
+  // A drive can have power without enable(), from a drive_action, so the drives always go down first.
+  if (streaming_ && !disable())
+  {
+    RCLCPP_ERROR(rclcpp::get_logger(LOGGER_NAME), "stop() refused: the drives did not all lose their power.");
+    return false;
+  }
   streaming_ = false;
   enabled_ = false;
   return true;
@@ -176,9 +197,16 @@ bool MockCia402Hal::stop()
 bool MockCia402Hal::disconnect()
 {
   stop();
+  streaming_ = false;
+  enabled_ = false;
   connected_ = false;
   drives_.clear();
   return true;
+}
+
+std::size_t MockCia402Hal::joint_count() const
+{
+  return joints_.size();
 }
 
 bool MockCia402Hal::is_connected() const
@@ -253,7 +281,7 @@ void MockCia402Hal::write_controlword(std::size_t joint, uint16_t controlword)
 
 void MockCia402Hal::write_setpoints(std::size_t joint, const DriveCommand& command)
 {
-  // NaN keeps the last value, as on a real drive's command buffer.
+  // A value that is not finite keeps the one sent last.
   auto& out = commands_[joint];
   const auto take = [](double& field, double value) {
     if (std::isfinite(value))
@@ -264,8 +292,9 @@ void MockCia402Hal::write_setpoints(std::size_t joint, const DriveCommand& comma
   take(out.position, command.position);
   take(out.velocity, command.velocity);
   take(out.effort, command.effort);
-  out.stiffness = command.stiffness;
-  out.damping = command.damping;
+  take(out.stiffness, command.stiffness);
+  take(out.damping, command.damping);
+  take(out.max_joint_torque, command.max_joint_torque);
 }
 
 void MockCia402Hal::write_hold(std::size_t joint, double position)

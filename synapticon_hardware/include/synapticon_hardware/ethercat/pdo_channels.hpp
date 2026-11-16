@@ -217,13 +217,6 @@ inline constexpr std::size_t ACTUAL_TORQUE = *input_slot("effort");
 inline constexpr std::size_t ERROR_REPORT = *input_slot("error_report");
 }  // namespace slot
 
-/// True for the units whose command may be NaN to mean "no change": stiffness, damping and the torque limit. The
-/// value already in the array is sent again. Before the first command, that is what bring-up put there.
-constexpr bool holds_last_value(Unit unit)
-{
-  return unit == Unit::STIFFNESS || unit == Unit::DAMPING || unit == Unit::TORQUE_LIMIT;
-}
-
 /// `value` as a FieldT. For an integer field the value is cut to a whole number via int64_t (no rounding) and then
 /// wraps to the field's width.
 template <typename FieldT>

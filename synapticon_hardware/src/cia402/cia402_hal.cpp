@@ -130,7 +130,7 @@ bool Cia402Hal::enable()
 }
 
 /// Per joint and cycle: take a changed drive_action, pass the setpoints on if the joint gets them, write the
-/// controlword and keep a quick stop hold in place.
+/// controlword and keep a quick stop hold in place. An infinite setpoint is logged once per run of such cycles.
 bool Cia402Hal::write(const std::vector<DriveCommand>& commands)
 {
   if (!streaming_)
@@ -145,8 +145,18 @@ bool Cia402Hal::write(const std::vector<DriveCommand>& commands)
     return false;
   }
 
+  bool finite = true;
   for (std::size_t j = 0; j < drives_.size(); ++j)
   {
+    if (has_infinite_setpoint(commands[j]))
+    {
+      if (finite && !infinite_reported_)
+      {
+        RCLCPP_ERROR(log(), "write(): joint '%s' got an infinite setpoint. Each such field keeps its last value.",
+                     drives_[j].settings.name.c_str());
+      }
+      finite = false;
+    }
     DriveAction accepted = DriveAction::NONE;
     const DriveAction requested = commands[j].drive_action;
     if (requested != drives_[j].seen_request)
@@ -166,7 +176,8 @@ bool Cia402Hal::write(const std::vector<DriveCommand>& commands)
     steer(j);
     freeze_in_quick_stop(j, state);
   }
-  return exchange_write();
+  infinite_reported_ = !finite;
+  return exchange_write() && finite;
 }
 
 /// Takes every joint down, also one that a drive action powered, because enabled_ only follows enable() and
@@ -192,7 +203,9 @@ bool Cia402Hal::disable()
     const bool direct = drives_[j].walking == DriveAction::DISABLE_VOLTAGE;
     write_step(j, state, cia402::DeviceState::SWITCH_ON_DISABLED,
                direct ? cia402::WalkPath::DIRECT : cia402::WalkPath::RAMPED);
-    const bool down = cia402::reached(state, cia402::DeviceState::SWITCH_ON_DISABLED);
+    // Not Ready to Switch On has no power and moves on to Switch On Disabled by itself, so it counts as down.
+    const bool down = cia402::reached(state, cia402::DeviceState::SWITCH_ON_DISABLED) ||
+                      state == cia402::DeviceState::NOT_READY_TO_SWITCH_ON;
     return down || !drives_[j].settings.energize ? Progress::DONE : Progress::PENDING;
   });
   if (result == Outcome::FAILED)

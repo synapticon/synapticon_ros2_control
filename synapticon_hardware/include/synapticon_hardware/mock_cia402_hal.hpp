@@ -46,6 +46,8 @@ public:
   bool read(std::vector<DriveState>& states) override;
   bool stop() override;
   bool disconnect() override;
+  /// The joints as setup() found them, also before connect().
+  std::size_t joint_count() const override;
   bool is_connected() const override;
   bool quick_stop_available(std::size_t joint) const override;
 

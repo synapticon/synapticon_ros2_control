@@ -8,6 +8,7 @@
 /// @file
 /// @brief The data exchanged with each drive once per control cycle.
 
+#include <cmath>
 #include <cstdint>
 
 #include "synapticon_hardware/drive_action.hpp"
@@ -17,7 +18,9 @@ namespace synapticon_hardware
 
 /// @brief Setpoints for one joint, for one cycle.
 ///
-/// Every value must be finite. The only exception is a field that documents a meaning for NaN.
+/// NaN in a setpoint field means "keep the value sent last" for that field. Before the first finite value that is
+/// what the HAL starts with, for example the hold position that enable() sends. An infinite value is an error: the
+/// field keeps its last value, the other values still go out, and write() returns false.
 struct DriveCommand
 {
   double position{ 0.0 };          ///< [rad] position setpoint.
@@ -30,6 +33,20 @@ struct DriveCommand
   /// A new request takes the place of one the joint has not finished yet.
   DriveAction drive_action{ DriveAction::NONE };
 };
+
+/// @brief True when a setpoint of `command` is infinite. NaN does not count.
+inline bool has_infinite_setpoint(const DriveCommand& command)
+{
+  for (const double value : { command.position, command.velocity, command.effort, command.stiffness, command.damping,
+                              command.max_joint_torque })
+  {
+    if (std::isinf(value))
+    {
+      return true;
+    }
+  }
+  return false;
+}
 
 /// @brief Feedback of one drive, for one cycle.
 ///

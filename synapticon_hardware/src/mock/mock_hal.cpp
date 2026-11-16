@@ -11,7 +11,6 @@
 #include <array>
 #include <cmath>
 #include <cstddef>
-#include <optional>
 #include <utility>
 #include <vector>
 
@@ -40,27 +39,10 @@ const char* level_name(int level)
   return names.at(static_cast<std::size_t>(level));
 }
 
-/// Position of the first command that has an infinite setpoint, if any. NaN does not count.
-std::optional<std::size_t> first_infinite(const std::vector<DriveCommand>& commands)
-{
-  for (std::size_t index = 0; index < commands.size(); ++index)
-  {
-    const DriveCommand& c = commands[index];
-    for (const double value : { c.position, c.velocity, c.effort, c.stiffness, c.damping, c.max_joint_torque })
-    {
-      if (std::isinf(value))
-      {
-        return index;
-      }
-    }
-  }
-  return std::nullopt;
-}
-
-/// Store `source` in `target`, unless `source` is NaN.
+/// Store `source` in `target`, unless `source` is NaN or infinite.
 void echo(double source, double& target)
 {
-  target = std::isnan(source) ? target : source;
+  target = std::isfinite(source) ? source : target;
 }
 }  // namespace
 
@@ -93,7 +75,7 @@ bool MockHal::connect()
 {
   if (configured_)
   {
-    return step("connect()", Level::DISCONNECTED, Level::CONNECTED);
+    return climb("connect()", Level::CONNECTED);
   }
   RCLCPP_ERROR(mock_logger(), "connect() is not allowed before setup() gave the mock its joints.");
   return false;
@@ -101,12 +83,12 @@ bool MockHal::connect()
 
 bool MockHal::start()
 {
-  return step("start()", Level::CONNECTED, Level::STREAMING);
+  return climb("start()", Level::STREAMING);
 }
 
 bool MockHal::enable()
 {
-  return step("enable()", Level::STREAMING, Level::ENABLED);
+  return climb("enable()", Level::ENABLED);
 }
 
 bool MockHal::read(std::vector<DriveState>& states)
@@ -135,37 +117,40 @@ bool MockHal::write(const std::vector<DriveCommand>& commands)
                  reported_.size());
     return false;
   }
-  if (const auto index = first_infinite(commands))
-  {
-    RCLCPP_ERROR(mock_logger(), "write() rejected: infinite setpoint for joint '%s', number %zu of the command.",
-                 names_[*index].c_str(), *index);
-    return false;
-  }
+  bool finite = true;
   for (std::size_t index = 0; index < commands.size(); ++index)
   {
+    if (has_infinite_setpoint(commands[index]))
+    {
+      RCLCPP_ERROR(mock_logger(), "write(): infinite setpoint for joint '%s', number %zu. That field keeps its value.",
+                   names_[index].c_str(), index);
+      finite = false;
+    }
     DriveState& state = reported_[index];
     echo(commands[index].position, state.position);
     echo(commands[index].velocity, state.velocity);
     echo(commands[index].effort, state.effort);
     state.status_word = STREAMING_STATUS_WORD;
   }
-  return true;
+  return finite;
 }
 
 bool MockHal::disable()
 {
-  // Streaming without power is where disable() leads, so there is nothing to do.
-  return level_ == Level::STREAMING || step("disable()", Level::ENABLED, Level::STREAMING);
+  if (level_ == Level::ENABLED)
+  {
+    level_ = Level::STREAMING;
+  }
+  return true;
 }
 
 bool MockHal::stop()
 {
-  if (level_ == Level::ENABLED)
+  if (level_ >= Level::STREAMING)
   {
-    RCLCPP_ERROR(mock_logger(), "stop() needs disabled drives. Use disable() to switch them off.");
-    return false;
+    level_ = Level::CONNECTED;  // switches the power off too
   }
-  return step("stop()", Level::STREAMING, Level::CONNECTED);
+  return true;
 }
 
 bool MockHal::disconnect()
@@ -206,15 +191,20 @@ bool MockHal::set_states(const std::vector<DriveState>& states)
   return false;
 }
 
-bool MockHal::step(const char* call, Level expected, Level next)
+bool MockHal::climb(const char* call, Level next)
 {
-  if (level_ == expected)
+  if (level_ >= next)
+  {
+    return true;
+  }
+  const auto below = static_cast<Level>(static_cast<int>(next) - 1);
+  if (level_ == below)
   {
     level_ = next;
     return true;
   }
   RCLCPP_ERROR(mock_logger(), "%s is not allowed: the mock is %s, but the call needs it %s.", call,
-               level_name(static_cast<int>(level_)), level_name(static_cast<int>(expected)));
+               level_name(static_cast<int>(level_)), level_name(static_cast<int>(below)));
   return false;
 }
 

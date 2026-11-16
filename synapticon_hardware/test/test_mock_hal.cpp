@@ -108,12 +108,14 @@ INSTANTIATE_TEST_SUITE_P(
                 "?---- connect+ ?C--- start+ ?CS-- enable+ ?CSER disable+ ?CS-- stop+ ?C--- disconnect+ ?----" },
         Script{ "WithoutSetupNothingConnects", false, "connect- start- ?----" },
         Script{ "StartAndEnableWaitForTheLink", true, "start- enable- ?----" },
-        Script{ "EnableStopAndDisableWaitForTheExchange", true, "connect+ enable- stop- disable- ?C---" },
-        Script{ "ConnectOnlyOnce", true, "connect+ connect- ?C---" },
-        Script{ "StartOnlyOnce", true, "connect+ start+ start- ?CS--" },
-        Script{ "EnableOnlyOnce", true, "connect+ start+ enable+ enable- ?CSER" },
+        Script{ "EnableWaitsForTheExchange", true, "connect+ enable- ?C---" },
+        Script{ "DownCallsOffTheirRungChangeNothing", true,
+                "disable+ stop+ disconnect+ ?---- connect+ disable+ stop+ ?C--- start+ disable+ ?CS--" },
+        Script{ "ConnectAgainChangesNothing", true, "connect+ connect+ ?C--- start+ enable+ connect+ ?CSER" },
+        Script{ "StartAgainChangesNothing", true, "connect+ start+ start+ ?CS-- enable+ start+ ?CSER" },
+        Script{ "EnableAgainChangesNothing", true, "connect+ start+ enable+ enable+ ?CSER" },
         Script{ "DisableWithoutPowerIsHarmless", true, "connect+ start+ disable+ disable+ ?CS--" },
-        Script{ "StopWaitsForDisable", true, "connect+ start+ enable+ stop- ?CSER disable+ stop+ ?C---" },
+        Script{ "StopSwitchesThePowerOff", true, "connect+ start+ enable+ stop+ ?C--- start+ ?CS--" },
         Script{ "PowerTogglesOnARunningExchange", true,
                 "connect+ start+ enable+ disable+ enable+ disable+ enable+ disable+ disable+ ?CS--" },
         Script{ "TheExchangeRestartsOnTheSameLink", true, "connect+ start+ stop+ start+ stop+ start+ stop+ ?C---" },
@@ -289,17 +291,20 @@ protected:
   }
 };
 
-TEST_P(SetpointTest, AnInfiniteValueRefusesTheWholeWrite)
+TEST_P(SetpointTest, AnInfiniteValueFailsTheWriteAndKeepsItsLastValue)
 {
   ASSERT_TRUE(mock_.write(uniform(0.9)));
   for (const double value : { INFINITE, -INFINITE })
   {
     EXPECT_FALSE(mock_.write(with(5.0, 2, value))) << value;
   }
-  for (const DriveState& state : read_back())
+  const auto states = read_back();
+  for (const Setpoint& looped : LOOPED_BACK)
   {
-    EXPECT_DOUBLE_EQ(state.position, 0.9) << "no joint takes anything from a refused write";
-    EXPECT_DOUBLE_EQ(state.effort, 0.9);
+    SCOPED_TRACE(looped.label);
+    EXPECT_DOUBLE_EQ(looped.shows_as(states[1]), 5.0) << "the other joints get their commands";
+    const bool infinite = std::string(looped.label) == GetParam().label;
+    EXPECT_DOUBLE_EQ(looped.shows_as(states[2]), infinite ? 0.9 : 5.0) << "only the infinite field keeps its value";
   }
 }
 

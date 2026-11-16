@@ -92,7 +92,8 @@ protected:
   virtual double transport_position(std::size_t joint) const = 0;
 
   virtual void write_controlword(std::size_t joint, uint16_t controlword) = 0;
-  /// Set this cycle's setpoints from the controller fields of `command`.
+  /// Set this cycle's setpoints from the controller fields of `command`. A field that is NaN or infinite keeps the
+  /// value sent last.
   virtual void write_setpoints(std::size_t joint, const DriveCommand& command) = 0;
   /// Set the target to `position` (in transport_position() units), with velocity and torque offset zero.
   virtual void write_hold(std::size_t joint, double position) = 0;
@@ -187,6 +188,7 @@ private:
   std::string logger_name_;
   std::vector<DriveSlot> drives_;
   std::chrono::nanoseconds period_{ 1000000 };
+  bool infinite_reported_{ false };  ///< write() logged an infinite setpoint in the cycle before
 };
 
 }  // namespace synapticon_hardware

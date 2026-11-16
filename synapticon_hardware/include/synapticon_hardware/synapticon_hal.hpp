@@ -33,6 +33,15 @@ namespace synapticon_hardware
 /// Each rung can be climbed again after it was left. read() and write() run in the control loop, everything else
 /// may take seconds. The caller serialises all calls on one instance.
 ///
+/// Every HAL follows the same call rules:
+///
+/// - An up-call on a rung the HAL is on already succeeds and changes nothing: connect() while connected, start()
+///   while streaming, enable() while enabled.
+/// - A down-call for a rung the HAL is not on succeeds and changes nothing: disable() while not streaming or not
+///   enabled, stop() while not streaming, disconnect() always.
+/// - An up-call out of order fails: start() before connect(), enable() before start().
+/// - stop() while drives may have power switches them off first, as disable() does.
+///
 /// What a false return means:
 ///
 /// - setup(): no configuration is kept.
@@ -65,12 +74,11 @@ public:
   virtual bool start() = 0;
 
   /// Stop the cyclic exchange, and keep the link. read() and write() then wait for the next start().
-  /// Call disable() before. What a HAL does with drives that are still powered is its own choice (refuse, or
-  /// switch them off).
+  /// Drives that may still have power are switched off first, as by disable().
   virtual bool stop() = 0;
 
-  /// Give the drives power, so they follow their commands. The HAL decides whether start() must come first, and how
-  /// long this may take.
+  /// Give the drives power, so they follow their commands. Needs start() first. The HAL decides how long this may
+  /// take.
   virtual bool enable() = 0;
 
   /// Take the power off the drives, and keep the exchange and the link, so enable() can follow right away.
@@ -81,8 +89,9 @@ public:
   /// it never blocks, and allocates nothing once the exchange runs.
   virtual bool read(std::vector<DriveState>& states) = 0;
 
-  /// Send one command per joint, in joint order. Runs in the control loop, under the same rules as read(). Values
-  /// must be finite, unless a field says what NaN means for it. False when the commands did not go out.
+  /// Send one command per joint, in joint order. Runs in the control loop, under the same rules as read(). A NaN
+  /// setpoint keeps the value sent last, an infinite one is an error (see DriveCommand). False when the commands did
+  /// not go out, or when a setpoint was infinite.
   virtual bool write(const std::vector<DriveCommand>& commands) = 0;
 
   /// How many joints the HAL serves, as setup() found them.

@@ -11,6 +11,7 @@
 
 #include <chrono>
 #include <cstdint>
+#include <limits>
 #include <optional>
 #include <string>
 #include <thread>
@@ -29,6 +30,7 @@ using synapticon_hardware::DriveState;
 using synapticon_hardware::HalConfig;
 using Clock = std::chrono::steady_clock;
 
+constexpr uint16_t NOT_READY_TO_SWITCH_ON = 0x00;
 constexpr uint16_t SWITCH_ON_DISABLED = 0x40;
 constexpr uint16_t SWITCHED_ON = 0x23;
 constexpr uint16_t OPERATION_ENABLED = 0x27;
@@ -233,6 +235,19 @@ TEST(Cia402HalFailures, WritesWithTheWrongNumberOfCommandsAreRefused)
   EXPECT_TRUE(drives.write({ DriveCommand{}, DriveCommand{} }));
 }
 
+/// An infinite setpoint fails the write, while NaN is a valid value that keeps the last one.
+TEST(Cia402HalFailures, AnInfiniteSetpointFailsTheWrite)
+{
+  ScriptedDrives drives({ true, true });
+  ASSERT_TRUE(drives.start());
+  std::vector<DriveCommand> commands(2);
+  commands[1].velocity = std::numeric_limits<double>::infinity();
+  EXPECT_FALSE(drives.write(commands));
+  EXPECT_FALSE(drives.write(commands));
+  commands[1].velocity = std::numeric_limits<double>::quiet_NaN();
+  EXPECT_TRUE(drives.write(commands));
+}
+
 /// An action code the HAL does not walk, such as an undeclared vendor action, is ignored.
 TEST(Cia402HalFailures, AnUnsupportedActionIsIgnored)
 {
@@ -305,6 +320,17 @@ TEST(Cia402HalFailures, EnableTimesOutOnADriveThatNeverArrives)
   EXPECT_FALSE(drives.enable());
   EXPECT_GE(since(start), 4.9);
   EXPECT_FALSE(drives.is_enabled());
+}
+
+/// A drive in Not Ready to Switch On has no power, so disable() does not wait for it.
+TEST(Cia402HalFailures, DisableDoesNotWaitForADriveThatIsNotReadyToSwitchOn)
+{
+  ScriptedDrives drives({ true });
+  ASSERT_TRUE(drives.start());
+  drives.report(NOT_READY_TO_SWITCH_ON);
+  const auto start = Clock::now();
+  EXPECT_TRUE(drives.disable());
+  EXPECT_LT(since(start), 1.0);
 }
 
 /// A drive that stays in Quick Stop Active and keeps moving gets its voltage cut after the ramp wait, and disable

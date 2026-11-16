@@ -24,9 +24,8 @@ namespace synapticon_hardware
 /// Like a cable plugged back into its own socket, write() stores the commanded position, velocity and effort, and
 /// read() hands them back. set_states() replaces what read() returns, for states a loopback cannot produce.
 ///
-/// It is strict where a real HAL could be: the ladder is connect(), start(), enable(), and stop() needs disabled
-/// drives. Any call off that order is logged and refused (false), with no effect. In write(), a NaN field keeps the
-/// stored value, while one infinite field rejects the whole command.
+/// It follows the call rules of SynapticonHalI: an up-call out of order is logged and refused (false), with no
+/// effect. In write(), a NaN field keeps the stored value. An infinite field keeps it too, and write() returns false.
 class MockHal : public SynapticonHalI
 {
 public:
@@ -64,8 +63,9 @@ private:
     ENABLED
   };
 
-  /// Move from `expected` to `next` on behalf of `call`. Refused, with a log line, from any other stage.
-  bool step(const char* call, Level expected, Level next);
+  /// Climb to `next` on behalf of `call`, from the stage just below it. Nothing changes when the mock is at `next`
+  /// or above already. Refused, with a log line, from any lower stage.
+  bool climb(const char* call, Level next);
 
   std::vector<std::string> names_;
   std::vector<DriveState> reported_;
