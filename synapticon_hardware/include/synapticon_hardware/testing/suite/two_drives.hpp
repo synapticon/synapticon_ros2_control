@@ -46,7 +46,7 @@ TEST_F(DrivePair, BothComeUpAndGoDownTogether)
 TEST_F(DrivePair, AQuickStopOfOneLeavesTheOtherEnabledAndMoving)
 {
   ASSERT_TRUE(start());
-  energize_both();
+  ASSERT_NO_FATAL_FAILURE(energize_both());
   set_off(1, 0.3);
   const double p_before = readings_[1].position;
   act({ 0 }, DriveAction::QUICK_STOP);
@@ -64,7 +64,7 @@ TEST_F(DrivePair, AQuickStopOfOneLeavesTheOtherEnabledAndMoving)
 TEST_F(DrivePair, ADisableVoltageOfOneLeavesTheOtherInQuickStop)
 {
   ASSERT_TRUE(start());
-  energize_both();
+  ASSERT_NO_FATAL_FAILURE(energize_both());
   act({ 0, 1 }, DriveAction::QUICK_STOP);  // both in the same cycle
   ASSERT_GE(tick_until(
                 [this] {
@@ -90,7 +90,7 @@ TEST_F(DrivePair, AFaultOnOneLeavesTheOtherRunning)
   // the Fault Reset.
   ASSERT_TRUE(start({ .following_error = FollowingError::FAULT }));
   max_lag_ = 1.2;
-  energize_both();
+  ASSERT_NO_FATAL_FAILURE(energize_both());
   set_off(1, 0.3);
   setpoints_[0].position += 0.02;  // a jump joint_1 cannot follow within the window
   ASSERT_GE(tick_until([this] { return drive_state(0) == DeviceState::FAULT; }, 0.5), 0.0)

@@ -75,7 +75,7 @@ TEST_F(SingleDrive, TheReadinessQueryFollowsTheLifecycle)
 TEST_F(SingleDrive, CspTracksASmallMove)
 {
   ASSERT_TRUE(start({}));
-  energize();
+  ASSERT_NO_FATAL_FAILURE(energize());
   limit_travel(0.8);
   double max_error = 0.0;
   const double v = 0.5 * sign_;
@@ -96,7 +96,7 @@ TEST_F(SingleDrive, CspTracksASmallMove)
 TEST_F(SingleDrive, CsvTracksASmallMove)
 {
   ASSERT_TRUE(start({ .mode = CSV_MODE }));
-  energize();
+  ASSERT_NO_FATAL_FAILURE(energize());
   limit_travel(0.8);
   const double v = 0.5 * sign_;
   double sum = 0.0;
@@ -122,7 +122,7 @@ TEST_F(SingleDrive, CsvTracksASmallMove)
 TEST_F(SingleDrive, CsvQuickStopFromMotionStops)
 {
   ASSERT_TRUE(start({ .mode = CSV_MODE }));
-  energize();
+  ASSERT_NO_FATAL_FAILURE(energize());
   const double v = 0.5 * sign_;
   for (int i = 0; i < cycles(0.4); ++i)
   {
@@ -147,7 +147,7 @@ TEST_F(SingleDrive, ImpedanceEffortWithZeroGainsIsTheJointTorqueDemand)
   {
     SKIP_OR_FAIL("impedance bring-up failed, most likely no torque sensor is configured");
   }
-  energize();
+  ASSERT_NO_FATAL_FAILURE(energize());
   setpoint_.stiffness = 0.0;
   setpoint_.damping = 0.0;
   tick(cycles(0.05));

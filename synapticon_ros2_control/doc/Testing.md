@@ -121,7 +121,8 @@ mode.
 The suite turns them into `sdo:` entries of a slave_config, built on a base config.
 
 A watchdog protects the joint.
-When the joint travels further than the test expects, it cuts the voltage and fails the test.
+When the joint travels further than the test expects, it cuts the voltage and stops the test.
+After a trip, and after any other fatal failure, every later cycle of that test keeps the voltage cut.
 
 ### Steps
 

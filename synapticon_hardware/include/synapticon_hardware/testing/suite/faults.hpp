@@ -33,7 +33,7 @@ TEST_F(SingleDrive, AFollowingErrorFaultFromAStepIsMeasured)
 {
   constexpr double DECEL = 200.0;  // rad/s^2: braking would be 5 to 6 times shorter than coasting
   ASSERT_TRUE(start({ .quick_stop_deceleration = DECEL, .following_error = FollowingError::FAULT }));
-  energize();
+  ASSERT_NO_FATAL_FAILURE(energize());
   limit_travel(6.0);  // a coast cannot be cut short: the drive is already de-energised
   const double p_step = reading_.position;
   setpoint_.position += 0.2 * sign_;  // small, since the joint coasts in Fault after the reaction
@@ -85,7 +85,7 @@ TEST_F(SingleDrive, AClientQuickStopOnAReportedFollowingErrorStopsAndHolds)
   for (const Variant& variant : variants)
   {
     ASSERT_TRUE(start({ .quick_stop_deceleration = variant.decel, .following_error = FollowingError::REPORT }));
-    energize();
+    ASSERT_NO_FATAL_FAILURE(energize());
     limit_travel(3.0);
     const double p_step = reading_.position;
     setpoint_.position += 1.0 * sign;
@@ -165,7 +165,7 @@ TEST_F(SingleDrive, AClientQuickStopOnAReportedFollowingErrorStopsAndHolds)
 TEST_F(SingleDrive, AReportedFollowingErrorKeepsTheDriveRunningAndIsVisible)
 {
   ASSERT_TRUE(start({ .following_error = FollowingError::REPORT }));  // the window of the fault tests
-  energize();
+  ASSERT_NO_FATAL_FAILURE(energize());
   limit_travel(1.0);
   const double target = reading_.position + 0.5 * sign_;
   setpoint_.position = target;
@@ -197,7 +197,7 @@ TEST_F(SingleDrive, AQuickStoppedDriveIgnoresSetpointsUntilEnabled)
 {
   ASSERT_TRUE(start({ .quick_stop_deceleration = 20.0 }));
   EXPECT_TRUE(drive_->forwarding_setpoints(0));
-  energize();
+  ASSERT_NO_FATAL_FAILURE(energize());
   EXPECT_TRUE(drive_->forwarding_setpoints(0));
   run_at(0.5, 0.3);
   limit_travel(0.5);
@@ -227,7 +227,7 @@ TEST_F(SingleDrive, AQuickStoppedDriveIgnoresSetpointsUntilEnabled)
 TEST_F(SingleDrive, TheTargetStreamedDuringTheEnableWalkIsTheFirstTheDriveFollows)
 {
   ASSERT_TRUE(start({}));
-  energize();
+  ASSERT_NO_FATAL_FAILURE(energize());
   act(DriveAction::DISABLE);
   ASSERT_GE(tick_until([this] { return drive_state() == DeviceState::SWITCH_ON_DISABLED; }, 1.0), 0.0);
   tick(cycles(0.1));
@@ -256,7 +256,7 @@ TEST_F(SingleDrive, TheTargetStreamedDuringTheEnableWalkIsTheFirstTheDriveFollow
 TEST_F(SingleDrive, TheLifecycleEnableResumesForwarding)
 {
   ASSERT_TRUE(start({}));
-  energize();
+  ASSERT_NO_FATAL_FAILURE(energize());
   act(DriveAction::DISABLE_VOLTAGE);
   EXPECT_FALSE(drive_->forwarding_setpoints(0));
   ASSERT_GE(tick_until([this] { return drive_state() == DeviceState::SWITCH_ON_DISABLED; },
@@ -274,7 +274,7 @@ TEST_F(SingleDrive, TheLifecycleEnableResumesForwarding)
 TEST_F(SingleDrive, AFaultedDriveIgnoresSetpointsThroughTheResetUntilEnabled)
 {
   ASSERT_TRUE(start({ .quick_stop_deceleration = 1000.0, .following_error = FollowingError::FAULT }));
-  energize();
+  ASSERT_NO_FATAL_FAILURE(energize());
   limit_travel(1.2);
   setpoint_.position += 0.02 * sign_;
   ASSERT_GE(tick_until([this] { return drive_state() == DeviceState::FAULT; }, 0.5), 0.0)

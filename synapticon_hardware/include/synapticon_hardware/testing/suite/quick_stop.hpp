@@ -51,7 +51,7 @@ TEST_F(SingleDrive, QuickStopAvailabilityFollowsTheOptionCode)
 TEST_F(SingleDrive, QuickStopHoldsAStandingDrive)
 {
   ASSERT_TRUE(start({}));
-  energize();
+  ASSERT_NO_FATAL_FAILURE(energize());
   const double p0 = reading_.position;
   limit_travel(0.05);
   act(DriveAction::QUICK_STOP);
@@ -70,11 +70,12 @@ TEST_F(SingleDrive, QuickStopRampsAtTheConfiguredDeceleration)
   double slope = QUIET_NAN;
   for (int attempt = 0; attempt < 3 && std::isnan(slope); ++attempt)
   {
-    energize();
-    run_at(0.8, 0.3);
+    ASSERT_NO_FATAL_FAILURE(energize());
+    ASSERT_NO_FATAL_FAILURE(run_at(0.8, 0.3));
     limit_travel(1.2);
-    act(DriveAction::QUICK_STOP);
+    ASSERT_NO_FATAL_FAILURE(act(DriveAction::QUICK_STOP));
     const Trace samples = trace(3.0, at_rest);
+    ASSERT_FALSE(HasFatalFailure());
     ASSERT_TRUE(at_rest(samples)) << "did not stop";
     EXPECT_EQ(drive_state(), DeviceState::QUICK_STOP_ACTIVE);
     slope = fitted_deceleration(samples);
@@ -92,18 +93,20 @@ TEST_F(SingleDrive, QuickStopHoldsWhileTheMotionControllerKeepsStreaming)
   bool tested = false;
   for (int attempt = 0; attempt < 3 && !tested; ++attempt)
   {
-    energize();
-    run_at(0.8, 0.3);
+    ASSERT_NO_FATAL_FAILURE(energize());
+    ASSERT_NO_FATAL_FAILURE(run_at(0.8, 0.3));
     const double last_forwarded = setpoint_.position;  // the request's own cycle is not forwarded
     limit_travel(1.2);
-    act(DriveAction::QUICK_STOP);
-    ASSERT_TRUE(at_rest(trace(3.0, at_rest))) << "did not stop";
+    ASSERT_NO_FATAL_FAILURE(act(DriveAction::QUICK_STOP));
+    const Trace samples = trace(3.0, at_rest);
+    ASSERT_FALSE(HasFatalFailure());
+    ASSERT_TRUE(at_rest(samples)) << "did not stop";
     const double p_stopped = reading_.position;
     if (std::abs(p_stopped - last_forwarded) < 0.1)
     {
       continue;
     }  // no real ramp: not conclusive
-    carry_on(2.0);  // the controller does not know about the quick stop and carries on
+    ASSERT_NO_FATAL_FAILURE(carry_on(2.0));  // the controller does not know about the quick stop and carries on
     EXPECT_EQ(drive_state(), DeviceState::QUICK_STOP_ACTIVE);
     EXPECT_NEAR(reading_.position, p_stopped, 0.03) << "the drive moved back toward its last target";
     EXPECT_GT(std::abs(setpoint_.position - reading_.position), 0.5) << "the stream did not move away";
@@ -122,13 +125,13 @@ TEST_F(SingleDrive, QuickStopDoesNotSnapBackToAHeldTarget)
 TEST_F(SingleDrive, ReEnablingFromQuickStopActiveDoesNotJump)
 {
   ASSERT_TRUE(start({}));
-  energize();
+  ASSERT_NO_FATAL_FAILURE(energize());
   act(DriveAction::QUICK_STOP);
   tick(cycles(0.2));
   ASSERT_EQ(drive_state(), DeviceState::QUICK_STOP_ACTIVE);
   const double p = reading_.position;
   limit_travel(0.05);
-  energize();
+  ASSERT_NO_FATAL_FAILURE(energize());
   tick(cycles(0.5));
   EXPECT_NEAR(reading_.position, p, 0.005);
 }
@@ -137,7 +140,7 @@ TEST_F(SingleDrive, ReEnablingFromQuickStopActiveDoesNotJump)
 TEST_F(SingleDrive, QuickStopFallsBackToDisableForAnUnsupportedOptionCode)
 {
   ASSERT_TRUE(start({ .quick_stop_option_code = 0 }));
-  energize();
+  ASSERT_NO_FATAL_FAILURE(energize());
   act(DriveAction::QUICK_STOP);
   EXPECT_EQ(drive_->active_drive_action(0), DriveAction::DISABLE);
   EXPECT_GE(tick_until([this] { return drive_state() == DeviceState::SWITCH_ON_DISABLED; }, 1.0), 0.0);
@@ -147,7 +150,7 @@ TEST_F(SingleDrive, QuickStopFallsBackToDisableForAnUnsupportedOptionCode)
 TEST_F(SingleDrive, QuickStopWithOptionCodeTwoStopsThenDeEnergises)
 {
   ASSERT_TRUE(start({ .quick_stop_option_code = 2, .quick_stop_deceleration = 2.0 }));
-  energize();
+  ASSERT_NO_FATAL_FAILURE(energize());
   run_at(0.5, 0.3);
   const double p_request = reading_.position;
   limit_travel(0.6);

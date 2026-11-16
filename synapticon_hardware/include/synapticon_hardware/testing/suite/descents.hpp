@@ -32,7 +32,7 @@ using cia402::DeviceState;
 TEST_F(SingleDrive, TheRampedDisableCutsOnlyOnceStopped)
 {
   ASSERT_TRUE(start({ .quick_stop_deceleration = 2.0 }));
-  energize();
+  ASSERT_NO_FATAL_FAILURE(energize());
   run_at(0.8, 0.3);
   limit_travel(1.2);
   act(DriveAction::DISABLE);
@@ -52,7 +52,7 @@ TEST_F(SingleDrive, TheRampedDisableCutsOnlyOnceStopped)
 TEST_F(SingleDrive, TheLifecycleDisableCutsOnlyOnceStopped)
 {
   ASSERT_TRUE(start({ .quick_stop_deceleration = 2.0 }));
-  energize();
+  ASSERT_NO_FATAL_FAILURE(energize());
   run_at(0.8, 0.3);
   EXPECT_TRUE(drive_->disable());
   sample();
@@ -66,7 +66,7 @@ TEST_F(SingleDrive, TheLifecycleDisableKeepsADisableVoltageInProgress)
   // A disable_voltage whose frame is followed within the same cycle by the lifecycle disable():
   // the drive only sees the later frame, so disable() must keep the direct route, not ramp.
   ASSERT_TRUE(start({ .quick_stop_deceleration = 2.0 }));
-  energize();
+  ASSERT_NO_FATAL_FAILURE(energize());
   run_at(0.5, 0.3);
   limit_travel(0.5);
   setpoint_.drive_action = DriveAction::DISABLE_VOLTAGE;
@@ -85,7 +85,7 @@ TEST_F(SingleDrive, TheLifecycleDisableKeepsADisableVoltageInProgress)
 TEST_F(SingleDrive, DisableVoltageCutsAtOnce)
 {
   ASSERT_TRUE(start({ .quick_stop_deceleration = 2.0 }));
-  energize();
+  ASSERT_NO_FATAL_FAILURE(energize());
   run_at(0.5, 0.3);
   limit_travel(0.3);
   act(DriveAction::DISABLE_VOLTAGE);
@@ -105,7 +105,7 @@ TEST_F(SingleDrive, DisableVoltageCutsAtOnce)
 TEST_F(SingleDrive, DisableVoltageFromQuickStopActiveIsDirect)
 {
   ASSERT_TRUE(start({}));
-  energize();
+  ASSERT_NO_FATAL_FAILURE(energize());
   act(DriveAction::QUICK_STOP);
   tick(cycles(0.2));
   ASSERT_EQ(drive_state(), DeviceState::QUICK_STOP_ACTIVE);
@@ -139,7 +139,7 @@ TEST_F(SingleDrive, AQuickStopOfAFaultedDriveCompletesAndAResetRecovers)
   // the Fault Reset the drive may turn the motor about 0.6 rad on its own while still reporting
   // Fault (about one electrical revolution), hence the wider watchdog.
   ASSERT_TRUE(start({ .quick_stop_deceleration = 1000.0, .following_error = FollowingError::FAULT }));
-  energize();
+  ASSERT_NO_FATAL_FAILURE(energize());
   limit_travel(1.2);
   // A jump the drive cannot follow within the window: a following error. The position loop answers
   // it with a velocity spike before the fault reaction stops it, so the jump is kept small.

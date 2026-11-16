@@ -279,8 +279,13 @@ protected:
     }
     hold_here();
     tick(cycles(0.02));
-    act(DriveAction::RESET_FAULT);
-    tick_until([this] { return drive_state() == cia402::DeviceState::SWITCH_ON_DISABLED; }, 1.0);
+    // A reset leaves the drive without power, so it also runs after a fatal failure.
+    setpoint_.drive_action = DriveAction::RESET_FAULT;
+    for (int i = 0; i < cycles(1.0) && drive_state() != cia402::DeviceState::SWITCH_ON_DISABLED; ++i)
+    {
+      cycle();
+    }
+    setpoint_.drive_action = DriveAction::NONE;
   }
 
   void sample()
@@ -292,31 +297,54 @@ protected:
   }
 
   /// One control cycle: read, check the watchdog, write the command, wait for the period.
+  ///
+  /// Once the test has a fatal failure, a watchdog trip among them, every cycle commands disable_voltage and tick()
+  /// returns after one cycle. The helpers that loop stop as well, so a test body that goes on moves nothing.
   void tick(int count = 1)
   {
     for (int i = 0; i < count; ++i)
     {
-      sample();
-      check_travel();
-      ASSERT_TRUE(drive_->write({ setpoint_ }));
-      next_tick_ += std::chrono::duration_cast<Clock::duration>(std::chrono::duration<double>(DT));
-      std::this_thread::sleep_until(next_tick_);
+      cycle();
+      if (HasFatalFailure())
+      {
+        return;
+      }
     }
   }
 
-  /// Cycle until `done`, at most `seconds`. Returns the time it took, or a negative value.
+  /// The one cycle of tick(). After a fatal failure it commands disable_voltage, unless the command is a reset_fault.
+  void cycle()
+  {
+    sample();
+    check_travel();
+    if (HasFatalFailure() && setpoint_.drive_action != DriveAction::RESET_FAULT)
+    {
+      setpoint_.drive_action = DriveAction::DISABLE_VOLTAGE;
+      setpoint_.velocity = 0.0;
+    }
+    const bool sent = drive_->write({ setpoint_ });
+    next_tick_ += std::chrono::duration_cast<Clock::duration>(std::chrono::duration<double>(DT));
+    std::this_thread::sleep_until(next_tick_);
+    ASSERT_TRUE(sent);
+  }
+
+  /// Cycle until `done`, at most `seconds`. Returns the time it took, or a negative value, also after a fatal failure.
   double tick_until(const std::function<bool()>& done, double seconds)
   {
     const int max = static_cast<int>(seconds / DT);
     for (int i = 0; i < max; ++i)
     {
+      if (HasFatalFailure())
+      {
+        return -1.0;
+      }
       if (done())
       {
         return i * DT;
       }
       tick();
     }
-    return done() ? seconds : -1.0;
+    return !HasFatalFailure() && done() ? seconds : -1.0;
   }
 
   /// A drive_action request: the action for one cycle, then NONE, with the streamed motion carried on through it.
@@ -350,14 +378,14 @@ protected:
   {
     const double v = speed * sign_;
     const int ramp = cycles(0.2);
-    for (int i = 0; i < ramp; ++i)
+    for (int i = 0; i < ramp && !HasFatalFailure(); ++i)
     {
       setpoint_.velocity = v * (i + 1) / ramp;
       setpoint_.position += setpoint_.velocity * DT;
       tick();
     }
     const int steps = static_cast<int>(seconds / DT);
-    for (int i = 0; i < steps; ++i)
+    for (int i = 0; i < steps && !HasFatalFailure(); ++i)
     {
       setpoint_.position += v * DT;
       tick();
@@ -368,21 +396,22 @@ protected:
   void carry_on(double seconds)
   {
     const int steps = static_cast<int>(seconds / DT);
-    for (int i = 0; i < steps; ++i)
+    for (int i = 0; i < steps && !HasFatalFailure(); ++i)
     {
       setpoint_.position += setpoint_.velocity * DT;
       tick();
     }
   }
 
-  /// Arm the watchdog: from now on the joint may travel at most `max_travel` rad.
+  /// Arm the watchdog: from now on the joint may travel at most `max_travel` rad. A trip stays in force.
   void limit_travel(double max_travel)
   {
     travel_origin_ = reading_.position;
     travel_limit_ = max_travel;
   }
 
-  /// Cut the voltage and fail the test once the joint has travelled more than `travel_limit_` rad.
+  /// Fail the test, fatally, once the joint has travelled more than `travel_limit_` rad. tick() then cuts the voltage
+  /// in this cycle and in every later one.
   void check_travel()
   {
     if (std::isnan(travel_limit_) || limit_hit_)
@@ -392,10 +421,9 @@ protected:
     if (std::abs(reading_.position - travel_origin_) > travel_limit_)
     {
       limit_hit_ = true;
-      setpoint_.drive_action = DriveAction::DISABLE_VOLTAGE;
-      ADD_FAILURE() << "WATCHDOG: travelled more than " << travel_limit_ << " rad (from " << travel_origin_ << " to "
-                    << reading_.position << ", statusword 0x" << std::hex << reading_.status_word << std::dec
-                    << "), voltage cut";
+      FAIL() << "WATCHDOG: travelled more than " << travel_limit_ << " rad (from " << travel_origin_ << " to "
+             << reading_.position << ", statusword 0x" << std::hex << reading_.status_word << std::dec
+             << "), voltage cut";
     }
   }
 
@@ -425,7 +453,7 @@ protected:
     Trace samples;
     const auto started = Clock::now();
     const int max = static_cast<int>(seconds / DT);
-    for (int i = 0; i < max; ++i)
+    for (int i = 0; i < max && !HasFatalFailure(); ++i)
     {
       tick();
       const double t = std::chrono::duration<double>(read_time_ - started).count();
@@ -494,19 +522,21 @@ protected:
     bool tested = false;
     for (int attempt = 0; attempt < 3 && !tested; ++attempt)
     {
-      energize();
-      run_at(0.8, 0.3);
+      ASSERT_NO_FATAL_FAILURE(energize());
+      ASSERT_NO_FATAL_FAILURE(run_at(0.8, 0.3));
       limit_travel(1.2);
-      act(DriveAction::QUICK_STOP);
+      ASSERT_NO_FATAL_FAILURE(act(DriveAction::QUICK_STOP));
       const double held_target = setpoint_.position;
       setpoint_.velocity = 0.0;  // the controller holds its target at the request point
-      ASSERT_TRUE(at_rest(trace(3.0, at_rest))) << "did not stop";
+      const Trace samples = trace(3.0, at_rest);
+      ASSERT_FALSE(HasFatalFailure());
+      ASSERT_TRUE(at_rest(samples)) << "did not stop";
       const double p_stopped = reading_.position;
       if (std::abs(p_stopped - held_target) < 0.05)
       {
         continue;
       }  // no ramp: nothing to snap back
-      tick(cycles(2.0));
+      ASSERT_NO_FATAL_FAILURE(tick(cycles(2.0)));
       EXPECT_NEAR(reading_.position, p_stopped, 0.03) << "snapped back toward the held target";
       tested = true;
     }
@@ -517,7 +547,7 @@ protected:
   void provoke_step_fault(double deceleration, double step)
   {
     ASSERT_TRUE(start({ .quick_stop_deceleration = deceleration, .following_error = FollowingError::FAULT }));
-    energize();
+    ASSERT_NO_FATAL_FAILURE(energize());
     limit_travel(1.2);  // wide enough for the drive's reaction and for its turn after a Fault Reset
     setpoint_.position += step * sign_;
     ASSERT_GE(tick_until(
@@ -631,14 +661,23 @@ protected:
     }
     hold_here();
     tick(cycles(0.02));
-    act(faulted, DriveAction::RESET_FAULT);
-    tick_until(
-        [this, &faulted] {
-          return std::all_of(faulted.begin(), faulted.end(), [this](std::size_t j) {
-            return drive_state(j) == cia402::DeviceState::SWITCH_ON_DISABLED;
-          });
-        },
-        1.0);
+    // A reset leaves the drives without power, so it also runs after a fatal failure.
+    for (const std::size_t j : faulted)
+    {
+      setpoints_[j].drive_action = DriveAction::RESET_FAULT;
+    }
+    const auto all_reset = [this, &faulted] {
+      return std::all_of(faulted.begin(), faulted.end(),
+                         [this](std::size_t j) { return drive_state(j) == cia402::DeviceState::SWITCH_ON_DISABLED; });
+    };
+    for (int i = 0; i < cycles(1.0) && !all_reset(); ++i)
+    {
+      cycle();
+    }
+    for (const std::size_t j : faulted)
+    {
+      setpoints_[j].drive_action = DriveAction::NONE;
+    }
   }
 
   void sample()
@@ -648,35 +687,62 @@ protected:
   }
 
   /// One cycle for both joints: advance the targets, read, check the watchdog, write, wait.
+  ///
+  /// Once the test has a fatal failure, a watchdog trip among them, every cycle commands disable_voltage on both
+  /// joints and tick() returns after one cycle, like SingleDrive::tick().
   void tick(int count = 1)
   {
     for (int i = 0; i < count; ++i)
     {
-      for (auto& command : setpoints_)
+      cycle();
+      if (HasFatalFailure())
       {
-        command.position += command.velocity * DT;
+        return;
       }
-      sample();
-      check_travel();
-      ASSERT_TRUE(drive_->write(setpoints_));
-      next_tick_ += std::chrono::duration_cast<Clock::duration>(std::chrono::duration<double>(DT));
-      std::this_thread::sleep_until(next_tick_);
     }
   }
 
-  /// Cycle until `done`, at most `seconds`. Returns the time it took, or a negative value.
+  /// The one cycle of tick(). After a fatal failure it commands disable_voltage on every joint that is not asked for
+  /// a reset_fault.
+  void cycle()
+  {
+    for (auto& command : setpoints_)
+    {
+      command.position += command.velocity * DT;
+    }
+    sample();
+    check_travel();
+    for (auto& command : setpoints_)
+    {
+      if (HasFatalFailure() && command.drive_action != DriveAction::RESET_FAULT)
+      {
+        command.drive_action = DriveAction::DISABLE_VOLTAGE;
+        command.velocity = 0.0;
+      }
+    }
+    const bool sent = drive_->write(setpoints_);
+    next_tick_ += std::chrono::duration_cast<Clock::duration>(std::chrono::duration<double>(DT));
+    std::this_thread::sleep_until(next_tick_);
+    ASSERT_TRUE(sent);
+  }
+
+  /// Cycle until `done`, at most `seconds`. Returns the time it took, or a negative value, also after a fatal failure.
   double tick_until(const std::function<bool()>& done, double seconds)
   {
     const int max = static_cast<int>(seconds / DT);
     for (int i = 0; i < max; ++i)
     {
+      if (HasFatalFailure())
+      {
+        return -1.0;
+      }
       if (done())
       {
         return i * DT;
       }
       tick();
     }
-    return done() ? seconds : -1.0;
+    return !HasFatalFailure() && done() ? seconds : -1.0;
   }
 
   /// A drive_action request for the joints in `joints`, all in the same cycle.
@@ -723,17 +789,18 @@ protected:
   void set_off(std::size_t joint, double speed)
   {
     const int ramp = cycles(0.2);
-    for (int i = 0; i < ramp; ++i)
+    for (int i = 0; i < ramp && !HasFatalFailure(); ++i)
     {
       setpoints_[joint].velocity = speed * (i + 1) / ramp;
       tick();
     }
   }
 
-  /// Cut both drives and fail the test once a joint is more than `max_lag_` rad off its target.
+  /// Fail the test, fatally, once a joint is more than `max_lag_` rad off its target. tick() then cuts the voltage of
+  /// both drives in this cycle and in every later one.
   void check_travel()
   {
-    if (limit_hit_)
+    if (limit_hit_ || readings_.size() != JOINTS)
     {
       return;
     }
@@ -742,14 +809,8 @@ protected:
       if (std::abs(readings_[j].position - setpoints_[j].position) > max_lag_)
       {
         limit_hit_ = true;
-        for (auto& command : setpoints_)
-        {
-          command.drive_action = DriveAction::DISABLE_VOLTAGE;
-          command.velocity = 0.0;
-        }
-        ADD_FAILURE() << "WATCHDOG: joint_" << j + 1 << " is " << readings_[j].position - setpoints_[j].position
-                      << " rad off its target, voltage cut";
-        return;
+        FAIL() << "WATCHDOG: joint_" << j + 1 << " is " << readings_[j].position - setpoints_[j].position
+               << " rad off its target, voltage cut";
       }
     }
   }
