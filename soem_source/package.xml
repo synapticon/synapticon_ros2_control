@@ -1,0 +1,22 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>soem_source</name>
+  <version>0.3.0</version>
+  <description>
+    The SOEM (Simple Open EtherCAT Master) library, vendored from upstream commit 42aadc1 and built as a static
+    library.
+  </description>
+  <maintainer email="jennifer.buehler@b-robotized.com">Jennifer Buehler</maintainer>
+  <maintainer email="timotej.gaspar@b-robotized.com">Timotej Gaspar</maintainer>
+  <license file="LICENSE">GPL-2.0-only WITH eCos-exception-2.0</license>
+  <url type="website">https://github.com/OpenEtherCATsociety/SOEM</url>
+  <url type="repository">https://github.com/synapticon/synapticon_ros2_control</url>
+  <url type="bugtracker">https://github.com/synapticon/synapticon_ros2_control/issues</url>
+
+  <buildtool_depend>ament_cmake</buildtool_depend>
+
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+</package>

@@ -9,18 +9,18 @@ on:
   merge_group:
   push:
     branches:
-      - main
+      - jazzy-devel
 
 jobs:
   pre-commit:
     name: Format
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
     steps:
     - uses: actions/checkout@v4
     - uses: actions/setup-python@v5
       with:
-        python-version: 3.x
-    - name: Install clang-format-14
-      run: sudo apt-get install clang-format-14
+        python-version: "3.12"
+    - name: Install clang-format
+      run: sudo apt-get install clang-format
     - uses: pre-commit/action@v3.0.1
       id: precommit

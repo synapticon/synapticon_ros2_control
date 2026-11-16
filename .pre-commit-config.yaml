@@ -12,6 +12,9 @@
 #
 # See https://github.com/pre-commit/pre-commit
 
+# The vendored SOEM sources and their license texts stay exactly as upstream has them.
+exclude: ^soem_source/(src/|LICENSE$|GPL-2\.0\.txt$)
+
 repos:
   # Standard hooks
   - repo: https://github.com/pre-commit/pre-commit-hooks
@@ -43,11 +46,10 @@ repos:
       - id: clang-format
         name: clang-format
         description: Format files with ClangFormat.
-        entry: clang-format-14
+        entry: clang-format
         language: system
         files: \.(c|cc|cxx|cpp|frag|glsl|h|hpp|hxx|ih|ispc|ipp|java|js|m|proto|vert)$
         args: ['-fallback-style=none', '-i']
-        exclude: ^(src/osal/|src/oshw/|src/soem/) # Exclude vendored libraries
 
   - repo: https://github.com/cheshirekow/cmake-format-precommit
     rev: v0.6.10

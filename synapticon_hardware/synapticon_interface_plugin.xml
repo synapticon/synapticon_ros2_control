@@ -1,0 +1,9 @@
+<library path="synapticon_hardware">
+  <class name="synapticon_ros2_control/SynapticonSystemInterface"
+         type="synapticon_ros2_control::SynapticonSystemInterface"
+         base_class_type="hardware_interface::SystemInterface">
+    <description>
+      A ros2_control interface for Synapticon motor drivers.
+    </description>
+  </class>
+</library>
