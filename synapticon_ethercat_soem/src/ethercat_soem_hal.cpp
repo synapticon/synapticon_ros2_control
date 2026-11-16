@@ -554,6 +554,15 @@ bool EthercatSoemHal::start()
       back_to_pre_op();
       return false;
     }
+    if (slave.Istartbit != 0 || slave.Ostartbit != 0)
+    {
+      RCLCPP_ERROR(logger(),
+                   "Joint '%s': the drive's process data starts at bit %u (outputs) and %u (inputs) of a byte. The HAL "
+                   "takes it only at the start of a byte.",
+                   joints_[j].name.c_str(), slave.Ostartbit, slave.Istartbit);
+      back_to_pre_op();
+      return false;
+    }
   }
 
   // SYNC0 at the control frequency, for every drive whose slave_config sets assign_activate.
