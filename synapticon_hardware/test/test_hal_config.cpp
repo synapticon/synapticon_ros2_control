@@ -4,7 +4,7 @@
 // Copyright (c) 2026 b-robotized GmbH
 
 /// @file
-/// @brief Reading single values from a HalConfig: lookup with a fallback, and flags.
+/// @brief Reading single values from a HalConfig: lookup with a fallback, flags and numbers.
 
 #include <stdexcept>
 #include <string>
@@ -20,6 +20,8 @@ using synapticon_hardware::JointSpec;
 using synapticon_hardware::param_or;
 using synapticon_hardware::ParameterMap;
 using synapticon_hardware::read_flag;
+using synapticon_hardware::read_non_negative;
+using synapticon_hardware::read_whole_number;
 
 TEST(ReadFlag, RefusesWordsOutsideTheFourSpellings)
 {
@@ -52,6 +54,28 @@ TEST(ReadFlag, NamesTheRefusedTextInTheError)
   {
     EXPECT_NE(std::string(e.what()).find("maybe"), std::string::npos) << e.what();
   }
+}
+
+TEST(ReadWholeNumber, TakesDecimalNumbers)
+{
+  EXPECT_EQ(read_whole_number("position", "0"), 0);
+  EXPECT_EQ(read_whole_number("position", "42"), 42);
+  EXPECT_EQ(read_whole_number("mode_of_operation", "-6"), -6);
+}
+
+TEST(ReadWholeNumber, RefusesAnyOtherText)
+{
+  for (const char* text : { "", "-", "+3", " 3", "3 ", "0x03", "3x", "1.5", "1e3", "three", "99999999999999999999" })
+  {
+    EXPECT_THROW(read_whole_number("position", text), std::invalid_argument) << "'" << text << "'";
+  }
+}
+
+TEST(ReadNonNegative, RefusesANumberFollowedByOtherText)
+{
+  EXPECT_DOUBLE_EQ(read_non_negative("stiffness", "Nm/rad", "1.5"), 1.5);
+  EXPECT_THROW(read_non_negative("stiffness", "Nm/rad", "1.5x"), std::invalid_argument);
+  EXPECT_THROW(read_non_negative("stiffness", "Nm/rad", "1,5"), std::invalid_argument);
 }
 
 TEST(ParamOr, KeepsAnEmptyValueThatIsSet)

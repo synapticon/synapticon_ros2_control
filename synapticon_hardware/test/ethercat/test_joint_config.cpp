@@ -79,14 +79,17 @@ TEST_P(InvalidJoint, IsRefused)
   EXPECT_THROW(joint_from("joint_1", params), std::invalid_argument);
 }
 
-INSTANTIATE_TEST_SUITE_P(Cases, InvalidJoint,
-                         ::testing::Values(Parameters{}, with({ { "position", "65536" } }),
-                                           with({ { "alias", "first" } }), with({ { "mode_of_operation", "10" } }),
-                                           with({ { "max_joint_torque", "-1" } }),
-                                           with({ { "max_joint_torque", "inf" } }), with({ { "invert", "maybe" } }),
-                                           with({ { "alias", "-1" } }), with({ { "position", "+3" } }),
-                                           with({ { "position", "" } }), with({ { "max_joint_torque", "nan" } }),
-                                           with({ { "stiffness", "-0.1" } }), with({ { "damping", "soft" } })));
+INSTANTIATE_TEST_SUITE_P(
+    Cases, InvalidJoint,
+    ::testing::Values(Parameters{}, with({ { "position", "65536" } }), with({ { "alias", "first" } }),
+                      with({ { "mode_of_operation", "10" } }), with({ { "max_joint_torque", "-1" } }),
+                      with({ { "max_joint_torque", "inf" } }), with({ { "invert", "maybe" } }),
+                      with({ { "alias", "-1" } }), with({ { "position", "+3" } }), with({ { "position", "" } }),
+                      with({ { "max_joint_torque", "nan" } }), with({ { "stiffness", "-0.1" } }),
+                      with({ { "damping", "soft" } }), with({ { "position", "0x03" } }), with({ { "position", "3x" } }),
+                      with({ { "position", "1.5" } }), with({ { "alias", " 1" } }),
+                      with({ { "position", "99999999999999999999" } }), with({ { "mode_of_operation", "8.5" } }),
+                      with({ { "mode_of_operation", "8x" } }), with({ { "max_joint_torque", "2Nm" } })));
 
 TEST(JointConfig, AnAddressErrorNamesTheParameter)
 {

@@ -82,9 +82,32 @@ inline bool read_flag(std::string_view text)
   throw std::invalid_argument("expected true, false, 1 or 0, got '" + std::string(text) + "'");
 }
 
+/// @brief Parse parameter `name`, a whole decimal number with an optional minus sign.
+///
+/// Any other text, such as "0x03", "3x", "1.5" or a number out of range, throws std::invalid_argument naming the
+/// parameter.
+inline long long read_whole_number(const std::string& name, const std::string& text)
+{
+  const std::size_t first_digit = !text.empty() && text.front() == '-' ? 1 : 0;
+  const bool digits_only = text.size() > first_digit && std::all_of(text.begin() + first_digit, text.end(), [](char c) {
+                             return std::isdigit(static_cast<unsigned char>(c)) != 0;
+                           });
+  if (digits_only)
+  {
+    try
+    {
+      return std::stoll(text);
+    }
+    catch (const std::out_of_range&)
+    {
+    }
+  }
+  throw std::invalid_argument(name + " must be a whole decimal number, got '" + text + "'");
+}
+
 /// @brief Parse parameter `name`, a finite value of 0 or more in `unit`. An empty text gives NaN, "not set".
 ///
-/// Anything else throws std::invalid_argument naming the parameter.
+/// Anything else, also a number followed by other text, throws std::invalid_argument naming the parameter.
 inline double read_non_negative(const std::string& name, const std::string& unit, const std::string& text)
 {
   if (text.empty())
@@ -94,7 +117,9 @@ inline double read_non_negative(const std::string& name, const std::string& unit
   double value = std::numeric_limits<double>::quiet_NaN();
   try
   {
-    value = std::stod(text);
+    std::size_t used = 0;
+    value = std::stod(text, &used);
+    value = used == text.size() ? value : std::numeric_limits<double>::quiet_NaN();
   }
   catch (const std::exception&)
   {

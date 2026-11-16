@@ -33,8 +33,9 @@ int at_least_one(const std::string& text)
 
 double positive(const std::string& text)
 {
-  const double number = std::stod(text);
-  if (std::isfinite(number) && number > 0.0)
+  std::size_t used = 0;
+  const double number = std::stod(text, &used);
+  if (used == text.size() && std::isfinite(number) && number > 0.0)
   {
     return number;
   }

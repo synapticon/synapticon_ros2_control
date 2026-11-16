@@ -27,12 +27,8 @@ namespace
 /// Parameter `what` as an EtherCAT address, which has 16 bits and no sign.
 uint16_t address(const std::string& what, const std::string& text)
 {
-  if (text.empty() || text.front() == '-' || text.front() == '+')
-  {
-    throw std::invalid_argument(what + " must be a whole number in 0..65535, got '" + text + "'");
-  }
-  const unsigned long number = std::stoul(text);
-  if (number > std::numeric_limits<uint16_t>::max())
+  const long long number = read_whole_number(what, text);
+  if (number < 0 || number > std::numeric_limits<uint16_t>::max())
   {
     throw std::invalid_argument(what + " must be a whole number in 0..65535, got " + text);
   }
@@ -42,12 +38,12 @@ uint16_t address(const std::string& what, const std::string& text)
 /// The mode of operation in `text`. Only the modes of `mode` pass.
 int supported_mode(const std::string& text)
 {
-  switch (const int requested = std::stoi(text))
+  switch (const long long requested = read_whole_number("mode_of_operation", text))
   {
     case mode::IMPEDANCE:
     case mode::CSP:
     case mode::CSV:
-      return requested;
+      return static_cast<int>(requested);
     default:
       throw std::invalid_argument("mode_of_operation " + text +
                                   " cannot be run. Allowed are -6 (impedance), 8 (CSP) and 9 (CSV).");

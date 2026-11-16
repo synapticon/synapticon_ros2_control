@@ -55,9 +55,9 @@ TEST_P(InvalidBus, IsRefused)
 INSTANTIATE_TEST_SUITE_P(
     Cases, InvalidBus,
     ::testing::Values(Parameters{ { "control_frequency", "0" } }, Parameters{ { "control_frequency", "fast" } },
-                      Parameters{ { "readiness_timeout_s", "-1" } }, Parameters{ { "readiness_timeout_s", "nan" } },
-                      Parameters{ { "quick_stop_hold", "sometimes" } }, Parameters{ { "sdo_read_attempts", "0" } },
-                      Parameters{ { "sdo_read_attempts", "2.5" } }, Parameters{ { "sdo_read_attempts", "often" } },
-                      Parameters{ { "sdo_retry_wait_s", "0" } }));
+                      Parameters{ { "control_frequency", "1000Hz" } }, Parameters{ { "readiness_timeout_s", "-1" } },
+                      Parameters{ { "readiness_timeout_s", "nan" } }, Parameters{ { "quick_stop_hold", "sometimes" } },
+                      Parameters{ { "sdo_read_attempts", "0" } }, Parameters{ { "sdo_read_attempts", "2.5" } },
+                      Parameters{ { "sdo_read_attempts", "often" } }, Parameters{ { "sdo_retry_wait_s", "0" } }));
 
 }  // namespace

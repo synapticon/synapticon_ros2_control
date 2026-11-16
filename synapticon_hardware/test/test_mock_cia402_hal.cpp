@@ -81,6 +81,10 @@ INSTANTIATE_TEST_SUITE_P(
     ::testing::Values(InvalidCase{ "UnknownFollowingError", { { "following_error", "sometimes" } }, {} },
                       InvalidCase{ "UnsupportedMode", { { "mode_of_operation", "10" } }, {} },
                       InvalidCase{ "NonNumericMode", { { "mode_of_operation", "csp" } }, {} },
+                      InvalidCase{ "ModeWithTrailingText", { { "mode_of_operation", "8x" } }, {} },
+                      InvalidCase{ "FractionalOptionCode", { { "quick_stop_option_code", "6.5" } }, {} },
+                      InvalidCase{ "DecelerationWithUnit", { { "quick_stop_deceleration", "20rad" } }, {} },
+                      InvalidCase{ "FrequencyWithUnit", {}, { { "control_frequency", "500Hz" } } },
                       InvalidCase{ "NonBooleanEnergize", { { "energize", "maybe" } }, {} },
                       InvalidCase{ "ZeroFrequency", {}, { { "control_frequency", "0" } } }),
     [](const auto& info) { return std::string(info.param.name); });

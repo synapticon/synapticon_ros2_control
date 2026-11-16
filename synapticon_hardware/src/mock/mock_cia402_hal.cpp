@@ -53,12 +53,12 @@ FollowingErrorMode parse_following_error(const std::string& value)
 
 int parse_mode(const std::string& value)
 {
-  const int mode = std::stoi(value);
+  const long long mode = read_whole_number("mode_of_operation", value);
   if (mode != IMPEDANCE_MODE && mode != 8 && mode != 9)
   {
     throw std::invalid_argument("mode_of_operation must be -6, 8 or 9, got '" + value + "'");
   }
-  return mode;
+  return static_cast<int>(mode);
 }
 }  // namespace
 
@@ -90,7 +90,7 @@ bool MockCia402Hal::setup(const HalConfig& config)
   try
   {
     const auto& hw = config.hardware_parameters;
-    control_frequency = std::stod(param_or(hw, "control_frequency", "500"));
+    control_frequency = read_non_negative("control_frequency", "Hz", param_or(hw, "control_frequency", "500"));
     quick_stop_hold = read_flag(param_or(hw, "quick_stop_hold", "true"));
     const std::string default_mode = param_or(hw, "mode_of_operation", "8");
     for (const auto& spec : config.joints)
@@ -100,8 +100,14 @@ bool MockCia402Hal::setup(const HalConfig& config)
       joint.name = spec.name;
       joint.energize = read_flag(param_or(p, "energize", "true"));
       joint.drive.mode_of_operation = parse_mode(param_or(p, "mode_of_operation", default_mode));
-      joint.drive.quick_stop_option_code = std::stoi(param_or(p, "quick_stop_option_code", "6"));
-      joint.drive.quick_stop_deceleration = std::stod(param_or(p, "quick_stop_deceleration", "20.0"));
+      joint.drive.quick_stop_option_code =
+          static_cast<int>(read_whole_number("quick_stop_option_code", param_or(p, "quick_stop_option_code", "6")));
+      joint.drive.quick_stop_deceleration =
+          read_non_negative("quick_stop_deceleration", "rad/s^2", param_or(p, "quick_stop_deceleration", "20.0"));
+      if (std::isnan(joint.drive.quick_stop_deceleration))
+      {
+        throw std::invalid_argument("quick_stop_deceleration is empty");
+      }
       joint.drive.following_error = parse_following_error(param_or(p, "following_error", "off"));
       joints.push_back(std::move(joint));
     }
