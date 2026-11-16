@@ -5,4 +5,4 @@ repositories:
   synapticon_control_msgs:
     type: git
     url: https://github.com/synapticon/synapticon_control_msgs.git
-    version: main
+    version: 48dae68d664868dd8eee88e034a2eec0b7eabec8
