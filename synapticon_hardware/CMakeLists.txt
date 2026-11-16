@@ -71,7 +71,7 @@ install(PROGRAMS scripts/esi_to_slave_config.py DESTINATION lib/${PROJECT_NAME})
 install(DIRECTORY config DESTINATION share/${PROJECT_NAME})
 
 # drive_check: try one drive through any HAL, without ros2_control.
-add_executable(drive_check test/drive_check.cpp)
+add_executable(drive_check src/drive_check.cpp)
 target_link_libraries(drive_check ${PROJECT_NAME} ament_index_cpp::ament_index_cpp)
 install(TARGETS drive_check DESTINATION lib/${PROJECT_NAME})
 
