@@ -7,8 +7,8 @@
 /// @brief Basic checks of one SOMANET drive through a HAL, without ros2_control.
 ///
 /// The HAL is loaded by its plugin name (--hal) and set up with the parameters a URDF would give it.
-/// - read: bring the bus up and print the drive state. Never energises.
-/// - timing: time every read() and write() call. Never energises.
+/// - read: bring the bus up and print the drive state. Never energises: the joint is set up with energize false.
+/// - timing: time every read() and write() call. Never energises, like read.
 /// - hold: ENERGISES. Enable, hold the present position, disable.
 /// - move: ENERGISES AND MOVES. Enable, ramp the target back and forth between the start position and
 ///   --travel-deg away, disable. Stops when the joint leaves that range.
@@ -58,6 +58,7 @@ constexpr double NaN = std::numeric_limits<double>::quiet_NaN();
 constexpr double TRAVEL_MARGIN = 0.3;  // [rad] beyond the travel range before the move check gives up
 constexpr double TARGET_SPEED = 1.0;   // [rad/s] of the move check's target ramp
 constexpr auto PRINT_PERIOD = std::chrono::milliseconds(500);
+constexpr auto DATA_WAIT = std::chrono::seconds(5);    // for the drive's first statusword in read and timing
 constexpr double CYCLE_HZ = 500.0;                     // the control rate of the examples
 constexpr auto TURN_PERIOD = std::chrono::seconds(2);  // between the direction changes of the move check
 
@@ -206,7 +207,8 @@ void request_real_time(int priority)
 }
 
 /// The HAL description of one drive from the command line: the parameters a URDF would give the HAL. Optional
-/// settings are left out when not given, so that the HAL's defaults apply.
+/// settings are left out when not given, so that the HAL's defaults apply. The checks that never energise set
+/// energize to false, so the HAL itself keeps the drive without power.
 synapticon_hardware::HalConfig hal_config(const Options& o, int mode_of_operation)
 {
   synapticon_hardware::HalConfig config;
@@ -221,6 +223,10 @@ synapticon_hardware::HalConfig hal_config(const Options& o, int mode_of_operatio
   joint.parameters = { { "position", std::to_string(o.ring_position) },
                        { "mode_of_operation", std::to_string(mode_of_operation) },
                        { "slave_config", o.config } };
+  if (o.check == "read" || o.check == "timing")
+  {
+    joint.parameters["energize"] = "false";
+  }
   const std::pair<const char*, double> values[] = { { "max_joint_torque", o.max_torque },
                                                     { "stiffness", o.stiffness },
                                                     { "damping", o.damping } };
@@ -336,6 +342,30 @@ std::optional<std::size_t> run_cycles(const Options& o, const std::function<bool
     }
   }
   return behind;
+}
+
+/// Exchange neutral commands until the drive sends a statusword, for at most DATA_WAIT. A drive without power does
+/// not hold up start(), so read and timing wait here for its first data.
+bool wait_for_data(SynapticonHalI& hal)
+{
+  std::vector<DriveState> states;
+  const std::vector<DriveCommand> neutral(1, neutral_command());
+  const auto give_up = Clock::now() + DATA_WAIT;
+  while (!g_stop && Clock::now() < give_up)
+  {
+    if (!hal.read(states) || !hal.write(neutral))
+    {
+      std::cerr << "Exchange with the drive failed\n";
+      return false;
+    }
+    if (states[0].status_word != 0)
+    {
+      return true;
+    }
+    std::this_thread::sleep_for(std::chrono::duration<double>(1.0 / CYCLE_HZ));
+  }
+  std::cerr << "No valid data from the drive (statusword still 0). Check the PDO mapping of the slave_config.\n";
+  return false;
 }
 
 /// True once every PRINT_PERIOD.
@@ -464,11 +494,17 @@ int check_motion(SynapticonHalI& hal, const Options& o)
   const double lowest = std::min(start, start + travel) - TRAVEL_MARGIN;
   const double highest = std::max(start, start + travel) + TRAVEL_MARGIN;
 
+  if (g_stop)
+  {
+    std::cout << "Stopped before the drive got power\n";
+    return 0;
+  }
   std::cout
       << "Powering the drive now. Keep clear of the joint and the e-stop within reach, Ctrl-C takes the power off.\n";
   if (!hal.enable())
   {
     std::cerr << "enable() failed\n";
+    hal.disable();  // leaves a drive without power alone
     return 1;
   }
   DriveCommand command = neutral_command();
@@ -534,7 +570,7 @@ int main(int argc, char** argv)
   int result = 1;
   {
     Bus bus;
-    if (bus.open(*options, moves && options->impedance ? -6 : 8))
+    if (bus.open(*options, moves && options->impedance ? -6 : 8) && (moves || wait_for_data(bus.hal())))
     {
       std::cout << "The drive streams its data and has no power yet\n";
       if (options->check == "read")
