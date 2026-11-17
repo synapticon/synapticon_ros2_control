@@ -30,6 +30,7 @@
 #include <memory>
 #include <numeric>
 #include <optional>
+#include <stdexcept>
 #include <string>
 #include <thread>
 #include <utility>
@@ -105,25 +106,69 @@ struct Options
   int rt_priority{ 60 };
 };
 
+/// Parse option `name`, a whole number from `min` to `max`. Throws std::invalid_argument for any other text.
+long long read_whole_number_in(const std::string& name, const std::string& text, long long min, long long max)
+{
+  const long long value = synapticon_hardware::read_whole_number(name, text);
+  if (value < min || value > max)
+  {
+    throw std::invalid_argument(name + " takes a whole number from " + std::to_string(min) + " to " +
+                                std::to_string(max) + ", got '" + text + "'");
+  }
+  return value;
+}
+
+/// Parse option `name`, a finite number with nothing after it. Throws std::invalid_argument for any other text.
+double read_number(const std::string& name, const std::string& text)
+{
+  std::size_t used = 0;
+  double value = NaN;
+  try
+  {
+    value = std::stod(text, &used);
+  }
+  catch (const std::exception&)
+  {
+  }
+  if (used != text.size() || !std::isfinite(value))
+  {
+    throw std::invalid_argument(name + " must be a finite number, got '" + text + "'");
+  }
+  return value;
+}
+
+/// Parse option `name`, a finite number of 0 or more in `unit`. Throws std::invalid_argument for any other text.
+double read_amount(const std::string& name, const std::string& unit, const std::string& text)
+{
+  const double value = synapticon_hardware::read_non_negative(name, unit, text);
+  if (std::isnan(value))
+  {
+    throw std::invalid_argument(name + " needs a value");
+  }
+  return value;
+}
+
 /// Parse the command line. Prints the usage and returns nothing on --help or when it is incomplete or wrong.
 std::optional<Options> parse_options(int argc, char** argv)
 {
   Options o;
-  const auto u16 = [](const std::string& v) { return static_cast<uint16_t>(std::stoul(v, nullptr, 0)); };
   const std::map<std::string, std::function<void(const std::string&)>> valued = {
     { "--hal", [&](const std::string& v) { o.hal = v; } },
     { "--config", [&](const std::string& v) { o.config = v; } },
     { "--network-interface", [&](const std::string& v) { o.network_interface = v; } },
-    { "--ring-position", [&](const std::string& v) { o.ring_position = u16(v); } },
-    { "--duration", [&](const std::string& v) { o.duration = std::stod(v); } },
-    { "--travel-deg", [&](const std::string& v) { o.travel_deg = std::stod(v); } },
-    { "--max-torque", [&](const std::string& v) { o.max_torque = std::stod(v); } },
-    { "--stiffness", [&](const std::string& v) { o.stiffness = std::stod(v); } },
-    { "--damping", [&](const std::string& v) { o.damping = std::stod(v); } },
+    { "--ring-position",
+      [&](const std::string& v) {
+        o.ring_position = static_cast<uint16_t>(read_whole_number_in("--ring-position", v, 0, UINT16_MAX));
+      } },
+    { "--duration", [&](const std::string& v) { o.duration = read_amount("--duration", "seconds", v); } },
+    { "--travel-deg", [&](const std::string& v) { o.travel_deg = read_number("--travel-deg", v); } },
+    { "--max-torque", [&](const std::string& v) { o.max_torque = read_amount("--max-torque", "Nm", v); } },
+    { "--stiffness", [&](const std::string& v) { o.stiffness = read_amount("--stiffness", "Nm/rad", v); } },
+    { "--damping", [&](const std::string& v) { o.damping = read_amount("--damping", "Nm s/rad", v); } },
     { "--rt-priority",
       [&](const std::string& v) {
         o.rt = true;
-        o.rt_priority = std::stoi(v);
+        o.rt_priority = static_cast<int>(read_whole_number_in("--rt-priority", v, 1, 99));
       } },
   };
   const std::map<std::string, std::function<void()>> flags = {
@@ -140,7 +185,15 @@ std::optional<Options> parse_options(int argc, char** argv)
     }
     if (const auto it = valued.find(arg); it != valued.end() && i + 1 < argc)
     {
-      it->second(argv[++i]);
+      try
+      {
+        it->second(argv[++i]);
+      }
+      catch (const std::invalid_argument& e)
+      {
+        std::cerr << e.what() << "\n";
+        return std::nullopt;
+      }
     }
     else if (const auto flag = flags.find(arg); flag != flags.end())
     {
@@ -165,11 +218,6 @@ std::optional<Options> parse_options(int argc, char** argv)
   if (o.hal == "ethercat_soem" && o.network_interface.empty())
   {
     std::cerr << "The HAL ethercat_soem needs the network interface of the drive: --network-interface <interface>\n";
-    return std::nullopt;
-  }
-  if (o.rt_priority < 1 || o.rt_priority > 99)
-  {
-    std::cerr << "--rt-priority takes a SCHED_FIFO priority from 1 to 99.\n";
     return std::nullopt;
   }
   if (o.impedance && !(std::isfinite(o.stiffness) && std::isfinite(o.damping) && std::isfinite(o.max_torque)))

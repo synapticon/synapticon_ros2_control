@@ -137,6 +137,8 @@ if(BUILD_TESTING)
   endforeach()
   ament_add_test(drive_check_sigterm GENERATE_RESULT_FOR_RETURN_CODE_ZERO TIMEOUT 60
     COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/test/test_drive_check_sigterm.sh $<TARGET_FILE:drive_check>)
+  ament_add_test(drive_check_options GENERATE_RESULT_FOR_RETURN_CODE_ZERO TIMEOUT 60
+    COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/test/test_drive_check_options.sh $<TARGET_FILE:drive_check>)
 
   # The drive action suite of the hardware tests, on simulated drives, in real time.
   ament_add_gmock(test_mock_cia402_drive_actions test/test_mock_cia402_drive_actions.cpp
