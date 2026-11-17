@@ -160,6 +160,11 @@ INSTANTIATE_TEST_SUITE_P(
                                                       "0x6085, sub_index: 0, type: uint32, "
                                                       "value: fast }\n" },
                       BrokenCase{ "NotYaml", "vendor_id: [1\n" },
+                      BrokenCase{ "SdoSubIndexAbove255", "vendor_id: 1\nproduct_id: 2\nsdo:\n  - { index: "
+                                                         "0x605a, sub_index: 256, type: int16, value: 6 }\n" },
+                      BrokenCase{ "PdoSubIndexAbove255", "vendor_id: 1\nproduct_id: 2\nrpdo:\n  - index: 0x1600\n    "
+                                                         "channels:\n"
+                                                         "      - { index: 0x6040, sub_index: 256, type: uint16 }\n" },
                       BrokenCase{ "WordAfterABit", "vendor_id: 1\nproduct_id: 2\ntpdo:\n  - index: 0x1a00\n    "
                                                    "channels:\n"
                                                    "      - { index: 0x2000, sub_index: 1, type: bool }\n"

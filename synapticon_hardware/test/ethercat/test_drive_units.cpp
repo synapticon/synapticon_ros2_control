@@ -130,7 +130,9 @@ INSTANTIATE_TEST_SUITE_P(
         RefusedCase{ "ZeroCounts", "units:\n  counts_per_revolution: 0\n" },
         RefusedCase{ "NegativeRatedTorque", "units:\n  rated_torque: -1.0\n" },
         RefusedCase{ "FeedConstantNotDisabled", "units:\n  feed_constant: enabled\n" },
-        RefusedCase{ "UnknownUnitsKey", "units:\n  position_unit: 1\n" }),
+        RefusedCase{ "UnknownUnitsKey", "units:\n  position_unit: 1\n" },
+        RefusedCase{ "SubIndexAbove255", "sdo:\n  - { index: 0x1234, sub_index: 256, type: uint8, value: 3, "
+                                         "raw: true }\n" }),
     [](const auto& info) { return std::string(info.param.name); });
 
 TEST(ReadSlaveConfigUnits, RefusesAMissingFile)

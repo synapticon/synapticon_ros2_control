@@ -24,6 +24,17 @@ namespace synapticon_ethercat_soem
 
 namespace
 {
+/// The `sub_index` of the entry `node`. Throws when it is above 255.
+uint8_t sub_index_of(const YAML::Node& node)
+{
+  const unsigned sub_index = node["sub_index"].as<unsigned>();
+  if (sub_index > UINT8_MAX)
+  {
+    throw std::runtime_error("sub_index " + std::to_string(sub_index) + " is above 255");
+  }
+  return static_cast<uint8_t>(sub_index);
+}
+
 /// The PDOs of `node` (a `rpdo` or `tpdo` list).
 std::vector<Pdo> read_pdos(const YAML::Node& node)
 {
@@ -36,7 +47,7 @@ std::vector<Pdo> read_pdos(const YAML::Node& node)
     {
       PdoChannel channel;
       channel.index = c["index"].as<uint16_t>();
-      channel.sub_index = static_cast<uint8_t>(c["sub_index"].as<unsigned>());
+      channel.sub_index = sub_index_of(c);
       const std::string type = c["type"].as<std::string>();
       const auto parsed = value_type(type);
       if (!parsed)
@@ -171,7 +182,7 @@ std::optional<SlaveConfig> load_slave_config(const std::string& path, std::strin
     {
       StartupSdo sdo;
       sdo.index = s["index"].as<uint16_t>();
-      sdo.sub_index = static_cast<uint8_t>(s["sub_index"].as<unsigned>());
+      sdo.sub_index = sub_index_of(s);
       char object[16];
       std::snprintf(object, sizeof(object), "0x%04X:%u", sdo.index, sdo.sub_index);
       const std::string type = s["type"].as<std::string>();

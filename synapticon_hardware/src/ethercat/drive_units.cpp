@@ -148,7 +148,12 @@ CoeAddress entry_object(const YAML::Node& entry, const std::string& where)
   {
     throw std::invalid_argument(where + ": an entry needs index and sub_index");
   }
-  return { entry["index"].as<uint16_t>(), static_cast<uint8_t>(entry["sub_index"].as<unsigned>()) };
+  const unsigned sub_index = entry["sub_index"].as<unsigned>();
+  if (sub_index > UINT8_MAX)
+  {
+    throw std::invalid_argument(where + ": sub_index " + std::to_string(sub_index) + " is above 255");
+  }
+  return { entry["index"].as<uint16_t>(), static_cast<uint8_t>(sub_index) };
 }
 
 /// Check one `sdo:` entry against the rules of read_slave_config_units().
