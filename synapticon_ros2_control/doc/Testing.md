@@ -407,7 +407,8 @@ Problems show up at one of four moments. Find the moment first, then your sympto
   delay (`0x2004:5`, for example 100 ms). The tests allow that time.
   A monitored joint (`energize: false`) refuses every request that would give it power.
 - **Tracking.**
-  A small streamed move in CSP.
+  A small streamed move in CSP, with the measured velocity at the streamed one, so the drive applies its gear ratio
+  to velocities as the HAL assumes.
   A small streamed velocity in CSV: followed, stopped by a zero target, and braked by a quick stop while targets keep
   coming.
   In impedance mode with both gains at zero, `effort` is the joint torque demand.

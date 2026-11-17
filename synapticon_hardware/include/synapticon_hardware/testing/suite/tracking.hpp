@@ -71,7 +71,8 @@ TEST_F(SingleDrive, TheReadinessQueryFollowsTheLifecycle)
   bench().released();
 }
 
-/// CSP: a small streamed move is tracked, and the joint settles on the final target.
+/// CSP: a small streamed move is tracked, and the joint settles on the final target. At constant speed the measured
+/// velocity matches the streamed one, so the drive scales velocities with the gear ratio as the HAL assumes.
 TEST_F(SingleDrive, CspTracksASmallMove)
 {
   ASSERT_TRUE(start({}));
@@ -79,17 +80,26 @@ TEST_F(SingleDrive, CspTracksASmallMove)
   limit_travel(0.8);
   double max_error = 0.0;
   const double v = 0.5 * sign_;
-  for (int i = 0; i < cycles(0.4); ++i)
+  double sum = 0.0;
+  int summed = 0;
+  for (int i = 0; i < cycles(0.5); ++i)
   {
     setpoint_.velocity = v * std::min(1.0, (i + 1) / (0.2 * BENCH_RATE_HZ));
     setpoint_.position += setpoint_.velocity * DT;
     tick();
     max_error = std::max(max_error, std::abs(reading_.position - setpoint_.position));
+    if (i >= cycles(0.3))  // 0.1 s after the ramp, at constant speed
+    {
+      sum += reading_.velocity;
+      ++summed;
+    }
   }
   setpoint_.velocity = 0.0;
   tick(cycles(0.5));
   EXPECT_LT(max_error, 0.1) << "the drive lagged the streamed target";
   EXPECT_NEAR(reading_.position, setpoint_.position, 0.02) << "the joint did not settle on the target";
+  EXPECT_NEAR(sum / summed, v, 0.15 * std::abs(v) + bench().velocity_step(0))
+      << "the measured velocity is not the streamed one: is the gear ratio applied to velocities?";
 }
 
 /// CSV: a small streamed velocity is followed, and the joint stops once the target returns to zero.
