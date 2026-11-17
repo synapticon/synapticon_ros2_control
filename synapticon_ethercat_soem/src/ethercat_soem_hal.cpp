@@ -36,6 +36,7 @@ extern "C" {
 }
 
 #include "coe_encoding.hpp"
+#include "error_list.hpp"
 #include "process_data_mapping.hpp"
 #include "process_image.hpp"
 #include "slave_config.hpp"
@@ -178,14 +179,14 @@ struct EthercatSoemHal::Bus
   /// One SDO download, logged when it fails. True when the drive took it.
   bool download(uint16_t slave, uint16_t index, uint8_t sub_index, std::vector<uint8_t> bytes)
   {
+    drain_error_list(context);
     const int wkc = ecx_SDOwrite(&context, slave, index, sub_index, FALSE, static_cast<int>(bytes.size()), bytes.data(),
                                  EC_TIMEOUTRXM);
     if (wkc > 0)
     {
       return true;
     }
-    ec_errort error{};
-    const uint32_t abort_code = ecx_poperror(&context, &error) ? static_cast<uint32_t>(error.AbortCode) : 0;
+    const uint32_t abort_code = drain_error_list(context, SdoAddress{ slave, index, sub_index });
     RCLCPP_ERROR(logger(), "SDO download 0x%04X:%u to slave %u failed (abort=0x%08X).", index, sub_index, slave,
                  abort_code);
     return false;
@@ -196,14 +197,14 @@ struct EthercatSoemHal::Bus
   {
     bytes.assign(SDO_READ_BACK_BYTES, 0);
     int size = static_cast<int>(bytes.size());
+    drain_error_list(context);
     const int wkc = ecx_SDOread(&context, slave, index, sub_index, FALSE, &size, bytes.data(), EC_TIMEOUTRXM);
     if (wkc > 0)
     {
       bytes.resize(static_cast<std::size_t>(size));
       return true;
     }
-    ec_errort error{};
-    const uint32_t abort_code = ecx_poperror(&context, &error) ? static_cast<uint32_t>(error.AbortCode) : 0;
+    const uint32_t abort_code = drain_error_list(context, SdoAddress{ slave, index, sub_index });
     RCLCPP_ERROR(logger(), "SDO upload 0x%04X:%u from slave %u failed (abort=0x%08X).", index, sub_index, slave,
                  abort_code);
     return false;
@@ -743,16 +744,16 @@ int EthercatSoemHal::upload(uint16_t position, uint16_t index, uint8_t sub_index
   {
     return -1;
   }
+  const auto slave = static_cast<uint16_t>(position + 1);
   int length = static_cast<int>(bytes.size());
-  const int wkc = ecx_SDOread(&bus_->context, static_cast<uint16_t>(position + 1), index, sub_index, FALSE, &length,
-                              bytes.data(), EC_TIMEOUTRXM);
+  drain_error_list(bus_->context);
+  const int wkc = ecx_SDOread(&bus_->context, slave, index, sub_index, FALSE, &length, bytes.data(), EC_TIMEOUTRXM);
   if (wkc > 0)
   {
     size = static_cast<std::size_t>(length);
     return 0;
   }
-  ec_errort error{};
-  abort_code = ecx_poperror(&bus_->context, &error) ? static_cast<uint32_t>(error.AbortCode) : 0;
+  abort_code = drain_error_list(bus_->context, SdoAddress{ slave, index, sub_index });
   return -1;
 }
 
@@ -763,15 +764,16 @@ int EthercatSoemHal::download(uint16_t position, uint16_t index, uint8_t sub_ind
   {
     return -1;
   }
+  const auto slave = static_cast<uint16_t>(position + 1);
   std::vector<uint8_t> data(bytes);  // SOEM takes a mutable buffer
-  const int wkc = ecx_SDOwrite(&bus_->context, static_cast<uint16_t>(position + 1), index, sub_index, FALSE,
-                               static_cast<int>(data.size()), data.data(), EC_TIMEOUTRXM);
+  drain_error_list(bus_->context);
+  const int wkc = ecx_SDOwrite(&bus_->context, slave, index, sub_index, FALSE, static_cast<int>(data.size()),
+                               data.data(), EC_TIMEOUTRXM);
   if (wkc > 0)
   {
     return 0;
   }
-  ec_errort error{};
-  abort_code = ecx_poperror(&bus_->context, &error) ? static_cast<uint32_t>(error.AbortCode) : 0;
+  abort_code = drain_error_list(bus_->context, SdoAddress{ slave, index, sub_index });
   return -1;
 }
 
