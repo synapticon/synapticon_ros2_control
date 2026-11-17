@@ -257,7 +257,7 @@ There are four checks:
 They also work on a drive whose units bring-up cannot read.
 `hold` and `move` use CSP, or impedance mode with `--impedance`.
 
-A check ends after `--duration` seconds (10 by default), on Ctrl-C, or when the drive faults.
+A check ends after `--duration` seconds (10 by default), on Ctrl-C or SIGTERM, or when the drive faults.
 It then takes the power off and releases the bus.
 A Ctrl-C during the bring-up ends `hold` and `move` before the drive gets power.
 `move` also ends as soon as the joint gets more than 0.3 rad outside its travel.

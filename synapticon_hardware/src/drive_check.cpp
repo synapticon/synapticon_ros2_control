@@ -13,7 +13,7 @@
 /// - move: ENERGISES AND MOVES. Enable, ramp the target back and forth between the start position and
 ///   --travel-deg away, disable. Stops when the joint leaves that range.
 ///
-/// hold and move run in CSP, or in impedance mode with --impedance. Ctrl-C stops any check cleanly.
+/// hold and move run in CSP, or in impedance mode with --impedance. Ctrl-C or SIGTERM stops any check cleanly.
 
 #include <algorithm>
 #include <atomic>
@@ -74,7 +74,7 @@ Usage: drive_check <read|timing|hold|move> [--config <slave_config.yaml>] [optio
   --config PATH      the drive's slave_config (default: the bundled example, which fits one drive model only)
   --network-interface IF   network interface of the drive, required by ethercat_soem
   --ring-position N  place of the drive on the ring, counted from 0 (default 0)
-  --duration S       run time, 0 until Ctrl-C (default 10)
+  --duration S       run time, 0 until Ctrl-C or SIGTERM (default 10)
   --travel-deg D     travel of the move check (default 30)
   --max-torque NM    MaxJointTorque for the run (default in CSP: the drive's value)
   --impedance        hold and move in impedance mode instead of CSP. Needs the next two and --max-torque.
@@ -316,7 +316,7 @@ void print_state(const DriveState& s)
             << s.error_code << std::dec << std::setfill(' ') << "\n";
 }
 
-/// Call `cycle` once per bus period until it returns false, the duration ends or Ctrl-C.
+/// Call `cycle` once per bus period until it returns false, the duration ends or a stop signal came in.
 /// Returns the number of periods the loop fell behind, or nothing when `cycle` failed.
 std::optional<std::size_t> run_cycles(const Options& o, const std::function<bool()>& cycle)
 {
@@ -559,8 +559,12 @@ int main(int argc, char** argv)
   {
     return 2;
   }
-  rclcpp::init(argc, argv);
-  std::signal(SIGINT, [](int) { g_stop = true; });
+  // Without rclcpp's signal handlers, so SIGINT and SIGTERM both end the check and take the power off.
+  rclcpp::init(argc, argv, rclcpp::InitOptions(), rclcpp::SignalHandlerOptions::None);
+  for (const int signal : { SIGINT, SIGTERM })
+  {
+    std::signal(signal, [](int) { g_stop = true; });
+  }
   if (options->rt)
   {
     request_real_time(options->rt_priority);  // threads started later by the HAL inherit it
