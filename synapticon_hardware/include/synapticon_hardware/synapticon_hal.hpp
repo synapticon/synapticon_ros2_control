@@ -36,9 +36,12 @@ namespace synapticon_hardware
 /// Every HAL follows the same call rules:
 ///
 /// - An up-call on a rung the HAL is on already succeeds and changes nothing: connect() while connected, start()
-///   while streaming, enable() while enabled.
-/// - A down-call for a rung the HAL is not on succeeds and changes nothing: disable() while not streaming or not
-///   enabled, stop() while not streaming, disconnect() always.
+///   while streaming. enable() while enabled succeeds too, and brings back every drive with energize that a drive
+///   action took down.
+/// - A down-call for a rung the HAL is not on succeeds and changes nothing: disable() and stop() while not streaming,
+///   disconnect() always.
+/// - disable() while streaming always takes every drive down, also when the HAL is not enabled, since a drive
+///   action can have powered a drive.
 /// - An up-call out of order fails: start() before connect(), enable() before start().
 /// - stop() while drives may have power switches them off first, as disable() does.
 ///
@@ -48,6 +51,7 @@ namespace synapticon_hardware
 /// - connect(): this instance is spent. Make a new HAL instead of calling connect() again.
 /// - disconnect(): nothing to act on. The link is closed in any case.
 /// - read(): no fresh data this cycle. How to react is up to the caller.
+/// - disable() that ran out of time: the HAL is no longer enabled, while some drives may still have power.
 /// - any other call: the HAL stays on the rung it was on.
 class SynapticonHalI
 {
