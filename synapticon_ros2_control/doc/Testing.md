@@ -343,6 +343,9 @@ Problems show up at one of four moments. Find the moment first, then your sympto
   Bring-up tries each read up to `sdo_read_attempts` times (5), `sdo_retry_wait_s` apart (1 s).
   Once a drive used up its tries, its later reads get one try each. The other drives keep theirs.
   If it still gives up, raise them in the `bus` section of the robot definition.
+- Bring-up refuses a joint that gets power, because its torque on the position shaft is unknown.
+  The gear ratio (`0x6091`) cannot be read or is 0, or the encoders `0x2012:9` and `0x2010:12` do not name encoder 1
+  or 2. Unlike the drive's units, these have no `units:` override in the slave_config. Fix them on the drive.
 - Bring-up refuses an impedance joint because of its firmware.
   The drive runs a version older than 5.6.11. Update it.
 

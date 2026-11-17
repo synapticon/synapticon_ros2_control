@@ -65,6 +65,8 @@ struct SiSdo
 
 /// The `units:` section of a slave_config: the drive's units, for a drive that cannot report them. Each is used only
 /// where the drive cannot be read or understood, and must agree with what the drive reports otherwise.
+/// The gear ratio (0x6091) and the encoders that tell whether the drive applies it (0x2012:9, 0x2010:12) have no
+/// override: when bring-up cannot read or understand them, it refuses a joint that may get power.
 struct UnitOverrides
 {
   std::optional<uint32_t> velocity_unit;          ///< as in 0x60A9

@@ -266,6 +266,17 @@ TEST_F(DriveChecks, RefusesAGearedDriveWhoseCommutationEncoderCannotBeRead)
   EXPECT_FALSE(check({ joint() }, false));
 }
 
+/// Behind a gear, a commutation encoder other than 1 or 2 cannot tell whether the drive applies the ratio either.
+TEST_F(DriveChecks, RefusesAGearedDriveWhoseCommutationEncoderIsNoEncoder)
+{
+  for (const uint32_t encoder : { 0u, 3u })
+  {
+    drives_.healthy_drive();
+    drives_.put(coe::COMMUTATION_ENCODER, encoder);
+    EXPECT_FALSE(check({ joint() }, false)) << encoder;
+  }
+}
+
 TEST_F(DriveChecks, ReadsThePositionResolutionOfTheSecondEncoderWhenItFeedsThePosition)
 {
   drives_.healthy_drive();

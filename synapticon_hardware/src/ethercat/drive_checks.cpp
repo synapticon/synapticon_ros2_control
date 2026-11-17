@@ -221,8 +221,8 @@ std::optional<double> torque_factor(const SdoReader& sdo, const rclcpp::Logger& 
 ///
 /// The drive scales velocities to the shaft of its position encoder with the gear ratio 0x6091, unless the position
 /// encoder is the commutation encoder on the motor shaft: then it ignores the ratio. A drive without 0x6091 has no
-/// ratio. Nothing, with a warning, when the ratio is 0, cannot be read, or the two encoders cannot be read to tell
-/// whether the drive applies it.
+/// ratio. Nothing, with a warning, when the ratio is 0, cannot be read, or the two encoders cannot be read or name no
+/// encoder 1 or 2, so they cannot tell whether the drive applies it.
 std::optional<double> position_shaft_ratio(const SdoReader& sdo, const rclcpp::Logger& logger, const JointConfig& joint)
 {
   uint32_t abort_code = 0;
@@ -250,11 +250,13 @@ std::optional<double> position_shaft_ratio(const SdoReader& sdo, const rclcpp::L
   }
   const auto position_encoder = read_u32(sdo, logger, joint.position, coe::POSITION_ENCODER);
   const auto commutation_encoder = read_u32(sdo, logger, joint.position, coe::COMMUTATION_ENCODER);
-  if (!position_encoder || !commutation_encoder)
+  const auto names_an_encoder = [](std::optional<uint32_t> encoder) { return encoder == 1u || encoder == 2u; };
+  if (!names_an_encoder(position_encoder) || !names_an_encoder(commutation_encoder))
   {
     RCLCPP_WARN(logger,
                 "Joint '%s': whether the drive applies its gear ratio %u:%u (0x6091) depends on its encoders (0x2012:9 "
-                "and 0x2010:12), which cannot be read. Its torque on the position shaft is unknown.",
+                "and 0x2010:12), which cannot be read or name no encoder 1 or 2. Its torque on the position shaft is "
+                "unknown.",
                 joint.name.c_str(), motor_turns, shaft_turns);
     return std::nullopt;
   }
