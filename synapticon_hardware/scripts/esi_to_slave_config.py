@@ -268,9 +268,8 @@ def child_text(element: ET.Element, path: str) -> str:
 
 
 def child_bits(element: ET.Element, path: str) -> int | None:
-    """Bit count of the element at `path`. None when it is missing."""
-    text = child_text(element, path)
-    return int(text) if text else None
+    """Bit count of the element at `path`. None when it is missing or no number."""
+    return parse_number(child_text(element, path))
 
 
 def find_device(
@@ -297,8 +296,8 @@ def predefined_pdo_objects(device: ET.Element) -> dict[tuple[int, int], EsiObjec
     for pdo in (*device.findall("RxPdo"), *device.findall("TxPdo")):
         for entry in pdo.findall("Entry"):
             index = parse_number(entry.findtext("Index"))
-            if index is not None:
-                sub_index = int(child_text(entry, "SubIndex") or 0)
+            sub_index = parse_number(child_text(entry, "SubIndex") or "0")
+            if index is not None and sub_index is not None:
                 found[(index, sub_index)] = EsiObject(
                     child_text(entry, "Name"),
                     child_text(entry, "DataType"),
@@ -321,12 +320,13 @@ def record_layouts(
             if not name or name in layouts:
                 continue
             mappable = {
-                int(child_text(item, "SubIdx")): (
+                sub_index: (
                     child_bits(item, "BitSize"),
                     child_text(item, "Type"),
                 )
                 for item in data_type.findall("SubItem")
-                if child_text(item, "SubIdx") and child_text(item, "Flags/PdoMapping")
+                if (sub_index := parse_number(child_text(item, "SubIdx"))) is not None
+                and child_text(item, "Flags/PdoMapping")
             }
             if mappable:
                 layouts[name] = mappable

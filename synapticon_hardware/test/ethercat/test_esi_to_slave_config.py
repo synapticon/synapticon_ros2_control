@@ -12,6 +12,7 @@ with the vendor objects, as the real files have them.
 
 import importlib.util
 import math
+import xml.etree.ElementTree as ET
 from pathlib import Path
 
 import pytest
@@ -274,6 +275,23 @@ def test_only_the_impedance_variant_seeds_the_impedance_objects():
 )
 def test_numbers_are_read_in_every_esi_notation(text, value):
     assert gen.parse_number(text) == value
+
+
+def test_sub_indexes_and_bit_counts_are_read_in_every_esi_notation():
+    device = ET.fromstring(
+        "<Device><TxPdo><Entry><Index>#x2060</Index><SubIndex>#x2</SubIndex><BitLen>#x20</BitLen>"
+        "<Name>Gain</Name><DataType>DINT</DataType></Entry></TxPdo></Device>"
+    )
+    assert gen.predefined_pdo_objects(device) == {
+        (0x2060, 2): gen.EsiObject("Gain", "DINT", 32)
+    }
+    dictionary = ET.fromstring(
+        "<Dictionary><DataTypes><DataType><Name>DT2060</Name>"
+        "<SubItem><SubIdx>#x1</SubIdx><Type>DINT</Type><BitSize>#x20</BitSize>"
+        "<Flags><PdoMapping>t</PdoMapping></Flags></SubItem>"
+        "</DataType></DataTypes></Dictionary>"
+    )
+    assert gen.record_layouts([dictionary]) == {"DT2060": {1: (32, "DINT")}}
 
 
 @pytest.mark.parametrize(
