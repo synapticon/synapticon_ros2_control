@@ -115,6 +115,7 @@ if(BUILD_TESTING)
   # The parts in the library.
   hardware_test(test_interface_binding)
   hardware_test(test_link_health)
+  hardware_test(test_hal_bench)
   hardware_test(cia402/test_drive_action_walk USES ${synapticon_control_msgs_TARGETS})
   hardware_test(cia402/test_cia402_hal_failures)
   hardware_test(ethercat/test_bus_config)

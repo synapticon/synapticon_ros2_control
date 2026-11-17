@@ -130,6 +130,13 @@ inline TestGains test_gains(std::size_t joint)
   }
 }
 
+/// True when `gains` differ from the default test gains.
+inline bool own_test_gains(const TestGains& gains)
+{
+  const TestGains defaults;
+  return gains.stiffness != defaults.stiffness || gains.damping != defaults.damping;
+}
+
 /// Strict mode (SYNAPTICON_HIL_STRICT=1): a test that cannot run on this bench fails instead of skipping.
 inline bool strict_mode()
 {

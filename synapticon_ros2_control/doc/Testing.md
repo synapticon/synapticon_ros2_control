@@ -179,12 +179,20 @@ Write it down, and look into it when it comes back.
 
 | Variable | Default | Meaning |
 |---|---|---|
+| `SYNAPTICON_HIL_ROBOT` | unset | robot definition of the bench: its first joint is the bench drive, its second the second drive |
 | `SYNAPTICON_HIL_SLAVE_CONFIG` | the installed example slave_config | base slave_config |
 | `SYNAPTICON_HIL_NETWORK_INTERFACE` | unset | network interface of the drives, required |
 | `SYNAPTICON_HIL_ALIAS` | `0` | slave alias, only `0` is supported |
 | `SYNAPTICON_HIL_POSITION` | `0`, or the robot file's | ring position, overrides the robot file |
 | `SYNAPTICON_HIL_POSITION_2` | the robot file's second joint, or `SYNAPTICON_HIL_POSITION` + 1 | ring position of the second drive, for `--two-drives` |
 | `SYNAPTICON_HIL_STRICT` | unset | `1` turns a failed impedance bring-up into a failure instead of a skip |
+
+The impedance tests move a joint with the test gains of the robot definition's `hil_tests` section.
+Without them, they take stiffness 15 Nm/rad and damping 0.5 Nm s/rad, with a torque ceiling of 50 Nm unless the joint
+sets `max_joint_torque`.
+A robot definition that gives a joint its own test gains must also give it `max_joint_torque`, per joint or in
+`command_defaults`.
+Otherwise every impedance test fails with a message that says so, also outside strict mode.
 
 ### What the suite leaves on the drive
 

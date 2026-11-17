@@ -23,7 +23,9 @@
 /// Environment (all optional):
 ///   SYNAPTICON_HIL_ROBOT         robot definition YAML of the bench: its first joint is the bench drive, its second
 ///                                the second drive, with their ring position, slave_config and command defaults.
-///                                Its bus section sets the bus, except the control frequency of the suite
+///                                Its bus section sets the bus, except the control frequency of the suite. Its
+///                                hil_tests section gives the impedance tests their gains. A joint with own gains
+///                                needs its max_joint_torque there too
 ///   SYNAPTICON_HIL_SLAVE_CONFIG  base slave_config of a drive that names none (default: the installed example config)
 ///   SYNAPTICON_HIL_ALIAS         slave alias, overrides the robot definition (default 0)
 ///   SYNAPTICON_HIL_POSITION      ring position, overrides the robot definition (default 0)
@@ -289,6 +291,8 @@ inline BusConfig bench_bus_config()
 /// SYNAPTICON_HIL_ALIAS, SYNAPTICON_HIL_POSITION and SYNAPTICON_HIL_POSITION_2 override what the file gives.
 /// An impedance joint keeps the file's stiffness, damping and torque ceiling, and takes those of the example robot
 /// definitions for any the file leaves out. In the other modes the drive keeps its own.
+/// @throws std::runtime_error for an impedance joint with own test gains but without a torque ceiling: the example's
+/// 50 Nm suits only the default test gains.
 inline JointConfig bench_drive(std::size_t index, int mode)
 {
   const auto joints = robot_joints();
@@ -308,6 +312,12 @@ inline JointConfig bench_drive(std::size_t index, int mode)
   joint.alias = env_u16("SYNAPTICON_HIL_ALIAS", std::to_string(joint.alias));
   joint.mode_of_operation = mode;
   const bool impedance = mode == ec::mode::IMPEDANCE;
+  if (impedance && std::isnan(joint.max_joint_torque) && own_test_gains(test_gains(index)))
+  {
+    throw std::runtime_error("joint '" + joint.name +
+                             "': the robot definition gives it own hil_tests gains, so it must also give its torque "
+                             "ceiling (max_joint_torque). The default of 50 Nm suits only the default gains.");
+  }
   const auto fill = [impedance](double& value, double example) {
     value = !impedance ? QUIET_NAN : std::isnan(value) ? example : value;
   };
