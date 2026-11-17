@@ -161,8 +161,8 @@ struct EthercatSoemHal::Bus
     context.eepFMMU = &eeprom_fmmu;
     context.FOEhook = nullptr;
     context.EOEhook = nullptr;
-    context.manualstatechange = 0;
-    context.userdata = this;  // the PDO mapping hook finds the bus through it
+    context.manualstatechange = 1;  // every state request comes from reach_state(), so SAFE-OP follows the DC setup
+    context.userdata = this;        // the PDO mapping hook finds the bus through it
   }
 
   /// The joint whose drive is the SOEM slave `slave`, if any.
@@ -543,8 +543,7 @@ bool EthercatSoemHal::start()
   }
   bus_->io_map.assign(bytes + IO_MAP_RESERVE_PER_SLAVE * static_cast<std::size_t>(bus_->slave_count), 0);
   bus_->mapping_failed = false;
-  // Mapping requests SAFE-OP for every slave, so each failure from here on goes back to PRE-OP, where the PDO mapping
-  // can be written again.
+  // Each failure from here on goes back to PRE-OP, where the PDO mapping can be written again.
   const int mapped = ecx_config_map_group(&context, bus_->io_map.data(), 0);
   if (bus_->mapping_failed)
   {
@@ -584,7 +583,8 @@ bool EthercatSoemHal::start()
     }
   }
 
-  // SYNC0 at the control frequency, for every drive whose slave_config sets assign_activate.
+  // SYNC0 at the control frequency, for every drive whose slave_config sets assign_activate. The drives check it in
+  // the transition to SAFE-OP, which is requested only afterwards.
   bus_->capture_realtime_offset();
   ecx_configdc(&context);
   const auto cycle_ns = static_cast<uint32>(1e9 / config_.control_frequency);
