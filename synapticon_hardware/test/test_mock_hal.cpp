@@ -6,6 +6,7 @@
 /// @file
 /// @brief Tests of MockHal: which calls it takes in which order, and how commands loop back as states.
 
+#include <cmath>
 #include <cstddef>
 #include <functional>
 #include <limits>
@@ -139,12 +140,12 @@ protected:
     ASSERT_TRUE(mock_.enable());
   }
 
-  /// One command per joint, every setpoint at `value`.
+  /// One command per joint: position, velocity and effort at `value`, the gains and the ceiling at its size.
   static std::vector<DriveCommand> uniform(double value)
   {
     DriveCommand command;
     command.position = command.velocity = command.effort = value;
-    command.stiffness = command.damping = command.max_joint_torque = value;
+    command.stiffness = command.damping = command.max_joint_torque = std::abs(value);
     return std::vector<DriveCommand>(ARM.size(), command);
   }
 
@@ -306,6 +307,14 @@ TEST_P(SetpointTest, AnInfiniteValueFailsTheWriteAndKeepsItsLastValue)
     const bool infinite = std::string(looped.label) == GetParam().label;
     EXPECT_DOUBLE_EQ(looped.shows_as(states[2]), infinite ? 0.9 : 5.0) << "only the infinite field keeps its value";
   }
+}
+
+/// A negative value fails the write only in the fields that take no negative values.
+TEST_P(SetpointTest, ANegativeValueFailsTheWriteOnlyWhereItIsInvalid)
+{
+  const std::string label = GetParam().label;
+  const bool non_negative = label == "Stiffness" || label == "Damping" || label == "MaxJointTorque";
+  EXPECT_EQ(mock_.write(with(0.5, 1, -1.0)), !non_negative);
 }
 
 INSTANTIATE_TEST_SUITE_P(Mock, SetpointTest, ::testing::ValuesIn(all_setpoints()),

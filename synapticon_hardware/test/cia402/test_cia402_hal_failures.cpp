@@ -350,6 +350,22 @@ TEST(Cia402HalFailures, AnInfiniteSetpointFailsTheWrite)
   EXPECT_TRUE(drives.write(commands));
 }
 
+/// A negative torque ceiling, stiffness or damping fails the write like an infinite value. Negative position, velocity
+/// and torque offset are valid.
+TEST(Cia402HalFailures, ANegativeCeilingOrGainFailsTheWrite)
+{
+  ScriptedDrives drives({ true });
+  ASSERT_TRUE(drives.start());
+  for (const auto field : { &DriveCommand::max_joint_torque, &DriveCommand::stiffness, &DriveCommand::damping })
+  {
+    DriveCommand command;
+    command.*field = -1.0;
+    EXPECT_FALSE(drives.write({ command }));
+  }
+  EXPECT_TRUE(drives.write({ DriveCommand{ -1.0, -1.0, -1.0, 0.0, 0.0, 0.0 } }));
+  EXPECT_TRUE(drives.write({ DriveCommand{} }));
+}
+
 /// An action code the HAL does not walk, such as an undeclared vendor action, is ignored.
 TEST(Cia402HalFailures, AnUnsupportedActionIsIgnored)
 {

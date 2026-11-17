@@ -117,14 +117,14 @@ bool MockHal::write(const std::vector<DriveCommand>& commands)
                  reported_.size());
     return false;
   }
-  bool finite = true;
+  bool valid = true;
   for (std::size_t index = 0; index < commands.size(); ++index)
   {
-    if (has_infinite_setpoint(commands[index]))
+    if (has_invalid_setpoint(commands[index]))
     {
-      RCLCPP_ERROR(mock_logger(), "write(): infinite setpoint for joint '%s', number %zu. That field keeps its value.",
+      RCLCPP_ERROR(mock_logger(), "write(): invalid setpoint for joint '%s', number %zu. That field keeps its value.",
                    names_[index].c_str(), index);
-      finite = false;
+      valid = false;
     }
     DriveState& state = reported_[index];
     echo(commands[index].position, state.position);
@@ -132,7 +132,7 @@ bool MockHal::write(const std::vector<DriveCommand>& commands)
     echo(commands[index].effort, state.effort);
     state.status_word = STREAMING_STATUS_WORD;
   }
-  return finite;
+  return valid;
 }
 
 bool MockHal::disable()

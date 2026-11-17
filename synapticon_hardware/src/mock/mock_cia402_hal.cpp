@@ -287,20 +287,16 @@ void MockCia402Hal::write_controlword(std::size_t joint, uint16_t controlword)
 
 void MockCia402Hal::write_setpoints(std::size_t joint, const DriveCommand& command)
 {
-  // A value that is not finite keeps the one sent last.
+  // A value that is not sendable keeps the one sent last.
   auto& out = commands_[joint];
-  const auto take = [](double& field, double value) {
-    if (std::isfinite(value))
+  for (const auto field : { &DriveCommand::position, &DriveCommand::velocity, &DriveCommand::effort,
+                            &DriveCommand::stiffness, &DriveCommand::damping, &DriveCommand::max_joint_torque })
+  {
+    if (is_sendable_setpoint(field, command.*field))
     {
-      field = value;
+      out.*field = command.*field;
     }
-  };
-  take(out.position, command.position);
-  take(out.velocity, command.velocity);
-  take(out.effort, command.effort);
-  take(out.stiffness, command.stiffness);
-  take(out.damping, command.damping);
-  take(out.max_joint_torque, command.max_joint_torque);
+  }
 }
 
 void MockCia402Hal::write_hold(std::size_t joint, double position)

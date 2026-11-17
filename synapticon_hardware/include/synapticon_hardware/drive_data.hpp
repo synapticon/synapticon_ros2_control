@@ -19,28 +19,50 @@ namespace synapticon_hardware
 /// @brief Setpoints for one joint, for one cycle.
 ///
 /// NaN in a setpoint field means "keep the value sent last" for that field. Before the first finite value that is
-/// what the HAL starts with, for example the hold position that enable() sends. An infinite value is an error: the
-/// field keeps its last value, the other values still go out, and write() returns false.
+/// what the HAL starts with, for example the hold position that enable() sends. An invalid value is an error: the
+/// field keeps its last value, the other values still go out, and write() returns false. Invalid are an infinite
+/// value in any field and a negative value in stiffness, damping and max_joint_torque. These three are never
+/// clamped, since a torque ceiling of 0 would drop a joint that holds against a load.
 struct DriveCommand
 {
   double position{ 0.0 };          ///< [rad] position setpoint.
   double velocity{ 0.0 };          ///< [rad/s] velocity setpoint.
   double effort{ 0.0 };            ///< [Nm] extra torque on top of the drive's own control, object 0x2053.
-  double stiffness{ 0.0 };         ///< [Nm/rad] spring constant of the impedance control.
-  double damping{ 0.0 };           ///< [Nm s/rad] damping constant of the impedance control.
+  double stiffness{ 0.0 };         ///< [Nm/rad] spring constant of the impedance control, never negative.
+  double damping{ 0.0 };           ///< [Nm s/rad] damping constant of the impedance control, never negative.
   double max_joint_torque{ 0.0 };  ///< [Nm] torque limit, never negative.
   /// Request for this joint's CiA 402 state machine, see DriveAction. Only this joint's controlword changes.
   /// A new request takes the place of one the joint has not finished yet.
   DriveAction drive_action{ DriveAction::NONE };
 };
 
-/// @brief True when a setpoint of `command` is infinite. NaN does not count.
-inline bool has_infinite_setpoint(const DriveCommand& command)
+/// @brief True for the setpoint fields that take no negative values: stiffness, damping and max_joint_torque.
+constexpr bool is_non_negative_setpoint(double DriveCommand::*field)
 {
-  for (const double value : { command.position, command.velocity, command.effort, command.stiffness, command.damping,
-                              command.max_joint_torque })
+  return field == &DriveCommand::stiffness || field == &DriveCommand::damping ||
+         field == &DriveCommand::max_joint_torque;
+}
+
+/// @brief True when `value` is invalid in the setpoint `field`: infinite, or negative in a field that takes no
+/// negative values. NaN does not count.
+inline bool is_invalid_setpoint(double DriveCommand::*field, double value)
+{
+  return std::isinf(value) || (is_non_negative_setpoint(field) && value < 0.0);
+}
+
+/// @brief True when `value` goes out in the setpoint `field`: neither NaN nor invalid.
+inline bool is_sendable_setpoint(double DriveCommand::*field, double value)
+{
+  return !std::isnan(value) && !is_invalid_setpoint(field, value);
+}
+
+/// @brief True when a setpoint of `command` is invalid, see DriveCommand. NaN does not count.
+inline bool has_invalid_setpoint(const DriveCommand& command)
+{
+  for (const auto field : { &DriveCommand::position, &DriveCommand::velocity, &DriveCommand::effort,
+                            &DriveCommand::stiffness, &DriveCommand::damping, &DriveCommand::max_joint_torque })
   {
-    if (std::isinf(value))
+    if (is_invalid_setpoint(field, command.*field))
     {
       return true;
     }

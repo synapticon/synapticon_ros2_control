@@ -94,8 +94,8 @@ public:
   virtual bool read(std::vector<DriveState>& states) = 0;
 
   /// Send one command per joint, in joint order. Runs in the control loop, under the same rules as read(). A NaN
-  /// setpoint keeps the value sent last, an infinite one is an error (see DriveCommand). False when the commands did
-  /// not go out, or when a setpoint was infinite.
+  /// setpoint keeps the value sent last, an invalid one is an error (see DriveCommand). False when the commands did
+  /// not go out, or when a setpoint was invalid.
   virtual bool write(const std::vector<DriveCommand>& commands) = 0;
 
   /// How many joints the HAL serves, as setup() found them.

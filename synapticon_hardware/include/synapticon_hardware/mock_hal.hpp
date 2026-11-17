@@ -25,7 +25,8 @@ namespace synapticon_hardware
 /// read() hands them back. set_states() replaces what read() returns, for states a loopback cannot produce.
 ///
 /// It follows the call rules of SynapticonHalI: an up-call out of order is logged and refused (false), with no
-/// effect. In write(), a NaN field keeps the stored value. An infinite field keeps it too, and write() returns false.
+/// effect. In write(), a NaN field keeps the stored value. An invalid field (see DriveCommand) keeps it too, and
+/// write() returns false.
 class MockHal : public SynapticonHalI
 {
 public:

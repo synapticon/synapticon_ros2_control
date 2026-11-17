@@ -20,6 +20,7 @@
 namespace
 {
 namespace ec = synapticon_hardware::ethercat;
+using synapticon_hardware::DriveCommand;
 using synapticon_hardware::DriveState;
 using synapticon_hardware::HalConfig;
 
@@ -59,6 +60,18 @@ public:
   {
     streaming_ = true;
     return wait_for_streaming(joints_, CONTROL_FREQUENCY, TIMEOUT_S);
+  }
+
+  /// Put the setpoints of `command` into the outputs of `joint`.
+  void put(std::size_t joint, const DriveCommand& command)
+  {
+    write_setpoints(joint, command);
+  }
+
+  /// The output of `joint` in `slot`.
+  double output(std::size_t joint, std::size_t slot) const
+  {
+    return outputs_[joint][slot];
   }
 
   bool setup(const HalConfig&) override
@@ -182,6 +195,30 @@ TEST(WaitForStreaming, StillRefusesADriveWithoutStatusword)
   ScriptedBus bus({ joint("a", ec::mode::CSP) });
   bus.report(0, 0, ec::mode::CSP);
   EXPECT_FALSE(bus.wait());
+}
+
+/// A negative torque ceiling, stiffness or damping keeps the value sent last, so it cannot wrap in an unsigned field.
+/// Negative position, velocity and torque offset go out.
+TEST(WriteSetpoints, ANegativeCeilingOrGainKeepsTheValueSentLast)
+{
+  ScriptedBus bus({ joint("a", ec::mode::IMPEDANCE) });
+  DriveCommand command;
+  command.max_joint_torque = 2.0;
+  command.stiffness = 3.0;
+  command.damping = 4.0;
+  bus.put(0, command);
+  const double ceiling = bus.output(0, ec::slot::TORQUE_LIMIT);
+  const double stiffness = bus.output(0, ec::slot::STIFFNESS);
+  const double damping = bus.output(0, ec::slot::DAMPING);
+
+  command = { -1.0, -1.0, -1.0, -1.0, -1.0, -1.0 };
+  bus.put(0, command);
+  EXPECT_EQ(bus.output(0, ec::slot::TORQUE_LIMIT), ceiling);
+  EXPECT_EQ(bus.output(0, ec::slot::STIFFNESS), stiffness);
+  EXPECT_EQ(bus.output(0, ec::slot::DAMPING), damping);
+  EXPECT_LT(bus.output(0, ec::slot::TARGET_POSITION), 0.0);
+  EXPECT_LT(bus.output(0, ec::slot::TARGET_VELOCITY), 0.0);
+  EXPECT_LT(bus.output(0, ec::slot::TORQUE_OFFSET), 0.0);
 }
 
 }  // namespace

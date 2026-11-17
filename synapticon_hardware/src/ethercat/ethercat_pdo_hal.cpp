@@ -215,7 +215,7 @@ void EthercatPdoHal::write_setpoints(std::size_t joint, const DriveCommand& comm
   {
     const auto& channel = COMMAND_CHANNELS[c];
     const double value_si = command.*(channel.field);
-    if (std::isfinite(value_si))  // otherwise the slot keeps the value sent last
+    if (is_sendable_setpoint(channel.field, value_si))  // otherwise the slot keeps the value sent last
     {
       outputs_[joint][layout::COMMANDS + c] = to_raw(value_si, si_factor(factors, channel.extra));
     }

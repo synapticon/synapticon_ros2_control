@@ -132,7 +132,7 @@ bool Cia402Hal::enable()
 }
 
 /// Per joint and cycle: take a changed drive_action, pass the setpoints on if the joint gets them, write the
-/// controlword and keep a quick stop hold in place. An infinite setpoint is logged once per run of such cycles.
+/// controlword and keep a quick stop hold in place. An invalid setpoint is logged once per run of such cycles.
 bool Cia402Hal::write(const std::vector<DriveCommand>& commands)
 {
   if (!streaming_)
@@ -147,17 +147,19 @@ bool Cia402Hal::write(const std::vector<DriveCommand>& commands)
     return false;
   }
 
-  bool finite = true;
+  bool valid = true;
   for (std::size_t j = 0; j < drives_.size(); ++j)
   {
-    if (has_infinite_setpoint(commands[j]))
+    if (has_invalid_setpoint(commands[j]))
     {
-      if (finite && !infinite_reported_)
+      if (valid && !invalid_reported_)
       {
-        RCLCPP_ERROR(log(), "write(): joint '%s' got an infinite setpoint. Each such field keeps its last value.",
+        RCLCPP_ERROR(log(),
+                     "write(): joint '%s' got an infinite setpoint, or a negative stiffness, damping or "
+                     "max_joint_torque. Each such field keeps its last value.",
                      drives_[j].settings.name.c_str());
       }
-      finite = false;
+      valid = false;
     }
     DriveAction accepted = DriveAction::NONE;
     const DriveAction requested = commands[j].drive_action;
@@ -178,8 +180,8 @@ bool Cia402Hal::write(const std::vector<DriveCommand>& commands)
     steer(j);
     freeze_in_quick_stop(j, state);
   }
-  infinite_reported_ = !finite;
-  return exchange_write() && finite;
+  invalid_reported_ = !valid;
+  return exchange_write() && valid;
 }
 
 /// Takes every joint down, also one that a drive action powered, because enabled_ only follows enable() and
