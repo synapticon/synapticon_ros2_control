@@ -47,7 +47,6 @@
 #include <limits>
 #include <memory>
 #include <optional>
-#include <sstream>
 #include <stdexcept>
 #include <string>
 #include <thread>
@@ -124,11 +123,28 @@ struct Sdo
   bool raw{ false };  ///< `raw: true`, for a raw value of an object whose unit depends on the drive
 };
 
-/// `sdo` as one line of its list in a slave_config.
-inline std::string sdo_line(const Sdo& sdo)
+/// `sdo` as an entry of its list in a slave_config.
+inline YAML::Node sdo_entry(const Sdo& sdo)
 {
-  return "  - { index: " + sdo.index + ", sub_index: " + std::to_string(sdo.sub_index) + ", type: " + sdo.type +
-         (sdo.si ? ", si_value: " : ", value: ") + sdo.value + (sdo.raw ? ", raw: true" : "") + " }\n";
+  YAML::Node entry(YAML::NodeType::Map);
+  entry.SetStyle(YAML::EmitterStyle::Flow);
+  entry["index"] = sdo.index;
+  entry["sub_index"] = sdo.sub_index;
+  entry["type"] = sdo.type;
+  entry[sdo.si ? "si_value" : "value"] = sdo.value;
+  if (sdo.raw)
+  {
+    entry["raw"] = true;
+  }
+  return entry;
+}
+
+/// True when the slave_config entry `entry` writes the object of `sdo`.
+inline bool same_object(const YAML::Node& entry, const Sdo& sdo)
+{
+  return entry["index"] && entry["sub_index"] &&
+         entry["index"].as<unsigned long>() == std::stoul(sdo.index, nullptr, 16) &&
+         entry["sub_index"].as<int>() == sdo.sub_index;
 }
 
 inline std::string base_config_path()
@@ -137,57 +153,36 @@ inline std::string base_config_path()
                                                    "/config/example_somanet_circulo_safe_motion.yaml");
 }
 
-/// The slave_config `base` with `overrides` replacing any entry of the same index, written to a temporary file. An
-/// SI entry goes into the `sdo_si:` list, which is added when `base` has none. Returns its path.
+/// The slave_config `base` with `overrides` replacing any entry of the same object, written to a temporary file.
+/// The overrides go first into the `sdo:` list, or into the `sdo_si:` list for an SI entry. Returns its path.
 inline std::string write_config(const std::vector<Sdo>& overrides, const std::string& name, const std::string& base)
 {
-  std::ifstream in(base);
-  std::stringstream out;
-  std::string line;
-  bool si_list = false;
-  const auto write_entries = [&out, &overrides](bool si) {
+  YAML::Node config = YAML::LoadFile(base);
+  for (const bool si : { false, true })
+  {
+    const char* key = si ? "sdo_si" : "sdo";
+    YAML::Node entries(YAML::NodeType::Sequence);
     for (const auto& sdo : overrides)
     {
       if (sdo.si == si)
       {
-        out << sdo_line(sdo);
+        entries.push_back(sdo_entry(sdo));
       }
     }
-  };
-  while (std::getline(in, line))
-  {
-    bool replaced = false;
-    for (const auto& sdo : overrides)
+    for (const auto& entry : config[key])
     {
-      if (line.find("index: " + sdo.index + ",") != std::string::npos &&
-          line.find("sub_index: " + std::to_string(sdo.sub_index) + ",") != std::string::npos &&
-          line.find("_interface") == std::string::npos)  // a PDO channel, not an SDO entry
+      const auto replaces_entry = [&entry](const Sdo& sdo) { return same_object(entry, sdo); };
+      if (std::none_of(overrides.begin(), overrides.end(), replaces_entry))
       {
-        replaced = true;
+        entries.push_back(entry);
       }
     }
-    if (replaced)
-    {
-      continue;
-    }
-    out << line << "\n";
-    if (line.rfind("sdo:", 0) == 0)
-    {
-      write_entries(false);
-    }
-    else if (line.rfind("sdo_si:", 0) == 0)
-    {
-      write_entries(true);
-      si_list = true;
-    }
+    config[key] = entries;
   }
-  if (!si_list)
-  {
-    out << "sdo_si:\n";
-    write_entries(true);
-  }
+  YAML::Emitter out;
+  out << config;
   const std::string path = ::testing::TempDir() + "hil_" + name + ".yaml";
-  std::ofstream(path) << out.str();
+  std::ofstream(path) << out.c_str() << "\n";
   return path;
 }
 
