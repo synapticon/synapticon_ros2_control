@@ -36,7 +36,8 @@ struct SoemConfig : synapticon_hardware::ethercat::BusConfig
 {
   /// The network interface the drives are wired to, for example `eth0`.
   std::string network_interface;
-  /// Max time [s] start() waits for every drive to reach SAFE-OP and then OP.
+  /// Max time [s] of each wait for every drive to reach a state: PRE-OP in connect() and stop(), SAFE-OP and then OP
+  /// in start().
   double state_timeout_s{ 5.0 };
   /// Cycles in a row without a complete exchange (no frame back, or a short working counter) after which read()
   /// fails, until a complete exchange comes back. Fewer are bridged with the last data received. Only a cycle whose
@@ -113,8 +114,8 @@ private:
   void exchange_for(std::chrono::milliseconds duration);
   /// End the exchange without switching the drives off first, and bring them back to PRE-OP.
   void leave_op();
-  /// Bring the drives back to PRE-OP and switch their SYNC0 off.
-  void back_to_pre_op();
+  /// Bring the drives back to PRE-OP and switch their SYNC0 off. False, logged, when a drive did not reach PRE-OP.
+  bool back_to_pre_op();
 
   // Fixed by setup().
   SoemConfig config_{};

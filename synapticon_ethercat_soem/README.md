@@ -20,7 +20,8 @@ ros2 run synapticon_hardware drive_check read --hal ethercat_soem --network-inte
 
 Optional:
 
-- `state_timeout_s` [5.0] bounds the wait for the drives to reach SAFE-OP and OP.
+- `state_timeout_s` [5.0] bounds each wait for the drives to reach a state: PRE-OP in `connect()` and `stop()`,
+  SAFE-OP and OP in `start()`.
 - `max_bad_cycles` [10], a whole number of at least 1: after this many cycles in a row without complete process data
   (no frame back, or a short working counter), `read()` fails until a complete cycle comes back.
   Fewer bad cycles are bridged with the last data received, and the link health shows them.

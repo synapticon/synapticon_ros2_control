@@ -987,18 +987,25 @@ void EthercatSoemHal::leave_op()
   streaming_ = false;
   bus_->bad_cycles.stop();
   enabled_ = false;  // a drive leaving OP de-energises
-  back_to_pre_op();
-  RCLCPP_INFO(logger(), "Drives back in PRE-OP.");
+  if (back_to_pre_op())
+  {
+    RCLCPP_INFO(logger(), "Drives back in PRE-OP.");
+  }
+  else
+  {
+    RCLCPP_WARN(logger(), "Left OP, but not every drive is back in PRE-OP.");
+  }
 }
 
-void EthercatSoemHal::back_to_pre_op()
+bool EthercatSoemHal::back_to_pre_op()
 {
   bus_->release_clock_sync();
-  reach_state(EC_STATE_PRE_OP, false);
+  const bool reached = reach_state(EC_STATE_PRE_OP, false);
   for (const uint16_t slave : bus_->slave_of_joint)
   {
     ecx_dcsync0(&bus_->context, slave, FALSE, 0, 0);
   }
+  return reached;
 }
 
 }  // namespace synapticon_ethercat_soem
