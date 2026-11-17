@@ -61,6 +61,7 @@ struct SiSdo
   std::string type;     ///< as in the slave_config, an integer type
   double value{ 0.0 };  ///< in the SI unit of `quantity`, the slave_config key `si_value`
   SiQuantity quantity{ SiQuantity::VELOCITY };
+  bool verify{ true };  ///< read back after the write and compared, the slave_config key `verify`
 };
 
 /// The `units:` section of a slave_config: the drive's units, for a drive that cannot report them. Each is used only
@@ -85,7 +86,8 @@ struct SlaveConfigUnits
 /// @brief Read and check the `sdo:`, `sdo_si:` and `units:` sections of the slave_config at `path`.
 ///
 /// An `sdo:` entry must be unit-free, or carry `raw: true`. An `sdo_si:` entry must give `si_value` for an
-/// integer-typed object whose unit the stack knows. Neither may set the units themselves.
+/// integer-typed object whose unit the stack knows. Neither may set the units themselves. Either may give `verify`,
+/// true or false, whether the value is read back after the write (true when it is not given).
 /// @throws std::invalid_argument naming the file and the entry when a rule is broken or a value is malformed.
 SlaveConfigUnits read_slave_config_units(const std::string& path);
 

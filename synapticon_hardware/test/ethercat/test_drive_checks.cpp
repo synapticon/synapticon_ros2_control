@@ -883,6 +883,20 @@ TEST_F(DriveChecks, StopsTheBringUpWhenTheDriveKeepsAnotherSdoSiValue)
   EXPECT_EQ(drives_.download_count(coe::QUICK_STOP_DECELERATION), 2);
 }
 
+/// An sdo_si entry with verify false is written once and not read back, whatever the drive then holds.
+TEST_F(DriveChecks, DoesNotReadBackAnSdoSiEntryWithVerifyFalse)
+{
+  drives_.healthy_drive();
+  drives_.ignore_writes(coe::QUICK_STOP_DECELERATION, 2);
+  units_.resize(1);
+  SiSdo entry{ coe::QUICK_STOP_DECELERATION, "uint32", 1000.0, SiQuantity::ACCELERATION };
+  entry.verify = false;
+  units_[0].si_sdo = { entry };
+  ASSERT_TRUE(check({ joint() }, false));
+  EXPECT_EQ(drives_.download_count(coe::QUICK_STOP_DECELERATION), 1);
+  EXPECT_EQ(drives_.written_value(coe::QUICK_STOP_DECELERATION), 9549);
+}
+
 /// A joint with unknown units is never powered, so its sdo_si entries are not written.
 TEST_F(DriveChecks, LeavesOutTheSdoSiEntriesOfAJointWithUnknownUnits)
 {

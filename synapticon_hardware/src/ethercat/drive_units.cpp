@@ -156,11 +156,23 @@ CoeAddress entry_object(const YAML::Node& entry, const std::string& where)
   return { entry["index"].as<uint16_t>(), static_cast<uint8_t>(sub_index) };
 }
 
+/// The key `verify` of an entry, true when it is not given. Throws, naming `where`, when it is not true or false.
+bool verify_key(const YAML::Node& entry, const std::string& where)
+{
+  bool verify = true;
+  if (entry["verify"] && !YAML::convert<bool>::decode(entry["verify"], verify))
+  {
+    throw std::invalid_argument(where + " has a verify that is not true or false");
+  }
+  return verify;
+}
+
 /// Check one `sdo:` entry against the rules of read_slave_config_units().
 void check_raw_entry(const YAML::Node& entry, const std::string& file)
 {
   const CoeAddress object = entry_object(entry, file + ": sdo");
   const std::string where = file + ": sdo entry " + object_name(object);
+  verify_key(entry, where);
   if (entry["si_value"])
   {
     throw std::invalid_argument(where + " gives si_value, which belongs in the sdo_si section");
@@ -209,7 +221,7 @@ SiSdo si_entry(const YAML::Node& entry, const std::string& file)
   {
     throw std::invalid_argument(where + " needs an integer type and a finite si_value");
   }
-  return { object, type, value, *quantity };
+  return { object, type, value, *quantity, verify_key(entry, where) };
 }
 
 /// The `units:` section, checked.

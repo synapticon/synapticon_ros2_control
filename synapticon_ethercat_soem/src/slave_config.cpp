@@ -202,6 +202,10 @@ std::optional<SlaveConfig> load_slave_config(const std::string& path, std::strin
         throw std::runtime_error(std::string("SDO ") + object + " has the value '" + sdo.value + "', which is not a " +
                                  type);
       }
+      if (s["verify"] && !YAML::convert<bool>::decode(s["verify"], sdo.verify))
+      {
+        throw std::runtime_error(std::string("SDO ") + object + " has a verify that is not true or false");
+      }
       config.sdo.push_back(sdo);
     }
     config.rpdo = read_pdos(root["rpdo"]);

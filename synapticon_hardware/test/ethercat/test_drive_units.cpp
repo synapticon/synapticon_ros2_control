@@ -89,6 +89,22 @@ TEST(ReadSlaveConfigUnits, ReadsSiEntriesAndOverrides)
   EXPECT_TRUE(units.overrides.feed_constant_disabled);
 }
 
+/// An entry is read back after the write unless it says verify: false.
+TEST(ReadSlaveConfigUnits, ReadsTheVerifyKey)
+{
+  const auto units = read_slave_config_units(
+      slave_config("sdo:\n"
+                   "  - { index: 0x1010, sub_index: 1, type: uint32, value: 0x65766173, raw: true, verify: false }\n"
+                   "sdo_si:\n"
+                   "  - { index: 0x6085, sub_index: 0, type: uint32, si_value: 200.0 }\n"
+                   "  - { index: 0x6080, sub_index: 0, type: uint32, si_value: 10.0, verify: false }\n"
+                   "  - { index: 0x6065, sub_index: 0, type: uint32, si_value: 0.1, verify: true }\n"));
+  ASSERT_EQ(units.si_sdo.size(), 3u);
+  EXPECT_TRUE(units.si_sdo[0].verify);
+  EXPECT_FALSE(units.si_sdo[1].verify);
+  EXPECT_TRUE(units.si_sdo[2].verify);
+}
+
 TEST(ReadSlaveConfigUnits, AcceptsAConfigWithoutUnitSections)
 {
   const auto units = read_slave_config_units(slave_config(""));
@@ -126,6 +142,10 @@ INSTANTIATE_TEST_SUITE_P(
                                               "si_value: 6 }\n" },
         RefusedCase{ "SdoSiWithValue", "sdo_si:\n  - { index: 0x6085, sub_index: 0, type: uint32, value: 5 }\n" },
         RefusedCase{ "SdoSiNotInteger", "sdo_si:\n  - { index: 0x6085, sub_index: 0, type: real32, si_value: 1.0 }\n" },
+        RefusedCase{ "SdoVerifyNoBoolean", "sdo:\n  - { index: 0x605a, sub_index: 0, type: int16, value: 6, "
+                                           "verify: maybe }\n" },
+        RefusedCase{ "SdoSiVerifyNoBoolean", "sdo_si:\n  - { index: 0x6085, sub_index: 0, type: uint32, "
+                                             "si_value: 1.0, verify: 0 }\n" },
         RefusedCase{ "UnknownVelocityUnit", "units:\n  velocity_unit: 0x00B44701\n" },
         RefusedCase{ "ZeroCounts", "units:\n  counts_per_revolution: 0\n" },
         RefusedCase{ "NegativeRatedTorque", "units:\n  rated_torque: -1.0\n" },

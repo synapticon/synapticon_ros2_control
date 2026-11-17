@@ -865,7 +865,7 @@ bool EthercatSoemHal::write_startup_sdos()
 bool EthercatSoemHal::write_startup_sdo(std::size_t joint, const StartupSdo& sdo)
 {
   // The value was checked at load. Two attempts, since right after a bus release the drive's mailbox may drop an SDO,
-  // or acknowledge it without applying it.
+  // or acknowledge it without applying it. An entry with verify false is only written.
   const uint16_t slave = bus_->slave_of_joint[joint];
   const std::vector<uint8_t> written = sdo_bytes(sdo);
   std::vector<uint8_t> read;
@@ -874,6 +874,10 @@ bool EthercatSoemHal::write_startup_sdo(std::size_t joint, const StartupSdo& sdo
   for (int attempt = 0; attempt < 2; ++attempt)
   {
     taken = bus_->download(slave, sdo.index, sdo.sub_index, written);
+    if (taken && !sdo.verify)
+    {
+      return true;
+    }
     answered = taken && bus_->upload(slave, sdo.index, sdo.sub_index, read);
     if (answered && read == written)
     {

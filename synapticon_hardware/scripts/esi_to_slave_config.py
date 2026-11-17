@@ -163,6 +163,8 @@ The robot description picks the mode of each joint: mode_of_operation 8 is CSP, 
 """,
     "startup": """\
 Startup SDOs are written in PRE-OP at every bring-up. Check each value for your drive and your machine.
+Each value is read back after the write and must match, unless its entry has 'verify: false'. That is for
+an object that reads back differently by design, such as a store or restore command (0x1010, 0x1011).
 
 0x605A, the quick stop option code, decides what a quick_stop request does:
   6  ramps down and stays powered in Quick Stop Active, holding the joint

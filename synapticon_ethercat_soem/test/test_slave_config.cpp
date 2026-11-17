@@ -130,6 +130,26 @@ rpdo:
   EXPECT_EQ(channel(config->rpdo, 0x60FF).default_value, 5.0);
 }
 
+/// A startup SDO is read back unless its entry says verify: false.
+TEST(SlaveConfig, ReadsTheVerifyKeyOfAStartupSdo)
+{
+  const auto path = write_file("verify.yaml", R"(
+vendor_id: 1
+product_id: 2
+sdo:
+  - { index: 0x605a, sub_index: 0, type: int16, value: 6 }
+  - { index: 0x1010, sub_index: 1, type: uint32, value: 0x65766173, verify: false }
+  - { index: 0x2060, sub_index: 3, type: real32, value: 1.0, verify: true }
+)");
+  std::string error;
+  const auto config = load_slave_config(path, error);
+  ASSERT_TRUE(config) << error;
+  ASSERT_EQ(config->sdo.size(), 3u);
+  EXPECT_TRUE(config->sdo[0].verify);
+  EXPECT_FALSE(config->sdo[1].verify);
+  EXPECT_TRUE(config->sdo[2].verify);
+}
+
 struct BrokenCase
 {
   const char* name;
@@ -159,6 +179,9 @@ INSTANTIATE_TEST_SUITE_P(
                       BrokenCase{ "SdoValueNoNumber", "vendor_id: 1\nproduct_id: 2\nsdo:\n  - { index: "
                                                       "0x6085, sub_index: 0, type: uint32, "
                                                       "value: fast }\n" },
+                      BrokenCase{ "SdoVerifyNoBoolean", "vendor_id: 1\nproduct_id: 2\nsdo:\n  - { index: "
+                                                        "0x1010, sub_index: 1, type: uint32, "
+                                                        "value: 1, verify: 0 }\n" },
                       BrokenCase{ "NotYaml", "vendor_id: [1\n" },
                       BrokenCase{ "SdoSubIndexAbove255", "vendor_id: 1\nproduct_id: 2\nsdo:\n  - { index: "
                                                          "0x605a, sub_index: 256, type: int16, value: 6 }\n" },

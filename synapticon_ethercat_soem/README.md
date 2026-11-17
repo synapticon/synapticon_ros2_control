@@ -28,6 +28,8 @@ Optional:
   Only a cycle whose frame was sent counts.
 
 Bring-up reads every startup SDO of the slave_config (its `sdo:` list) back after writing it.
+An entry with `verify: false` is only written, for an object that reads back differently by design, such as a store
+or restore command.
 When a drive refuses one or keeps another value, the HAL writes it once more.
 If that fails as well, bring-up stops with an error that names the joint, the object, and the written and read value.
 

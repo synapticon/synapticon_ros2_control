@@ -10,6 +10,8 @@ product_id: 0x00000302
 assign_activate: 0x0300  # distributed clock activation from the ESI file
 
 # Startup SDOs are written in PRE-OP at every bring-up. Check each value for your drive and your machine.
+# Each value is read back after the write and must match, unless its entry has 'verify: false'. That is for
+# an object that reads back differently by design, such as a store or restore command (0x1010, 0x1011).
 #
 # 0x605A, the quick stop option code, decides what a quick_stop request does:
 #   6  ramps down and stays powered in Quick Stop Active, holding the joint

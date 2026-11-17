@@ -67,7 +67,8 @@ struct StartupSdo
   uint16_t index{ 0 };
   uint8_t sub_index{ 0 };
   ValueType type;
-  std::string value;  ///< as written in the YAML, converted on download
+  std::string value;    ///< as written in the YAML, converted on download
+  bool verify{ true };  ///< read back after the download and compared, the key `verify`
 };
 
 /// A drive's slave_config.

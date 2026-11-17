@@ -116,8 +116,8 @@ std::optional<uint32_t> read_u32(const SdoReader& sdo, const rclcpp::Logger& log
 ///
 /// `units` holds one SlaveConfigUnits per joint. The drive's units are read and must be understood completely; the
 /// `units:` section of a slave_config only stands in for what the drive cannot report. Then each `sdo_si:` entry is
-/// converted with them, written through `writer` and read back through `sdo`. A value that reads back different is
-/// written once more. `readback` gets one DriveReadback per joint. Everything learned
+/// converted with them, written through `writer` and read back through `sdo`, unless it has `verify: false`. A value
+/// that reads back different is written once more. `readback` gets one DriveReadback per joint. Everything learned
 /// is logged to `logger`. A problem that the user must fix gets a framed block in the log.
 ///
 /// Bring-up stops (false) in these cases:

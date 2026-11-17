@@ -669,9 +669,9 @@ bool firmware_recent_enough(const SdoReader& sdo, const rclcpp::Logger& logger, 
   return true;
 }
 
-/// Write one `sdo_si:` entry of `joint` as `raw` and read it back. A drive may acknowledge a write without applying
-/// it, so a value that reads back different is written once more. False, logged, when the drive refuses the write,
-/// the value cannot be read back, or the drive still keeps another value.
+/// Write one `sdo_si:` entry of `joint` as `raw` and read it back, unless it has verify false. A drive may acknowledge
+/// a write without applying it, so a value that reads back different is written once more. False, logged, when the
+/// drive refuses the write, the value cannot be read back, or the drive still keeps another value.
 bool write_si_entry(const SdoReader& reader, const SdoWriter& writer, const rclcpp::Logger& logger,
                     const JointConfig& joint, const SiSdo& entry, int64_t raw)
 {
@@ -687,6 +687,10 @@ bool write_si_entry(const SdoReader& reader, const SdoWriter& writer, const rclc
       RCLCPP_ERROR(logger, "Joint '%s': the drive refused 0x%04X:%u = %lld (sdo_si), abort code 0x%08X.", name,
                    object.index, object.subindex, value, abort_code);
       return false;
+    }
+    if (!entry.verify)
+    {
+      return true;
     }
     const auto read = upload(reader, logger, joint.position, object, bytes.size(), &abort_code);
     if (!read)
@@ -715,9 +719,9 @@ bool write_si_entry(const SdoReader& reader, const SdoWriter& writer, const rclc
   return false;
 }
 
-/// Write the `sdo_si:` entries of every joint, converted with its unit factors, read each back and log it with both
-/// values. A joint with unknown units is never powered, so its entries are left out with a warning. False when an
-/// entry cannot be converted, or write_si_entry() fails.
+/// Write the `sdo_si:` entries of every joint, converted with its unit factors, read each back (unless it has verify
+/// false) and log it with both values. A joint with unknown units is never powered, so its entries are left out with
+/// a warning. False when an entry cannot be converted, or write_si_entry() fails.
 bool write_si_entries(const SdoReader& reader, const SdoWriter& writer, const rclcpp::Logger& logger,
                       const std::vector<JointConfig>& joints, const std::vector<SlaveConfigUnits>& units,
                       const std::vector<DriveReadback>& readback)

@@ -101,8 +101,8 @@ private:
   bool find_drives();
   /// Write each drive's startup SDOs. False, logged, at the first one that fails.
   bool write_startup_sdos();
-  /// Write one startup SDO of `joint` and read it back, with one more attempt when it is refused or reads back
-  /// another value. False, logged, when the second attempt fails as well.
+  /// Write one startup SDO of `joint` and read it back unless it has verify false, with one more attempt when it is
+  /// refused or reads back another value. False, logged, when the second attempt fails as well.
   bool write_startup_sdo(std::size_t joint, const StartupSdo& sdo);
   /// Request `state` of every drive and wait for it, exchanging process data while waiting when `cycling`. The
   /// request is repeated until it takes.
