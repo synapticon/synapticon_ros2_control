@@ -49,9 +49,10 @@ Cia402Hal::Cia402Hal(std::string logger_name) : logger_name_(std::move(logger_na
 /// 2. Cancel every action other than enable. A stop left running would take the drives down again right after.
 /// 3. Let setpoints through again for the joints that get power.
 /// 4. Step every drive with energize up to Operation Enabled, one state per cycle. Nobody else writes setpoints
-///    while this blocks, so each drive is told to stay where it is. Monitored drives are kept without power.
-///    Skipped when the HAL is enabled and every drive with energize is in Operation Enabled, so a repeated
-///    enable() leaves the setpoints alone.
+///    while this blocks, so each drive below Operation Enabled is told to stay where it is. A drive in Operation
+///    Enabled keeps the target it has, and its controlword asks for Enable Operation again, which replaces a stop
+///    that a drive action wrote. With every such drive in Operation Enabled this takes one cycle. Monitored drives
+///    are kept without power.
 /// 5. On a failure or timeout, take every drive down again, also those that already got power.
 bool Cia402Hal::enable()
 {
@@ -78,14 +79,13 @@ bool Cia402Hal::enable()
       refresh_feed(j, DriveAction::ENABLE, current_state(j));
     }
   }
-  if (is_enabled())
-  {
-    return true;
-  }
 
   const Outcome result = walk_all("enable()", [this](std::size_t j) {
     const cia402::DeviceState state = current_state(j);
-    write_hold(j, transport_position(j));
+    if (state != cia402::DeviceState::OPERATION_ENABLED)
+    {
+      write_hold(j, transport_position(j));
+    }
     if (!drives_[j].settings.energize)
     {
       write_step(j, state, cia402::DeviceState::SWITCH_ON_DISABLED, cia402::WalkPath::RAMPED);
@@ -107,8 +107,10 @@ bool Cia402Hal::enable()
   {
     case Outcome::DONE:
       enabled_ = true;
-      RCLCPP_INFO(log(), "Power is on for %zu drive(s), which hold their position. %zu drive(s) stay unpowered.",
-                  energisable, drives_.size() - energisable);
+      RCLCPP_INFO(
+          log(),
+          "Power is on for %zu drive(s). Those that just got it hold their position, %zu drive(s) stay unpowered.",
+          energisable, drives_.size() - energisable);
       return true;
     case Outcome::TIMED_OUT:
       report_enable_timeout();

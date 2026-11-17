@@ -6,8 +6,9 @@
 /// @file
 /// @brief How Cia402Hal handles calls out of order, a failing bus, and drives that fault or never arrive.
 ///
-/// The drives here do not follow the controlword: each reports the statusword a test gives it, which is how a stuck
-/// drive looks to the HAL. The timeout tests take as long as the timeouts, about five seconds each.
+/// The drives here do not follow the controlword unless a test asks for it: each reports the statusword a test gives
+/// it, which is how a stuck drive looks to the HAL. The timeout tests take as long as the timeouts, about five seconds
+/// each.
 
 #include <algorithm>
 #include <chrono>
@@ -33,6 +34,7 @@ using Clock = std::chrono::steady_clock;
 
 constexpr uint16_t NOT_READY_TO_SWITCH_ON = 0x00;
 constexpr uint16_t SWITCH_ON_DISABLED = 0x40;
+constexpr uint16_t READY_TO_SWITCH_ON = 0x21;
 constexpr uint16_t SWITCHED_ON = 0x23;
 constexpr uint16_t OPERATION_ENABLED = 0x27;
 constexpr uint16_t ENABLE_OPERATION_BIT = 0x08;
@@ -43,7 +45,34 @@ constexpr uint16_t FAULT_RESET_BIT = 0x80;
 constexpr uint16_t UNDECODABLE = 0x01;   ///< a statusword that matches no CiA 402 state
 constexpr uint16_t COMMAND_BITS = 0x8F;  ///< the controlword bits that carry the command
 constexpr uint16_t SHUTDOWN = 0x06;
+constexpr uint16_t SWITCH_ON = 0x07;
+constexpr uint16_t ENABLE_OPERATION = 0x0F;
+constexpr uint16_t DISABLE_VOLTAGE = 0x00;
 constexpr uint16_t QUICK_STOP = 0x02;
+
+/// The statusword a drive in `statusword` reports after it took the command of `controlword`. Covers the
+/// transitions a walk asks for. A quick stop stays in Quick Stop Active.
+uint16_t respond(uint16_t statusword, uint16_t controlword)
+{
+  const bool powered = statusword == OPERATION_ENABLED || statusword == QUICK_STOP_ACTIVE;
+  switch (controlword & COMMAND_BITS)
+  {
+    case SHUTDOWN:
+      return statusword == SWITCH_ON_DISABLED || statusword == SWITCHED_ON || statusword == OPERATION_ENABLED ?
+                 READY_TO_SWITCH_ON :
+                 statusword;
+    case SWITCH_ON:
+      return statusword == READY_TO_SWITCH_ON || statusword == OPERATION_ENABLED ? SWITCHED_ON : statusword;
+    case ENABLE_OPERATION:
+      return statusword == SWITCHED_ON || powered ? OPERATION_ENABLED : statusword;
+    case QUICK_STOP:
+      return powered ? QUICK_STOP_ACTIVE : SWITCH_ON_DISABLED;
+    case DISABLE_VOLTAGE:
+      return SWITCH_ON_DISABLED;
+    default:
+      return statusword;
+  }
+}
 
 /// The walk timeout of Cia402Hal, with a margin.
 constexpr auto WALK_TIMEOUT = std::chrono::milliseconds(5200);
@@ -63,6 +92,11 @@ public:
     statuswords_.assign(joints.size(), SWITCH_ON_DISABLED);
     controlwords_.assign(joints.size(), 0);
     sent_.resize(joints.size());
+    following_.assign(joints.size(), false);
+    in_transit_.resize(joints.size());
+    arrived_.resize(joints.size());
+    positions_.assign(joints.size(), 0.0);
+    holds_.resize(joints.size());
     init_joints(std::move(joints), 1000.0);
   }
 
@@ -134,6 +168,22 @@ public:
   {
     settle_on_quick_stop_ = true;
   }
+  /// From now on, `joint` follows the controlword one cycle late: a read reports its answer to the controlword sent
+  /// in the exchange before the last one.
+  void follow_controlword(std::size_t joint)
+  {
+    following_[joint] = true;
+  }
+  /// The measured position of `joint`.
+  void place(std::size_t joint, double position)
+  {
+    positions_[joint] = position;
+  }
+  /// The hold positions written to `joint` so far, oldest first.
+  const std::vector<double>& holds(std::size_t joint) const
+  {
+    return holds_[joint];
+  }
 
   /// True when a controlword written to `joint` so far carried `command`.
   bool sent(std::size_t joint, uint16_t command) const
@@ -146,6 +196,11 @@ public:
   uint16_t controlword(std::size_t joint) const
   {
     return controlwords_[joint];
+  }
+  /// The statusword `joint` reports.
+  uint16_t reported(std::size_t joint) const
+  {
+    return statuswords_[joint];
   }
 
   /// One cycle with `action` requested on every joint.
@@ -174,11 +229,27 @@ protected:
         report(FAULT);
       }
     }
+    for (std::size_t j = 0; j < statuswords_.size(); ++j)
+    {
+      if (following_[j] && arrived_[j])
+      {
+        statuswords_[j] = respond(statuswords_[j], *arrived_[j]);
+      }
+    }
     return !reads_fail_;
   }
   bool exchange_write() override
   {
-    return !writes_fail_;
+    if (writes_fail_)
+    {
+      return false;
+    }
+    for (std::size_t j = 0; j < controlwords_.size(); ++j)
+    {
+      arrived_[j] = in_transit_[j];
+      in_transit_[j] = controlwords_[j];
+    }
+    return true;
   }
   uint16_t statusword(std::size_t joint) const override
   {
@@ -196,9 +267,9 @@ protected:
   {
     return speed_;
   }
-  double transport_position(std::size_t) const override
+  double transport_position(std::size_t joint) const override
   {
-    return 0.0;
+    return positions_[joint];
   }
   void write_controlword(std::size_t joint, uint16_t controlword) override
   {
@@ -212,8 +283,9 @@ protected:
   void write_setpoints(std::size_t, const DriveCommand&) override
   {
   }
-  void write_hold(std::size_t, double) override
+  void write_hold(std::size_t joint, double position) override
   {
+    holds_[joint].push_back(position);
   }
 
 private:
@@ -221,6 +293,11 @@ private:
   std::vector<uint16_t> controlwords_;
   std::vector<std::vector<uint16_t>> sent_;
   bool settle_on_quick_stop_{ false };
+  std::vector<bool> following_;
+  std::vector<std::optional<uint16_t>> in_transit_;  ///< sent in the last exchange
+  std::vector<std::optional<uint16_t>> arrived_;     ///< sent in the exchange before, answered by the next read
+  std::vector<double> positions_;
+  std::vector<std::vector<double>> holds_;
   int reads_{ 0 };
   int fault_after_reads_{ 0 };
   std::optional<std::size_t> faulting_joint_;
@@ -504,6 +581,50 @@ TEST(Cia402HalFailures, ARepeatedEnableWalksTheDrivesAgain)
   EXPECT_EQ(drives.active_drive_action(0), DriveAction::NONE);
   EXPECT_TRUE(drives.forwarding_setpoints(0));
   EXPECT_TRUE(drives.is_enabled());
+  EXPECT_EQ(drives.controlword(0) & COMMAND_BITS, ENABLE_OPERATION);
+}
+
+/// A disable action writes Quick Stop, and enable() comes before the lagging drive reports a change. The repeated
+/// enable() asserts Enable Operation again, so the drive comes back to Operation Enabled after a short quick stop.
+TEST(Cia402HalFailures, ARepeatedEnableReplacesTheQuickStopOfADisableAction)
+{
+  ScriptedDrives drives({ true });
+  ASSERT_TRUE(drives.start());
+  drives.report(OPERATION_ENABLED);
+  drives.follow_controlword(0);
+  ASSERT_TRUE(drives.enable());
+  ASSERT_TRUE(drives.cycle(DriveAction::DISABLE));
+  ASSERT_EQ(drives.controlword(0) & COMMAND_BITS, QUICK_STOP);
+  ASSERT_EQ(drives.reported(0), OPERATION_ENABLED);
+  EXPECT_TRUE(drives.enable());
+  EXPECT_EQ(drives.controlword(0) & COMMAND_BITS, ENABLE_OPERATION);
+  for (int i = 0; i < 5; ++i)
+  {
+    ASSERT_TRUE(drives.cycle(DriveAction::NONE));
+  }
+  EXPECT_EQ(drives.controlword(0) & COMMAND_BITS, ENABLE_OPERATION);
+  EXPECT_EQ(drives.reported(0), OPERATION_ENABLED);
+  EXPECT_TRUE(drives.is_enabled());
+}
+
+/// While enable() waits for a drive to arrive, a joint already in Operation Enabled keeps its target. A joint below
+/// Operation Enabled is held at its measured position.
+TEST(Cia402HalFailures, EnableHoldsOnlyTheJointsBelowOperationEnabled)
+{
+  ScriptedDrives drives({ true, true });
+  ASSERT_TRUE(drives.start());
+  drives.report(0, OPERATION_ENABLED);
+  drives.place(0, 1.0);
+  drives.follow_controlword(1);
+  drives.place(1, 2.0);
+  ASSERT_TRUE(drives.enable());
+  EXPECT_EQ(drives.reported(1), OPERATION_ENABLED);
+  EXPECT_TRUE(drives.holds(0).empty());
+  ASSERT_FALSE(drives.holds(1).empty());
+  for (const double hold : drives.holds(1))
+  {
+    EXPECT_EQ(hold, 2.0);
+  }
 }
 
 /// disable() cancels an enable action still walking, so it does not resume afterwards.
