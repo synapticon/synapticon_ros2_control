@@ -515,6 +515,25 @@ TEST(Cia402HalFailures, DisableTimesOutOnADriveThatKeepsMovingInQuickStop)
   EXPECT_EQ(drives.controlword(0) & 0x02, 0);  // Enable voltage cleared
 }
 
+/// A NaN speed does not count as standing still: a disable action in Quick Stop Active cuts the voltage only at rest.
+TEST(Cia402HalFailures, ANaNSpeedDoesNotCountAsAtRest)
+{
+  for (const double speed : { 0.0, std::numeric_limits<double>::quiet_NaN() })
+  {
+    ScriptedDrives drives({ true });
+    ASSERT_TRUE(drives.start());
+    drives.report(QUICK_STOP_ACTIVE);
+    drives.move_at(speed);
+    const auto start = Clock::now();
+    while (since(start) < 0.3)
+    {
+      ASSERT_TRUE(drives.cycle(DriveAction::DISABLE));
+      std::this_thread::sleep_for(std::chrono::milliseconds(5));
+    }
+    EXPECT_EQ(drives.controlword(0) & COMMAND_BITS, speed == 0.0 ? DISABLE_VOLTAGE : QUICK_STOP) << "speed " << speed;
+  }
+}
+
 /// A drive that waits in Switched On after a timed-out enable() is not left with Enable Operation in its
 /// controlword, which it would follow on its own later.
 TEST(Cia402HalFailures, ATimedOutEnableWithdrawsEnableOperation)

@@ -28,11 +28,18 @@ constexpr uint16_t SWITCH_ON_DISABLED = 0x40;
 constexpr double CONTROL_FREQUENCY = 1000.0;
 constexpr double TIMEOUT_S = 0.05;
 
-/// A slave_config without entries beyond its head, written to a temporary file. Returns its path.
-std::string empty_slave_config()
+/// A slave_config whose only channel is the measured velocity, or without channels when `velocity` is false, written
+/// to a temporary file. Returns its path.
+std::string slave_config(bool velocity)
 {
-  const std::string path = ::testing::TempDir() + "ethercat_pdo_hal.yaml";
-  std::ofstream(path) << "vendor_id: 0x22d2\nproduct_id: 0x302\n";
+  const std::string path = ::testing::TempDir() + (velocity ? "ethercat_pdo_hal.yaml" : "ethercat_pdo_hal_bare.yaml");
+  std::ofstream file(path);
+  file << "vendor_id: 0x22d2\nproduct_id: 0x302\n";
+  if (velocity)
+  {
+    file << "tpdo:\n  - index: 0x1a00\n    channels:\n"
+            "      - { index: 0x606c, sub_index: 0, type: int32, state_interface: velocity }\n";
+  }
   return path;
 }
 
@@ -40,14 +47,21 @@ std::string empty_slave_config()
 class ScriptedBus : public ec::EthercatPdoHal
 {
 public:
-  explicit ScriptedBus(std::vector<ec::JointConfig> joints)
+  /// Drives for `joints`, on slave_configs that map the velocity unless `velocity` is false.
+  explicit ScriptedBus(std::vector<ec::JointConfig> joints, bool velocity = true)
     : EthercatPdoHal("test_ethercat_pdo_hal"), joints_(std::move(joints))
   {
     for (auto& joint : joints_)
     {
-      joint.slave_config_file = empty_slave_config();
+      joint.slave_config_file = slave_config(velocity);
     }
-    set_up_drives(joints_, true, CONTROL_FREQUENCY);
+    set_up_ = set_up_drives(joints_, true, CONTROL_FREQUENCY);
+  }
+
+  /// The result of set_up_drives() in the constructor.
+  bool set_up() const
+  {
+    return set_up_;
   }
 
   /// From read `after_reads` on, `joint` reports `statusword` and the mode of operation `mode`.
@@ -141,6 +155,7 @@ private:
   std::vector<ec::JointConfig> joints_;
   std::vector<Script> scripts_;
   int reads_{ 0 };
+  bool set_up_{ false };
 };
 
 ec::JointConfig joint(const std::string& name, int mode, bool energize = true)
@@ -195,6 +210,14 @@ TEST(WaitForStreaming, StillRefusesADriveWithoutStatusword)
   ScriptedBus bus({ joint("a", ec::mode::CSP) });
   bus.report(0, 0, ec::mode::CSP);
   EXPECT_FALSE(bus.wait());
+}
+
+/// A joint that gets power needs the measured velocity in its process data, to tell when it stands still.
+TEST(SetUpDrives, RefusesAPoweredJointWithoutVelocityState)
+{
+  EXPECT_TRUE(ScriptedBus({ joint("a", ec::mode::CSP) }).set_up());
+  EXPECT_FALSE(ScriptedBus({ joint("a", ec::mode::CSP) }, false).set_up());
+  EXPECT_TRUE(ScriptedBus({ joint("a", ec::mode::CSP, false) }, false).set_up()) << "a joint without power needs none";
 }
 
 /// A negative torque ceiling, stiffness or damping keeps the value sent last, so it cannot wrap in an unsigned field.

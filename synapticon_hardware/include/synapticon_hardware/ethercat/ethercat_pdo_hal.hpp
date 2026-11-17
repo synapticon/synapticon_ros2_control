@@ -50,7 +50,8 @@ protected:
   /// `joints`, prepare the CiA 402 logic, and read and check the unit sections of each joint's slave_config. Targets
   /// start as NaN, the controlword, gains and torque ceiling as 0 until check_drives() fills them. `quick_stop_hold`
   /// makes the HAL hold an impedance joint where its quick stop started, because the drive does not brake in impedance
-  /// mode. False, with the reason logged, when a slave_config breaks a rule of read_slave_config_units().
+  /// mode. False, with the reason logged, when a slave_config breaks a rule of read_slave_config_units(), or when a
+  /// joint with `energize` has a slave_config that maps no velocity state.
   bool set_up_drives(const std::vector<JointConfig>& joints, bool quick_stop_hold, double control_frequency);
 
   /// The bring-up checks of `joints` and the `sdo_si:` entries of their slave_configs, through upload() and

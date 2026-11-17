@@ -16,11 +16,13 @@
 #include <limits>
 #include <stdexcept>
 #include <string>
+#include <string_view>
 #include <thread>
 #include <utility>
 #include <vector>
 
 #include <rclcpp/rclcpp.hpp>
+#include <yaml-cpp/yaml.h>
 
 #include "synapticon_hardware/ethercat/coe_objects.hpp"
 
@@ -48,6 +50,22 @@ std::vector<double> initial_outputs()
     out[zeroed] = 0.0;
   }
   return out;
+}
+
+/// True when the tpdo of the slave_config at `path` has a channel with the state_interface `name`.
+bool maps_state(const std::string& path, std::string_view name)
+{
+  for (const auto& pdo : YAML::LoadFile(path)["tpdo"])
+  {
+    for (const auto& channel : pdo["channels"])
+    {
+      if (channel["state_interface"] && channel["state_interface"].as<std::string>() == name)
+      {
+        return true;
+      }
+    }
+  }
+  return false;
 }
 }  // namespace
 
@@ -83,10 +101,25 @@ bool EthercatPdoHal::set_up_drives(const std::vector<JointConfig>& joints, bool 
     try
     {
       slave_config_units_.push_back(read_slave_config_units(joint.slave_config_file));
+      // The ramped stops wait for the joint to stand still, which a joint without velocity feedback always seems to.
+      if (joint.energize && !maps_state(joint.slave_config_file, "velocity"))
+      {
+        RCLCPP_ERROR(log(),
+                     "Joint '%s' gets power, but its slave_config maps no velocity state (0x606C, state_interface "
+                     "velocity). The HAL needs it to tell when the joint stands still.",
+                     joint.name.c_str());
+        return false;
+      }
     }
     catch (const std::invalid_argument& e)
     {
       RCLCPP_ERROR(log(), "Joint '%s': %s", joint.name.c_str(), e.what());
+      return false;
+    }
+    catch (const YAML::Exception& e)
+    {
+      RCLCPP_ERROR(log(), "Joint '%s': slave_config %s: %s", joint.name.c_str(), joint.slave_config_file.c_str(),
+                   e.what());
       return false;
     }
   }

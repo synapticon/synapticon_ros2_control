@@ -324,6 +324,9 @@ Problems show up at one of four moments. Find the moment first, then your sympto
 - The network interface cannot be opened.
   The shell has no `CAP_NET_RAW`, or the name is wrong.
   Use the shell of [section 2](#2-before-any-hardware-test), and check the name with `ip link`.
+- Bring-up refuses a joint that gets power, because its slave_config maps no velocity state.
+  The HAL needs the measured velocity (`0x606C`) to tell when the joint stands still.
+  Map it in the `tpdo` section, as the example slave_config does.
 
 **While the bus comes up**
 

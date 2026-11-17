@@ -452,7 +452,7 @@ void Cia402Hal::steer(std::size_t j)
 bool Cia402Hal::resting(std::size_t j)
 {
   auto& slow_start = drives_[j].slow_start;
-  if (speed(j) >= REST_SPEED)
+  if (!(speed(j) < REST_SPEED))  // a NaN speed counts as moving
   {
     slow_start = Clock::time_point{};
     return false;
