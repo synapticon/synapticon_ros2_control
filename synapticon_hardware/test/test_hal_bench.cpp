@@ -3,11 +3,14 @@
 // Copyright (c) 2026 b-robotized GmbH
 
 /// @file
-/// @brief The test gains that the hil_tests section of a robot definition gives the bench joints.
+/// @brief The test gains that the hil_tests section of a robot definition gives the bench joints, and the stop
+/// request of the bench.
 
+#include <csignal>
 #include <stdexcept>
 #include <string>
 
+#include <gtest/gtest-spi.h>
 #include <gtest/gtest.h>
 #include <yaml-cpp/yaml.h>
 
@@ -15,7 +18,10 @@
 
 namespace
 {
+using synapticon_hardware::testing::fail_on_stop_request;
+using synapticon_hardware::testing::install_stop_handlers;
 using synapticon_hardware::testing::own_test_gains;
+using synapticon_hardware::testing::stop_requested;
 using synapticon_hardware::testing::test_gains;
 using synapticon_hardware::testing::TestGains;
 
@@ -62,6 +68,23 @@ TEST(TestGains, RefuseAJointTheRobotDoesNotHave)
                                                      "  joints:\n"
                                                      "    ankle: { stiffness: 1.0 }\n");
   EXPECT_THROW(test_gains(robot, 0), std::runtime_error);
+}
+
+/// SIGINT and SIGTERM request a stop instead of ending the process, and the request fails the running test fatally.
+TEST(StopRequest, ComesFromSigintAndSigtermAndFailsTheTest)
+{
+  install_stop_handlers();
+  for (const int signal : { SIGINT, SIGTERM })
+  {
+    stop_requested = false;
+    fail_on_stop_request();
+    ASSERT_EQ(std::raise(signal), 0);
+    EXPECT_TRUE(stop_requested) << signal;
+    EXPECT_FATAL_FAILURE(fail_on_stop_request(), "STOPPED");
+  }
+  stop_requested = false;
+  std::signal(SIGINT, SIG_DFL);
+  std::signal(SIGTERM, SIG_DFL);
 }
 
 }  // namespace

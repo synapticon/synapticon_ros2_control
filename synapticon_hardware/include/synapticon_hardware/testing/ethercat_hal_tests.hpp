@@ -569,6 +569,11 @@ TEST_F(SingleDrive, BringUpReadsBackTheQuickStopDeceleration)
 class EthercatBringUp : public ::testing::Test
 {
 protected:
+  void SetUp() override
+  {
+    SKIP_AFTER_STOP_REQUEST();
+  }
+
   /// The joint of the bench drive in `mode`, on its base slave_config.
   static JointConfig bench_joint(int mode = ec::mode::CSP)
   {
@@ -864,7 +869,8 @@ inline int run_ethercat_hil_tests(int argc, char** argv)
     }
   }
   argc = kept;
-  rclcpp::init(argc, argv);
+  rclcpp::init(argc, argv, rclcpp::InitOptions(), rclcpp::SignalHandlerOptions::None);
+  install_stop_handlers();
   bench_instance() = std::make_shared<EthercatBench>(two_drives);
   const int result = RUN_ALL_TESTS();
   bench().finish();

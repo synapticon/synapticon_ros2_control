@@ -12,8 +12,10 @@
 /// written against these fixtures, so the same tests run on simulated drives and on real ones.
 
 #include <algorithm>
+#include <atomic>
 #include <chrono>
 #include <cmath>
+#include <csignal>
 #include <cstddef>
 #include <cstdlib>
 #include <functional>
@@ -49,6 +51,44 @@ constexpr double QUIET_NAN = std::numeric_limits<double>::quiet_NaN();
 constexpr int CSP_MODE = 8;
 constexpr int CSV_MODE = 9;
 constexpr int IMPEDANCE_MODE = -6;
+
+/// Set by SIGINT and SIGTERM once install_stop_handlers() ran. The running test then fails fatally, which cuts the
+/// voltage, and every later test is skipped.
+inline std::atomic<bool> stop_requested{ false };
+static_assert(std::atomic<bool>::is_always_lock_free, "stop_requested is set in a signal handler");
+
+/// The signal handler of install_stop_handlers().
+inline void request_stop(int /*signal*/)
+{
+  stop_requested = true;
+}
+
+/// Route SIGINT and SIGTERM to stop_requested. Initialise rclcpp without its signal handlers, so it keeps out.
+inline void install_stop_handlers()
+{
+  std::signal(SIGINT, request_stop);
+  std::signal(SIGTERM, request_stop);
+}
+
+/// Fail the running test, fatally, once a stop was requested. A bench cycle then cuts the voltage, as after a
+/// watchdog trip.
+inline void fail_on_stop_request()
+{
+  if (stop_requested && !::testing::Test::HasFatalFailure())
+  {
+    FAIL() << "STOPPED: SIGINT or SIGTERM came in, voltage cut";
+  }
+}
+
+/// Skip the current test once a stop was requested. For a fixture's SetUp().
+#define SKIP_AFTER_STOP_REQUEST()                                                                                      \
+  do                                                                                                                   \
+  {                                                                                                                    \
+    if (synapticon_hardware::testing::stop_requested)                                                                  \
+    {                                                                                                                  \
+      GTEST_SKIP() << "a stop was requested by SIGINT or SIGTERM";                                                     \
+    }                                                                                                                  \
+  } while (0)
 
 /// The value of environment variable `name`, or `fallback` when it is unset or empty.
 inline std::string env_or(const char* name, const std::string& fallback)
@@ -236,6 +276,7 @@ protected:
 
   void SetUp() override
   {
+    SKIP_AFTER_STOP_REQUEST();
     sign_ = (tests_run_++ % 2 == 0) ? 1.0 : -1.0;
   }
   void TearDown() override
@@ -305,8 +346,9 @@ protected:
 
   /// One control cycle: read, check the watchdog, write the command, wait for the period.
   ///
-  /// Once the test has a fatal failure, a watchdog trip among them, every cycle commands disable_voltage and tick()
-  /// returns after one cycle. The helpers that loop stop as well, so a test body that goes on moves nothing.
+  /// Once the test has a fatal failure, a watchdog trip or a stop request among them, every cycle commands
+  /// disable_voltage and tick() returns after one cycle. The helpers that loop stop as well, so a test body that goes
+  /// on moves nothing.
   void tick(int count = 1)
   {
     for (int i = 0; i < count; ++i)
@@ -324,6 +366,7 @@ protected:
   {
     sample();
     check_travel();
+    fail_on_stop_request();
     if (HasFatalFailure() && setpoint_.drive_action != DriveAction::RESET_FAULT)
     {
       setpoint_.drive_action = DriveAction::DISABLE_VOLTAGE;
@@ -601,6 +644,7 @@ protected:
 
   void SetUp() override
   {
+    SKIP_AFTER_STOP_REQUEST();
     if (!bench().two_drives())
     {
       GTEST_SKIP() << "needs a second drive on the bus: run with --two-drives";
@@ -695,8 +739,8 @@ protected:
 
   /// One cycle for both joints: advance the targets, read, check the watchdog, write, wait.
   ///
-  /// Once the test has a fatal failure, a watchdog trip among them, every cycle commands disable_voltage on both
-  /// joints and tick() returns after one cycle, like SingleDrive::tick().
+  /// Once the test has a fatal failure, a watchdog trip or a stop request among them, every cycle commands
+  /// disable_voltage on both joints and tick() returns after one cycle, like SingleDrive::tick().
   void tick(int count = 1)
   {
     for (int i = 0; i < count; ++i)
@@ -719,6 +763,7 @@ protected:
     }
     sample();
     check_travel();
+    fail_on_stop_request();
     for (auto& command : setpoints_)
     {
       if (HasFatalFailure() && command.drive_action != DriveAction::RESET_FAULT)
