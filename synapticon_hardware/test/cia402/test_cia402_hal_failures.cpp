@@ -9,6 +9,7 @@
 /// The drives here do not follow the controlword: each reports the statusword a test gives it, which is how a stuck
 /// drive looks to the HAL. The timeout tests take as long as the timeouts, about five seconds each.
 
+#include <algorithm>
 #include <chrono>
 #include <cstdint>
 #include <limits>
@@ -39,6 +40,10 @@ constexpr uint16_t QUICK_STOP_ACTIVE = 0x07;
 constexpr uint16_t FAULT_REACTION_ACTIVE = 0x0F;
 constexpr uint16_t FAULT = 0x08;
 constexpr uint16_t FAULT_RESET_BIT = 0x80;
+constexpr uint16_t UNDECODABLE = 0x01;   ///< a statusword that matches no CiA 402 state
+constexpr uint16_t COMMAND_BITS = 0x8F;  ///< the controlword bits that carry the command
+constexpr uint16_t SHUTDOWN = 0x06;
+constexpr uint16_t QUICK_STOP = 0x02;
 
 /// The walk timeout of Cia402Hal, with a margin.
 constexpr auto WALK_TIMEOUT = std::chrono::milliseconds(5200);
@@ -57,6 +62,7 @@ public:
     }
     statuswords_.assign(joints.size(), SWITCH_ON_DISABLED);
     controlwords_.assign(joints.size(), 0);
+    sent_.resize(joints.size());
     init_joints(std::move(joints), 1000.0);
   }
 
@@ -123,6 +129,18 @@ public:
   {
     speed_ = speed;
   }
+  /// From now on, a drive that is sent Quick Stop reports Switch On Disabled, as a drive without power would.
+  void settle_on_quick_stop()
+  {
+    settle_on_quick_stop_ = true;
+  }
+
+  /// True when a controlword written to `joint` so far carried `command`.
+  bool sent(std::size_t joint, uint16_t command) const
+  {
+    return std::any_of(sent_[joint].begin(), sent_[joint].end(),
+                       [command](uint16_t word) { return (word & COMMAND_BITS) == command; });
+  }
 
   /// The controlword last written to `joint`.
   uint16_t controlword(std::size_t joint) const
@@ -185,6 +203,11 @@ protected:
   void write_controlword(std::size_t joint, uint16_t controlword) override
   {
     controlwords_[joint] = controlword;
+    sent_[joint].push_back(controlword);
+    if (settle_on_quick_stop_ && (controlword & COMMAND_BITS) == QUICK_STOP)
+    {
+      statuswords_[joint] = SWITCH_ON_DISABLED;
+    }
   }
   void write_setpoints(std::size_t, const DriveCommand&) override
   {
@@ -196,6 +219,8 @@ protected:
 private:
   std::vector<uint16_t> statuswords_;
   std::vector<uint16_t> controlwords_;
+  std::vector<std::vector<uint16_t>> sent_;
+  bool settle_on_quick_stop_{ false };
   int reads_{ 0 };
   int fault_after_reads_{ 0 };
   std::optional<std::size_t> faulting_joint_;
@@ -319,6 +344,22 @@ TEST(Cia402HalFailures, EnableTimesOutOnADriveThatNeverArrives)
   const auto start = Clock::now();
   EXPECT_FALSE(drives.enable());
   EXPECT_GE(since(start), 4.9);
+  EXPECT_FALSE(drives.is_enabled());
+}
+
+/// An undecodable statusword gets no Shutdown on the way up, which would take a powered drive down without a ramp.
+/// The walk waits for its timeout, and the way down then starts with a Quick Stop.
+TEST(Cia402HalFailures, EnableSendsNoShutdownToAnUndecodableState)
+{
+  ScriptedDrives drives({ true });
+  ASSERT_TRUE(drives.start());
+  drives.report(UNDECODABLE);
+  drives.settle_on_quick_stop();
+  const auto start = Clock::now();
+  EXPECT_FALSE(drives.enable());
+  EXPECT_GE(since(start), 4.9);
+  EXPECT_FALSE(drives.sent(0, SHUTDOWN));
+  EXPECT_TRUE(drives.sent(0, QUICK_STOP));
   EXPECT_FALSE(drives.is_enabled());
 }
 

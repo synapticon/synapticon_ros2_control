@@ -131,6 +131,7 @@ TEST_P(Walk, IssuesTheDiagramsCommandFromEachState)
   }
 }
 
+// On the way up, an undecodable state (UN) gets no new command: it may have power, and a Shutdown would take it.
 //                              ST    NR    SD    RS    SO    OE    QS    FR    FA    UN
 INSTANTIATE_TEST_SUITE_P(
     Targets, Walk,
@@ -139,17 +140,17 @@ INSTANTIATE_TEST_SUITE_P(
         WalkRow{ "OperationEnabled",
                  OPERATION_ENABLED,
                  WalkPath::RAMPED,
-                 { SHUT, SHUT, SHUT, SWON, OPER, OPER, OPER, SHUT, KEEP, SHUT } },
+                 { SHUT, SHUT, SHUT, SWON, OPER, OPER, OPER, SHUT, KEEP, KEEP } },
         // One rung lower, transition 5 from Operation Enabled. Quick Stop Active is left downward.
         WalkRow{ "SwitchedOn",
                  SWITCHED_ON,
                  WalkPath::RAMPED,
-                 { SHUT, SHUT, SHUT, SWON, SWON, SWON, CUTV, SHUT, KEEP, SHUT } },
+                 { SHUT, SHUT, SHUT, SWON, SWON, SWON, CUTV, SHUT, KEEP, KEEP } },
         // Shutdown from every rung (transitions 2, 6 and 8).
         WalkRow{ "ReadyToSwitchOn",
                  READY_TO_SWITCH_ON,
                  WalkPath::RAMPED,
-                 { SHUT, SHUT, SHUT, SHUT, SHUT, SHUT, CUTV, SHUT, KEEP, SHUT } },
+                 { SHUT, SHUT, SHUT, SHUT, SHUT, SHUT, CUTV, SHUT, KEEP, KEEP } },
         // Ramped: a quick stop first, the voltage cut only from Quick Stop Active.
         WalkRow{ "SwitchOnDisabled",
                  SWITCH_ON_DISABLED,

@@ -178,6 +178,9 @@ constexpr Command RSET = Command::FAULT_RESET;
 ///  - Start, Not Ready to Switch On, Fault Reaction Active and Fault are entered by the drive itself and never
 ///    commanded, so their rows keep throughout.
 ///  - The Fault column keeps too. Only a Fault Reset leaves Fault, and only on request (FaultExit::RESET).
+///  - Toward the powered rungs, the Unknown column keeps. The drive may have power, and a Shutdown from Operation
+///    Enabled would take it without a ramp. The walk waits for a state it can decode, or for its deadline, after
+///    which the caller takes the drive down on the ramped way.
 //   Columns, in DeviceState order: ST Start, NR Not Ready to Switch On, SD Switch On Disabled, RS Ready to Switch On,
 //   SO Switched On, OE Operation Enabled, QS Quick Stop Active, FR Fault Reaction Active, FA Fault, UN Unknown.
 constexpr Command WALK[NUM_DEVICE_STATES][NUM_DEVICE_STATES] = {
@@ -185,9 +188,9 @@ constexpr Command WALK[NUM_DEVICE_STATES][NUM_DEVICE_STATES] = {
   /* ST */ { KEEP, KEEP, KEEP, KEEP, KEEP, KEEP, KEEP, KEEP, KEEP, KEEP },
   /* NR */ { KEEP, KEEP, KEEP, KEEP, KEEP, KEEP, KEEP, KEEP, KEEP, KEEP },
   /* SD */ { QSTP, QSTP, CUTV, QSTP, QSTP, QSTP, CUTV, QSTP, KEEP, QSTP },
-  /* RS */ { SHUT, SHUT, SHUT, SHUT, SHUT, SHUT, CUTV, SHUT, KEEP, SHUT },
-  /* SO */ { SHUT, SHUT, SHUT, SWON, SWON, SWON, CUTV, SHUT, KEEP, SHUT },
-  /* OE */ { SHUT, SHUT, SHUT, SWON, OPER, OPER, OPER, SHUT, KEEP, SHUT },
+  /* RS */ { SHUT, SHUT, SHUT, SHUT, SHUT, SHUT, CUTV, SHUT, KEEP, KEEP },
+  /* SO */ { SHUT, SHUT, SHUT, SWON, SWON, SWON, CUTV, SHUT, KEEP, KEEP },
+  /* OE */ { SHUT, SHUT, SHUT, SWON, OPER, OPER, OPER, SHUT, KEEP, KEEP },
   /* QS */ { KEEP, KEEP, KEEP, KEEP, KEEP, QSTP, QSTP, KEEP, KEEP, KEEP },
   /* FR */ { KEEP, KEEP, KEEP, KEEP, KEEP, KEEP, KEEP, KEEP, KEEP, KEEP },
   /* FA */ { KEEP, KEEP, KEEP, KEEP, KEEP, KEEP, KEEP, KEEP, KEEP, KEEP },
