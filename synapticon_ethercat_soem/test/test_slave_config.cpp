@@ -159,8 +159,55 @@ INSTANTIATE_TEST_SUITE_P(
                       BrokenCase{ "SdoValueNoNumber", "vendor_id: 1\nproduct_id: 2\nsdo:\n  - { index: "
                                                       "0x6085, sub_index: 0, type: uint32, "
                                                       "value: fast }\n" },
-                      BrokenCase{ "NotYaml", "vendor_id: [1\n" }),
+                      BrokenCase{ "NotYaml", "vendor_id: [1\n" },
+                      BrokenCase{ "WordAfterABit", "vendor_id: 1\nproduct_id: 2\ntpdo:\n  - index: 0x1a00\n    "
+                                                   "channels:\n"
+                                                   "      - { index: 0x2000, sub_index: 1, type: bool }\n"
+                                                   "      - { index: 0x6041, sub_index: 0, type: uint16 }\n" },
+                      BrokenCase{ "BitsAcrossABytesEnd", "vendor_id: 1\nproduct_id: 2\nrpdo:\n  - index: 0x1600\n    "
+                                                         "channels:\n"
+                                                         "      - { index: 0x2000, sub_index: 1, type: bit6 }\n"
+                                                         "      - { index: 0x2000, sub_index: 2, type: bit4 }\n" }),
     [](const auto& info) { return std::string(info.param.name); });
+
+/// `bool` and `bitN` channels that fill whole bytes may sit between byte-sized ones, also across PDOs.
+TEST(SlaveConfig, TakesBitsThatFillTheirBytes)
+{
+  const auto path = write_file("bits.yaml", R"(
+vendor_id: 1
+product_id: 2
+tpdo:
+  - index: 0x1a00
+    channels:
+      - { index: 0x2000, sub_index: 1, type: bool }
+      - { index: 0x2000, sub_index: 2, type: bit7 }
+      - { index: 0x6041, sub_index: 0, type: uint16 }
+      - { index: 0x2000, sub_index: 3, type: bit4 }
+  - index: 0x1a01
+    channels:
+      - { index: 0x2000, sub_index: 4, type: bit4 }
+      - { index: 0x6064, sub_index: 0, type: int32 }
+)");
+  std::string error;
+  EXPECT_TRUE(load_slave_config(path, error)) << error;
+}
+
+/// The reason names the channel and where it starts.
+TEST(SlaveConfig, NamesAChannelOffItsByte)
+{
+  const auto path = write_file("off_byte.yaml", R"(
+vendor_id: 1
+product_id: 2
+rpdo:
+  - index: 0x1600
+    channels:
+      - { index: 0x2000, sub_index: 1, type: bit3 }
+      - { index: 0x6040, sub_index: 0, type: uint16 }
+)");
+  std::string error;
+  EXPECT_FALSE(load_slave_config(path, error));
+  EXPECT_NE(error.find("rpdo channel 0x6040:0 starts at bit 3"), std::string::npos) << error;
+}
 
 TEST(SlaveConfig, AMissingFileIsRefused)
 {

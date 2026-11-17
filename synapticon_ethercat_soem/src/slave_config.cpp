@@ -8,6 +8,7 @@
 
 #include "slave_config.hpp"
 
+#include <cstddef>
 #include <cstdio>
 #include <exception>
 #include <stdexcept>
@@ -76,6 +77,32 @@ std::vector<Pdo> read_pdos(const YAML::Node& node)
     pdos.push_back(pdo);
   }
   return pdos;
+}
+
+/// Throw when a channel of `pdos` (the `section` list) does not fit the byte access of the process image: a channel
+/// other than `bool` and `bitN` has to start on a byte, and a `bool` or `bitN` channel has to stay within one byte.
+/// The channels follow each other from bit 0, as in the process image.
+void check_byte_alignment(const std::vector<Pdo>& pdos, const char* section)
+{
+  std::size_t bit = 0;
+  for (const auto& pdo : pdos)
+  {
+    for (const auto& c : pdo.channels)
+    {
+      const std::size_t in_byte = bit % 8;
+      const bool bits = c.type.kind == ValueKind::BITS;
+      if ((!bits && in_byte != 0) || (bits && in_byte + c.type.bits > 8))
+      {
+        char object[16];
+        std::snprintf(object, sizeof(object), "0x%04X:%u", c.index, c.sub_index);
+        throw std::runtime_error(std::string(section) + " channel " + object + " starts at bit " +
+                                 std::to_string(in_byte) + " of a byte" +
+                                 (bits ? " and does not fit into it" : ", but only bool and bitN may") +
+                                 ". Fill the byte with bool or bitN channels before it");
+      }
+      bit += c.type.bits;
+    }
+  }
 }
 }  // namespace
 
@@ -168,6 +195,8 @@ std::optional<SlaveConfig> load_slave_config(const std::string& path, std::strin
     }
     config.rpdo = read_pdos(root["rpdo"]);
     config.tpdo = read_pdos(root["tpdo"]);
+    check_byte_alignment(config.rpdo, "rpdo");
+    check_byte_alignment(config.tpdo, "tpdo");
     return config;
   }
   catch (const std::exception& e)

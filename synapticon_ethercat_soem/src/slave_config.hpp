@@ -82,7 +82,8 @@ struct SlaveConfig
 };
 
 /// @brief Read the slave_config at `path`.
-/// @return nothing, with `error` set, when the file cannot be read or a required key or a type is missing or wrong.
+/// @return nothing, with `error` set, when the file cannot be read, a required key or a type is missing or wrong, or
+/// a PDO channel does not fit the byte access of the process image.
 std::optional<SlaveConfig> load_slave_config(const std::string& path, std::string& error);
 
 }  // namespace synapticon_ethercat_soem
