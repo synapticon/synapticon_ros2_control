@@ -35,6 +35,7 @@ extern "C" {
 #include "ethercat.h"
 }
 
+#include "bad_cycle_count.hpp"
 #include "coe_encoding.hpp"
 #include "error_list.hpp"
 #include "process_data_mapping.hpp"
@@ -313,7 +314,7 @@ struct EthercatSoemHal::Bus
   int expected_wkc{ 0 };
   int wkc{ EC_NOFRAME };
   unsigned cycles{ 0 };
-  int bad_cycles{ 0 };                    ///< cycles in a row without a complete exchange
+  BadCycleCount bad_cycles;               ///< the frame in flight, and cycles in a row without a complete exchange
   bool states_unknown{ false };           ///< no frame came back since the slave states were last read
   std::optional<uint8> clock_sync_index;  ///< the frame buffer of the last reference clock write
   int64_t realtime_offset_ns{ 0 };        ///< real time minus monotonic time when the clocks were set up
@@ -608,7 +609,7 @@ bool EthercatSoemHal::start()
     back_to_pre_op();
     return false;
   }
-  bus_->bad_cycles = 0;
+  bus_->bad_cycles.start(config_.max_bad_cycles);
   streaming_ = true;
   if (!wait_for_streaming(joints_, config_.control_frequency, config_.readiness_timeout_s))
   {
@@ -701,6 +702,10 @@ void EthercatSoemHal::link_health(LinkHealth& health) const
 
 bool EthercatSoemHal::exchange_read()
 {
+  if (!bus_->bad_cycles.frame_in_flight())
+  {
+    return bus_->bad_cycles.usable();  // nothing was sent, so there is nothing to receive or count
+  }
   // Half a cycle at most, so that a late or lost frame never delays the next cycle.
   bus_->wkc = ecx_receive_processdata(&bus_->context, static_cast<int>(0.5e6 / config_.control_frequency));
   bus_->release_clock_sync();
@@ -734,7 +739,12 @@ bool EthercatSoemHal::exchange_write()
     bus_->images[j].write_outputs(outputs_[j], bus_->slaves[bus_->slave_of_joint[j]].outputs);
   }
   bus_->sync_reference_clock();
-  return ecx_send_processdata(&bus_->context) > 0;
+  if (ecx_send_processdata(&bus_->context) <= 0)
+  {
+    return false;
+  }
+  bus_->bad_cycles.sent();
+  return true;
 }
 
 int EthercatSoemHal::upload(uint16_t position, uint16_t index, uint8_t sub_index, std::vector<uint8_t>& bytes,
@@ -921,28 +931,22 @@ bool EthercatSoemHal::reach_state(uint16_t state, bool cycling)
 
 bool EthercatSoemHal::count_bad_cycles()
 {
-  const int limit = config_.max_bad_cycles;
-  if (!streaming_)
+  // Not counted before streaming: in SAFE-OP and on the way to OP the working counter is short by design.
+  switch (bus_->bad_cycles.received(bus_->wkc == bus_->expected_wkc))
   {
-    return true;  // in SAFE-OP and on the way to OP the working counter is short by design
-  }
-  if (bus_->wkc == bus_->expected_wkc)
-  {
-    if (bus_->bad_cycles >= limit)
-    {
+    case BadCycleCount::Change::LIMIT_REACHED:
+      RCLCPP_ERROR(logger(),
+                   "No complete process data for %d cycles in a row (working counter %d, expected %d). read() "
+                   "fails until it is complete again.",
+                   bus_->bad_cycles.limit(), bus_->wkc, bus_->expected_wkc);
+      break;
+    case BadCycleCount::Change::COMPLETE_AGAIN:
       RCLCPP_INFO(logger(), "Process data complete again, read() delivers fresh data.");
-    }
-    bus_->bad_cycles = 0;
-    return true;
+      break;
+    case BadCycleCount::Change::NONE:
+      break;
   }
-  if (bus_->bad_cycles < limit && ++bus_->bad_cycles == limit)
-  {
-    RCLCPP_ERROR(logger(),
-                 "No complete process data for %d cycles in a row (working counter %d, expected %d). read() "
-                 "fails until it is complete again.",
-                 limit, bus_->wkc, bus_->expected_wkc);
-  }
-  return bus_->bad_cycles < limit;
+  return bus_->bad_cycles.usable();
 }
 
 void EthercatSoemHal::exchange_for(std::chrono::milliseconds duration)
@@ -960,6 +964,7 @@ void EthercatSoemHal::exchange_for(std::chrono::milliseconds duration)
 void EthercatSoemHal::leave_op()
 {
   streaming_ = false;
+  bus_->bad_cycles.stop();
   enabled_ = false;  // a drive leaving OP de-energises
   back_to_pre_op();
   RCLCPP_INFO(logger(), "Drives back in PRE-OP.");

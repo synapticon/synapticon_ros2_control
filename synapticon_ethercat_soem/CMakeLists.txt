@@ -31,6 +31,7 @@ find_package(yaml-cpp REQUIRED)
 set(_deps pluginlib rclcpp synapticon_hardware)
 
 add_library(${PROJECT_NAME} SHARED
+  src/bad_cycle_count.cpp
   src/coe_encoding.cpp
   src/error_list.cpp
   src/ethercat_soem_hal.cpp
@@ -67,10 +68,10 @@ if(BUILD_TESTING)
   find_package(ament_cmake_gmock REQUIRED)
   find_package(ament_index_cpp REQUIRED)
 
-  # The slave_config, the process image and its mapping, the object dictionary encodings, SOEM's error list and the
-  # HAL without a bus.
+  # The slave_config, the process image and its mapping, the object dictionary encodings, SOEM's error list, the count
+  # of bad cycles and the HAL without a bus.
   foreach(test_name test_slave_config test_process_image test_process_data_mapping test_coe_encoding test_error_list
-                    test_ethercat_soem_hal)
+                    test_bad_cycle_count test_ethercat_soem_hal)
     ament_add_gmock(${test_name} test/${test_name}.cpp)
     target_link_libraries(${test_name} ${PROJECT_NAME} ament_index_cpp::ament_index_cpp)
     target_include_directories(${test_name} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)

@@ -173,10 +173,16 @@ private:
     PENDING,
     FAILED,
   };
+  /// What walk_all() does after a failed read.
+  enum class OnReadFailure
+  {
+    STOP,      ///< end the walk as FAILED
+    CARRY_ON,  ///< step and write on the states received last, and end as FAILED if the last read failed
+  };
   /// Exchange cycles and call `step` for each joint in each of them, until all are done, one fails or
   /// WALK_TIMEOUT is over. `what` is the name logged when an exchange fails.
   template <typename StepFn>
-  Outcome walk_all(const char* what, StepFn step);
+  Outcome walk_all(const char* what, OnReadFailure on_read_failure, StepFn step);
   /// Count of joints with energize set.
   std::size_t energisable_count() const;
   /// Set every running action for which `cancelled(walking)` returns true back to NONE.

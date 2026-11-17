@@ -370,6 +370,39 @@ TEST(Cia402HalFailures, EnableFailsWhenTheBusReadFails)
   EXPECT_FALSE(drives.is_enabled());
 }
 
+/// A failed read does not keep disable() from writing. The drive gets the controlwords of the way down on the states
+/// it still reports, as with a short working counter, and disable() returns false, since the reads failed.
+TEST(Cia402HalFailures, DisableWritesTheWayDownWhileTheReadsFail)
+{
+  ScriptedDrives drives({ true });
+  ASSERT_TRUE(drives.start());
+  drives.report(OPERATION_ENABLED);
+  drives.follow_controlword(0);
+  ASSERT_TRUE(drives.enable());
+  drives.fail_reads();
+  const auto start = Clock::now();
+  EXPECT_FALSE(drives.disable());
+  EXPECT_LT(since(start), 1.0);  // once the drive reports Switch On Disabled, not at the timeout
+  EXPECT_TRUE(drives.sent(0, QUICK_STOP));
+  EXPECT_EQ(drives.controlword(0) & COMMAND_BITS, DISABLE_VOLTAGE);
+  EXPECT_EQ(drives.reported(0), SWITCH_ON_DISABLED);
+}
+
+/// When enable() fails on a read, the disable() that follows still writes the way down on the states received last,
+/// until its timeout.
+TEST(Cia402HalFailures, AnEnableThatFailsOnAReadStillTakesTheDrivesDown)
+{
+  ScriptedDrives drives({ true });
+  ASSERT_TRUE(drives.start());
+  drives.report(OPERATION_ENABLED);
+  drives.fail_reads();
+  const auto start = Clock::now();
+  EXPECT_FALSE(drives.enable());
+  EXPECT_GE(since(start), 4.9);
+  EXPECT_EQ(drives.controlword(0) & COMMAND_BITS, QUICK_STOP);
+  EXPECT_FALSE(drives.is_enabled());
+}
+
 TEST(Cia402HalFailures, EnableFailsWhenTheBusWriteFails)
 {
   ScriptedDrives drives({ true });

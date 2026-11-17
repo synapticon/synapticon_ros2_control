@@ -24,6 +24,7 @@ Optional:
 - `max_bad_cycles` [10], a whole number of at least 1: after this many cycles in a row without complete process data
   (no frame back, or a short working counter), `read()` fails until a complete cycle comes back.
   Fewer bad cycles are bridged with the last data received, and the link health shows them.
+  Only a cycle whose frame was sent counts.
 
 Bring-up reads every startup SDO of the slave_config (its `sdo:` list) back after writing it.
 When a drive refuses one or keeps another value, the HAL writes it once more.

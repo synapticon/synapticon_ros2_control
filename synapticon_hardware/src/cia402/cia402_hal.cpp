@@ -80,7 +80,7 @@ bool Cia402Hal::enable()
     }
   }
 
-  const Outcome result = walk_all("enable()", [this](std::size_t j) {
+  const Outcome result = walk_all("enable()", OnReadFailure::STOP, [this](std::size_t j) {
     const cia402::DeviceState state = current_state(j);
     if (state != cia402::DeviceState::OPERATION_ENABLED)
     {
@@ -185,7 +185,9 @@ bool Cia402Hal::write(const std::vector<DriveCommand>& commands)
 /// Takes every joint down, also one that a drive action powered, because enabled_ only follows enable() and
 /// disable(). Actions that need power are cancelled first, so they do not work against the way down. The way down
 /// is ramped, except for a joint that is already on the direct way of a disable_voltage. Only joints with energize
-/// are waited for: a monitored joint left in Fault must not block, and Fault has no power anyway.
+/// are waited for: a monitored joint left in Fault must not block, and Fault has no power anyway. A failed read does
+/// not stop the way down: the controlwords go out every cycle on the states received last, and disable() returns
+/// false when the last read failed.
 bool Cia402Hal::disable()
 {
   if (!streaming_)
@@ -199,7 +201,7 @@ bool Cia402Hal::disable()
     refresh_feed(j, DriveAction::DISABLE, current_state(j));
   }
 
-  const Outcome result = walk_all("disable()", [this](std::size_t j) {
+  const Outcome result = walk_all("disable()", OnReadFailure::CARRY_ON, [this](std::size_t j) {
     const cia402::DeviceState state = current_state(j);
     freeze_in_quick_stop(j, state);
     const bool direct = drives_[j].walking == DriveAction::DISABLE_VOLTAGE;
@@ -518,15 +520,24 @@ void Cia402Hal::write_step(std::size_t j, cia402::DeviceState current, cia402::D
 }
 
 template <typename StepFn>
-Cia402Hal::Outcome Cia402Hal::walk_all(const char* what, StepFn step)
+Cia402Hal::Outcome Cia402Hal::walk_all(const char* what, OnReadFailure on_read_failure, StepFn step)
 {
   const auto deadline = Clock::now() + WALK_TIMEOUT;
+  bool received = true;
+  bool reported = false;
   while (Clock::now() < deadline)
   {
-    if (!exchange_read())
+    received = exchange_read();
+    if (!received && on_read_failure == OnReadFailure::STOP)
     {
       RCLCPP_ERROR(log(), "%s stopped: no process data received.", what);
       return Outcome::FAILED;
+    }
+    if (!received && !reported)
+    {
+      RCLCPP_ERROR(log(), "%s: no process data received. The controlwords go on, based on the states received last.",
+                   what);
+      reported = true;
     }
     bool all_done = true;
     for (std::size_t j = 0; j < drives_.size(); ++j)
@@ -543,11 +554,20 @@ Cia402Hal::Outcome Cia402Hal::walk_all(const char* what, StepFn step)
       RCLCPP_ERROR(log(), "%s stopped: the process data could not be sent.", what);
       return Outcome::FAILED;
     }
-    if (all_done)
+    if (all_done && received)
     {
       return Outcome::DONE;
     }
+    if (all_done)
+    {
+      break;
+    }
     std::this_thread::sleep_for(period_);
+  }
+  if (!received)
+  {
+    RCLCPP_ERROR(log(), "%s ends without process data, so the states of the drives are not confirmed.", what);
+    return Outcome::FAILED;
   }
   return Outcome::TIMED_OUT;
 }
