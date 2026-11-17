@@ -89,8 +89,9 @@ inline constexpr CoeAddress FOLLOWING_ERROR_REACTION{ 0x2017, 1 };
 /// @}
 }  // namespace coe
 
-/// @brief The two quick stop option codes (0x605A) that give a controlled stop. The other codes take the power off
-/// at once or brake by shorting the motor.
+/// @brief The two quick stop option codes (0x605A) that give a controlled stop. SOMANET firmware offers 0, 2, 6 and 9,
+/// and only 2 and 6 ramp: 0 takes the power off at once, 9 brakes by shorting the motor. CiA 402 also defines ramped
+/// stops with the codes 1 and 5, which SOMANET firmware does not offer.
 enum class QuickStopReaction : int
 {
   RAMP_THEN_DISABLE = 2,  ///< Brake on the ramp, then switch off.

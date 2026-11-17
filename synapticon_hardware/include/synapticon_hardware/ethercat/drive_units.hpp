@@ -54,7 +54,7 @@ bool unit_free(CoeAddress object);
 bool defines_units(CoeAddress object);
 
 /// One `sdo_si:` entry of a slave_config: a value in SI units, converted at bring-up and written after the units were
-/// read.
+/// read. The value is in the drive's own direction, a joint's `invert` does not apply to it.
 struct SiSdo
 {
   CoeAddress object{ 0, 0 };

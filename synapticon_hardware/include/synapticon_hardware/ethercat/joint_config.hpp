@@ -46,7 +46,7 @@ struct JointConfig
   /// True when missing. False: the drive is brought up and read, but never powered.
   bool energize{ true };
   /// False when missing. True for a drive mounted in reverse: position, velocity and torque change sign on the way
-  /// between joint and drive. Gains and limits do not.
+  /// between joint and drive. Gains, limits and the `sdo_si:` values of the slave_config do not.
   bool invert{ false };
 };
 

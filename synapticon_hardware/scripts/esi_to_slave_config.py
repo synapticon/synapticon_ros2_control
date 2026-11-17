@@ -172,6 +172,7 @@ commissioning of the drive. To set it at every bring-up, enable its sdo_si entry
 commissioning goes into 'sdo_si' with si_value in SI units: bring-up reads the drive's units first and
 converts it. Velocities and positions are on the shaft of the position encoder. Torques are in Nm at the
 motor, as the drive counts them in thousandths of the motor's rated torque (0x6076).
+The values are in the drive's own direction: the joint's 'invert' does not apply to them.
 Any other object in 'sdo' needs 'raw: true' to say the value is meant as written.
 """,
     "impedance": """\
