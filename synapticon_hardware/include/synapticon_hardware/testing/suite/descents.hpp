@@ -33,6 +33,7 @@ TEST_F(SingleDrive, TheRampedDisableCutsOnlyOnceStopped)
 {
   ASSERT_TRUE(start({ .quick_stop_deceleration = 2.0 }));
   ASSERT_NO_FATAL_FAILURE(energize());
+  limit_travel(0.6);
   run_at(0.8, 0.3);
   limit_travel(1.2);
   act(DriveAction::DISABLE);
@@ -53,6 +54,7 @@ TEST_F(SingleDrive, TheLifecycleDisableCutsOnlyOnceStopped)
 {
   ASSERT_TRUE(start({ .quick_stop_deceleration = 2.0 }));
   ASSERT_NO_FATAL_FAILURE(energize());
+  limit_travel(0.6);
   run_at(0.8, 0.3);
   EXPECT_TRUE(drive_->disable());
   sample();
@@ -67,6 +69,7 @@ TEST_F(SingleDrive, TheLifecycleDisableKeepsADisableVoltageInProgress)
   // the drive only sees the later frame, so disable() must keep the direct route, not ramp.
   ASSERT_TRUE(start({ .quick_stop_deceleration = 2.0 }));
   ASSERT_NO_FATAL_FAILURE(energize());
+  limit_travel(0.5);
   run_at(0.5, 0.3);
   limit_travel(0.5);
   setpoint_.drive_action = DriveAction::DISABLE_VOLTAGE;
@@ -86,6 +89,7 @@ TEST_F(SingleDrive, DisableVoltageCutsAtOnce)
 {
   ASSERT_TRUE(start({ .quick_stop_deceleration = 2.0 }));
   ASSERT_NO_FATAL_FAILURE(energize());
+  limit_travel(0.5);
   run_at(0.5, 0.3);
   limit_travel(0.3);
   act(DriveAction::DISABLE_VOLTAGE);

@@ -198,6 +198,7 @@ TEST_F(SingleDrive, AQuickStoppedDriveIgnoresSetpointsUntilEnabled)
   ASSERT_TRUE(start({ .quick_stop_deceleration = 20.0 }));
   EXPECT_TRUE(drive_->forwarding_setpoints(0));
   ASSERT_NO_FATAL_FAILURE(energize());
+  limit_travel(0.5);
   EXPECT_TRUE(drive_->forwarding_setpoints(0));
   run_at(0.5, 0.3);
   limit_travel(0.5);

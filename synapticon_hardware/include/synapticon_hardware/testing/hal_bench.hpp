@@ -573,6 +573,7 @@ protected:
     for (int attempt = 0; attempt < 3 && !tested; ++attempt)
     {
       ASSERT_NO_FATAL_FAILURE(energize());
+      limit_travel(0.6);
       ASSERT_NO_FATAL_FAILURE(run_at(0.8, 0.3));
       limit_travel(1.2);
       ASSERT_NO_FATAL_FAILURE(act(DriveAction::QUICK_STOP));

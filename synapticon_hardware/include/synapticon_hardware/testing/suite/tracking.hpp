@@ -123,6 +123,7 @@ TEST_F(SingleDrive, CsvQuickStopFromMotionStops)
 {
   ASSERT_TRUE(start({ .mode = CSV_MODE }));
   ASSERT_NO_FATAL_FAILURE(energize());
+  limit_travel(0.6);
   const double v = 0.5 * sign_;
   for (int i = 0; i < cycles(0.4); ++i)
   {
@@ -130,7 +131,6 @@ TEST_F(SingleDrive, CsvQuickStopFromMotionStops)
     tick();
   }
   const double p_request = reading_.position;
-  limit_travel(0.6);
   act(DriveAction::QUICK_STOP);
   tick(cycles(0.3));
   const double p_stopped = reading_.position;

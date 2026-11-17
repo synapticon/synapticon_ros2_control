@@ -224,6 +224,7 @@ The suite lives in `synapticon_hardware`, as headers for test executables:
 - `testing/cia402_hal_tests.hpp` pulls in the tests, by topic, from `testing/suite/`.
 
 A test asks for its drive settings in `start()`, for example `start({ .quick_stop_deceleration = 2.0 })`.
+A test that moves the joint arms the watchdog with `limit_travel()` right after `energize()`, before the first motion.
 It uses the HAL only through `Cia402Hal`.
 
 Each HAL brings a `HalBench`, which applies the settings in its own way.

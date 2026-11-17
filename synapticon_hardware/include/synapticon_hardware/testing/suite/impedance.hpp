@@ -60,6 +60,7 @@ TEST_F(SingleDrive, ImpedanceQuickStopFromMotionStops)
   setpoint_.stiffness = test_gains(0).stiffness;
   setpoint_.damping = test_gains(0).damping;
   ASSERT_NO_FATAL_FAILURE(energize());
+  limit_travel(0.8);
   run_at(0.5, 0.8);
   const double p_request = reading_.position;
   limit_travel(0.6);
@@ -82,6 +83,7 @@ TEST_F(SingleDrive, ImpedanceWithoutTheHoldStopsAtTheLastForwardedTarget)
   setpoint_.stiffness = test_gains(0).stiffness;
   setpoint_.damping = test_gains(0).damping;
   ASSERT_NO_FATAL_FAILURE(energize());
+  limit_travel(0.8);
   run_at(0.5, 0.8);
   const double last_forwarded = setpoint_.position;  // the request's own cycle is not forwarded
   limit_travel(0.6);
@@ -102,6 +104,7 @@ TEST_F(SingleDrive, ImpedanceRampedDisableFromMotionStops)
   setpoint_.stiffness = test_gains(0).stiffness;
   setpoint_.damping = test_gains(0).damping;
   ASSERT_NO_FATAL_FAILURE(energize());
+  limit_travel(0.8);
   run_at(0.5, 0.8);
   const double p_request = reading_.position;
   limit_travel(0.6);
@@ -127,6 +130,7 @@ TEST_F(SingleDrive, ImpedanceQuickStopWithOptionCodeTwoStopsThenDeEnergises)
   setpoint_.stiffness = test_gains(0).stiffness;
   setpoint_.damping = test_gains(0).damping;
   ASSERT_NO_FATAL_FAILURE(energize());
+  limit_travel(0.8);
   run_at(0.5, 0.8);
   const double p_request = reading_.position;
   limit_travel(0.6);

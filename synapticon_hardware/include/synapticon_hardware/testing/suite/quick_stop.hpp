@@ -71,6 +71,7 @@ TEST_F(SingleDrive, QuickStopRampsAtTheConfiguredDeceleration)
   for (int attempt = 0; attempt < 3 && std::isnan(slope); ++attempt)
   {
     ASSERT_NO_FATAL_FAILURE(energize());
+    limit_travel(0.6);
     ASSERT_NO_FATAL_FAILURE(run_at(0.8, 0.3));
     limit_travel(1.2);
     ASSERT_NO_FATAL_FAILURE(act(DriveAction::QUICK_STOP));
@@ -94,6 +95,7 @@ TEST_F(SingleDrive, QuickStopHoldsWhileTheMotionControllerKeepsStreaming)
   for (int attempt = 0; attempt < 3 && !tested; ++attempt)
   {
     ASSERT_NO_FATAL_FAILURE(energize());
+    limit_travel(0.6);
     ASSERT_NO_FATAL_FAILURE(run_at(0.8, 0.3));
     const double last_forwarded = setpoint_.position;  // the request's own cycle is not forwarded
     limit_travel(1.2);
@@ -151,6 +153,7 @@ TEST_F(SingleDrive, QuickStopWithOptionCodeTwoStopsThenDeEnergises)
 {
   ASSERT_TRUE(start({ .quick_stop_option_code = 2, .quick_stop_deceleration = 2.0 }));
   ASSERT_NO_FATAL_FAILURE(energize());
+  limit_travel(0.5);
   run_at(0.5, 0.3);
   const double p_request = reading_.position;
   limit_travel(0.6);
