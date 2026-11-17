@@ -22,6 +22,7 @@
 #include <gtest/gtest.h>
 
 #include "synapticon_hardware/cia402/cia402_hal.hpp"
+#include "../log_capture.hpp"
 
 namespace
 {
@@ -633,6 +634,23 @@ TEST(Cia402HalFailures, IsEnabledFollowsTheDrives)
   drives.report(0, OPERATION_ENABLED);
   ASSERT_TRUE(drives.cycle(DriveAction::NONE));
   EXPECT_TRUE(drives.is_enabled());
+}
+
+/// disable() says once that the drives have no power: when it took one down, not again when all were down already.
+TEST(Cia402HalFailures, DisableLogsTheEndOfTheWayDownOnlyWhenItTookADriveDown)
+{
+  const synapticon_hardware::test::LogCapture log;
+  ScriptedDrives drives({ true });
+  ASSERT_TRUE(drives.start());
+  drives.report(OPERATION_ENABLED);
+  ASSERT_TRUE(drives.enable());
+  drives.follow_controlword(0);
+  ASSERT_TRUE(drives.disable());
+  EXPECT_FALSE(drives.is_enabled());
+  EXPECT_EQ(log.count("have no power now"), 1u);
+  EXPECT_TRUE(drives.disable());
+  EXPECT_TRUE(drives.disable());
+  EXPECT_EQ(log.count("have no power now"), 1u);
 }
 
 /// A repeated enable() walks the drives again: it cancels a running stop and lets the setpoints through again.

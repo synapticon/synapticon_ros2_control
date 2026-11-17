@@ -190,7 +190,7 @@ bool Cia402Hal::write(const std::vector<DriveCommand>& commands)
 /// is ramped, except for a joint that is already on the direct way of a disable_voltage. Only joints with energize
 /// are waited for: a monitored joint left in Fault must not block, and Fault has no power anyway. A failed read does
 /// not stop the way down: the controlwords go out every cycle on the states received last, and disable() returns
-/// false when the last read failed.
+/// false when the last read failed. The closing log line comes only when a drive had to be taken down.
 bool Cia402Hal::disable()
 {
   if (!streaming_)
@@ -204,7 +204,8 @@ bool Cia402Hal::disable()
     refresh_feed(j, DriveAction::DISABLE, current_state(j));
   }
 
-  const Outcome result = walk_all("disable()", OnReadFailure::CARRY_ON, [this](std::size_t j) {
+  bool taken_down = false;  // a drive was not down yet
+  const Outcome result = walk_all("disable()", OnReadFailure::CARRY_ON, [this, &taken_down](std::size_t j) {
     const cia402::DeviceState state = current_state(j);
     freeze_in_quick_stop(j, state);
     const bool direct = drives_[j].walking == DriveAction::DISABLE_VOLTAGE;
@@ -213,6 +214,7 @@ bool Cia402Hal::disable()
     // Not Ready to Switch On has no power and moves on to Switch On Disabled by itself, so it counts as down.
     const bool down = cia402::reached(state, cia402::DeviceState::SWITCH_ON_DISABLED) ||
                       state == cia402::DeviceState::NOT_READY_TO_SWITCH_ON;
+    taken_down = taken_down || !down;
     return down || !drives_[j].settings.energize ? Progress::DONE : Progress::PENDING;
   });
   if (result == Outcome::FAILED)
@@ -234,7 +236,10 @@ bool Cia402Hal::disable()
                   drives_[j].settings.name.c_str(), error_code(j));
     }
   }
-  RCLCPP_INFO(log(), "disable() finished, the %zu drive(s) have no power now.", drives_.size());
+  if (taken_down)
+  {
+    RCLCPP_INFO(log(), "disable() finished, the %zu drive(s) have no power now.", drives_.size());
+  }
   return true;
 }
 
