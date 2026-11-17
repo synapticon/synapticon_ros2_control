@@ -56,6 +56,7 @@ public:
   void healthy_drive(uint16_t position = 0)
   {
     put(coe::POSITION_ENCODER, 1, position);
+    put(coe::COMMUTATION_ENCODER, 1, position);
     put(coe::ENCODER_1_RESOLUTION, 4096, position);
     put(coe::VELOCITY_UNIT, 0x00B44700, position);  // rev/min
     put(coe::FEED_CONSTANT_FEED, FEED_CONSTANT_DISABLED, position);
@@ -202,6 +203,69 @@ TEST_F(DriveChecks, ReadsTheSiFactorsFromTheDrive)
   EXPECT_NEAR(si(Unit::MOTOR_TORQUE), 1e-3, 1e-15);  // a thousandth of 1 Nm
 }
 
+/// With the position counted on the motor shaft, the drive ignores its gear ratio, and so does the effort state.
+TEST_F(DriveChecks, GivesTheTorqueAtTheMotorWhenThePositionIsCountedThere)
+{
+  ASSERT_TRUE(check({ joint() }));
+  EXPECT_DOUBLE_EQ(si(Unit::SHAFT_TORQUE), si(Unit::MOTOR_TORQUE));
+}
+
+/// With the position counted behind the gear, the effort state is the motor torque times the gear ratio.
+TEST_F(DriveChecks, GivesTheTorqueBehindTheGearWhenThePositionIsCountedThere)
+{
+  drives_.healthy_drive();
+  drives_.put(coe::POSITION_ENCODER, 2);
+  drives_.put(coe::ENCODER_2_RESOLUTION, 1000);
+  drives_.put(coe::RATED_TORQUE, 774);
+  drives_.put(coe::GEAR_MOTOR_REVOLUTIONS, 775);
+  drives_.put(coe::GEAR_SHAFT_REVOLUTIONS, 100);
+  ASSERT_TRUE(check({ joint() }, false));
+  EXPECT_NEAR(si(Unit::MOTOR_TORQUE), 0.774e-3, 1e-15);
+  EXPECT_NEAR(si(Unit::SHAFT_TORQUE), 0.774e-3 * 7.75, 1e-15);
+}
+
+TEST_F(DriveChecks, TakesAGearRatioOfOneToOneAsNoGear)
+{
+  drives_.healthy_drive();
+  drives_.put(coe::POSITION_ENCODER, 2);
+  drives_.put(coe::ENCODER_2_RESOLUTION, 1000);
+  drives_.put(coe::GEAR_MOTOR_REVOLUTIONS, 3);
+  drives_.put(coe::GEAR_SHAFT_REVOLUTIONS, 3);
+  drives_.drop(coe::COMMUTATION_ENCODER);  // not needed without a gear
+  ASSERT_TRUE(check({ joint() }, false));
+  EXPECT_DOUBLE_EQ(si(Unit::SHAFT_TORQUE), si(Unit::MOTOR_TORQUE));
+}
+
+TEST_F(DriveChecks, TakesADriveWithoutAGearRatioAsUngeared)
+{
+  drives_.healthy_drive();
+  drives_.put(coe::POSITION_ENCODER, 2);
+  drives_.put(coe::ENCODER_2_RESOLUTION, 1000);
+  drives_.drop(coe::GEAR_MOTOR_REVOLUTIONS);
+  drives_.drop(coe::GEAR_SHAFT_REVOLUTIONS);
+  ASSERT_TRUE(check({ joint() }, false));
+  EXPECT_DOUBLE_EQ(si(Unit::SHAFT_TORQUE), si(Unit::MOTOR_TORQUE));
+}
+
+/// A gear ratio of 0 is no ratio at all: the torque on the position shaft stays unknown.
+TEST_F(DriveChecks, RefusesAGearRatioWithAZero)
+{
+  for (const CoeAddress zeroed : { coe::GEAR_MOTOR_REVOLUTIONS, coe::GEAR_SHAFT_REVOLUTIONS })
+  {
+    drives_.healthy_drive();
+    drives_.put(zeroed, 0);
+    EXPECT_FALSE(check({ joint() }, false));
+  }
+}
+
+/// Behind a gear, the encoders tell whether the drive applies the ratio. Unreadable, the torque stays unknown.
+TEST_F(DriveChecks, RefusesAGearedDriveWhoseCommutationEncoderCannotBeRead)
+{
+  drives_.healthy_drive();
+  drives_.drop(coe::COMMUTATION_ENCODER);
+  EXPECT_FALSE(check({ joint() }, false));
+}
+
 TEST_F(DriveChecks, ReadsThePositionResolutionOfTheSecondEncoderWhenItFeedsThePosition)
 {
   drives_.healthy_drive();
@@ -249,7 +313,8 @@ INSTANTIATE_TEST_SUITE_P(Cases, MissingFactor,
                          ::testing::Values(MissingFactorCase{ "EncoderSource", coe::POSITION_ENCODER },
                                            MissingFactorCase{ "EncoderResolution", coe::ENCODER_1_RESOLUTION },
                                            MissingFactorCase{ "VelocityUnit", coe::VELOCITY_UNIT },
-                                           MissingFactorCase{ "RatedTorque", coe::RATED_TORQUE }),
+                                           MissingFactorCase{ "RatedTorque", coe::RATED_TORQUE },
+                                           MissingFactorCase{ "GearShaftTurns", coe::GEAR_SHAFT_REVOLUTIONS }),
                          [](const auto& info) { return std::string(info.param.name); });
 
 /// One joint without its scaling refuses the bring-up of all.
@@ -261,7 +326,7 @@ TEST_F(DriveChecks, OneUnscaledJointRefusesAll)
   EXPECT_FALSE(check({ joint(0), joint(1) }, false));
 }
 
-/// An inverted joint flips position, velocity and both torques, but not the gains or the torque limit.
+/// An inverted joint flips position, velocity and the torques, but not the gains or the torque limit.
 TEST_F(DriveChecks, NegatesTheDirectedFactorsOfAnInvertedJoint)
 {
   JointConfig inverted = joint();
@@ -270,6 +335,7 @@ TEST_F(DriveChecks, NegatesTheDirectedFactorsOfAnInvertedJoint)
   EXPECT_LT(si(Unit::ANGLE), 0.0);
   EXPECT_LT(si(Unit::ANGULAR_VELOCITY), 0.0);
   EXPECT_LT(si(Unit::MOTOR_TORQUE), 0.0);
+  EXPECT_LT(si(Unit::SHAFT_TORQUE), 0.0);
   EXPECT_LT(si(Unit::OUTPUT_TORQUE), 0.0);
   EXPECT_GT(si(Unit::STIFFNESS), 0.0);
   EXPECT_GT(si(Unit::TORQUE_LIMIT), 0.0);

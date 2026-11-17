@@ -216,6 +216,55 @@ std::optional<double> torque_factor(const SdoReader& sdo, const rclcpp::Logger& 
   return *source == UnitSource::DRIVE ? *rated_mnm / 1.0e6 : *given / 1000.0;
 }
 
+/// @brief The motor turns per turn of the position shaft, by which the drive's torque at the motor becomes torque on
+/// the position shaft.
+///
+/// The drive scales velocities to the shaft of its position encoder with the gear ratio 0x6091, unless the position
+/// encoder is the commutation encoder on the motor shaft: then it ignores the ratio. A drive without 0x6091 has no
+/// ratio. Nothing, with a warning, when the ratio is 0, cannot be read, or the two encoders cannot be read to tell
+/// whether the drive applies it.
+std::optional<double> position_shaft_ratio(const SdoReader& sdo, const rclcpp::Logger& logger, const JointConfig& joint)
+{
+  uint32_t abort_code = 0;
+  const auto motor_bytes =
+      upload(sdo, logger, joint.position, coe::GEAR_MOTOR_REVOLUTIONS, sizeof(uint32_t), &abort_code);
+  if (!motor_bytes && abort_code == ABORT_NO_OBJECT)
+  {
+    return 1.0;
+  }
+  const auto shaft_read = read_u32(sdo, logger, joint.position, coe::GEAR_SHAFT_REVOLUTIONS);
+  const uint32_t motor_turns = motor_bytes ? unsigned_value(*motor_bytes) : 0;
+  const uint32_t shaft_turns = shaft_read.value_or(0);
+  if (motor_turns == 0 || shaft_turns == 0)
+  {
+    const std::string ratio = motor_bytes && shaft_read ?
+                                  std::to_string(motor_turns) + ":" + std::to_string(shaft_turns) :
+                                  std::string("not readable");
+    RCLCPP_WARN(logger, "Joint '%s': its gear ratio (0x6091) is %s, so its torque on the position shaft is unknown.",
+                joint.name.c_str(), ratio.c_str());
+    return std::nullopt;
+  }
+  if (motor_turns == shaft_turns)
+  {
+    return 1.0;
+  }
+  const auto position_encoder = read_u32(sdo, logger, joint.position, coe::POSITION_ENCODER);
+  const auto commutation_encoder = read_u32(sdo, logger, joint.position, coe::COMMUTATION_ENCODER);
+  if (!position_encoder || !commutation_encoder)
+  {
+    RCLCPP_WARN(logger,
+                "Joint '%s': whether the drive applies its gear ratio %u:%u (0x6091) depends on its encoders (0x2012:9 "
+                "and 0x2010:12), which cannot be read. Its torque on the position shaft is unknown.",
+                joint.name.c_str(), motor_turns, shaft_turns);
+    return std::nullopt;
+  }
+  if (*position_encoder == *commutation_encoder)
+  {
+    return 1.0;  // the position is counted on the motor shaft
+  }
+  return static_cast<double>(motor_turns) / shaft_turns;
+}
+
 /// True when the feed constant (0x6092:1) is disabled, so that positions are counts and velocities revolutions. A
 /// drive without the object has no feed constant.
 bool feed_constant_disabled(const SdoReader& sdo, const rclcpp::Logger& logger, const JointConfig& joint,
@@ -299,34 +348,34 @@ void seed_command_values(const SdoReader& sdo, const rclcpp::Logger& logger, con
   }
 }
 
-/// Log the factors of `joint` in one line, with the gear ratio for information.
-void log_scaling(const SdoReader& sdo, const rclcpp::Logger& logger, const JointConfig& joint, const SiFactors& f)
+/// Log the factors of `joint` in one line.
+void log_scaling(const rclcpp::Logger& logger, const JointConfig& joint, const SiFactors& f)
 {
-  const auto motor_turns = read_u32(sdo, logger, joint.position, coe::GEAR_MOTOR_REVOLUTIONS);
-  const auto output_turns = read_u32(sdo, logger, joint.position, coe::GEAR_SHAFT_REVOLUTIONS);
-  std::string gear = "gear ratio not readable";
-  if (motor_turns && output_turns && *output_turns != 0)
-  {
-    gear = "gear ratio " + std::to_string(*motor_turns) + ":" + std::to_string(*output_turns) + " (information only)";
-  }
-  RCLCPP_INFO(logger, "Joint '%s': one raw step on the motor side is %.6e Nm, %.6e rad/s and %.6e rad, %s%s.",
-              joint.name.c_str(), si_factor(f, Unit::MOTOR_TORQUE), si_factor(f, Unit::ANGULAR_VELOCITY),
-              si_factor(f, Unit::ANGLE), gear.c_str(), joint.invert ? ", mounted in reverse" : "");
+  RCLCPP_INFO(logger,
+              "Joint '%s': one raw step is %.6e rad and %.6e rad/s on the position shaft, and %.6e Nm at the motor, "
+              "%.6e Nm on the position shaft%s.",
+              joint.name.c_str(), si_factor(f, Unit::ANGLE), si_factor(f, Unit::ANGULAR_VELOCITY),
+              si_factor(f, Unit::MOTOR_TORQUE), si_factor(f, Unit::SHAFT_TORQUE),
+              joint.invert ? ", mounted in reverse" : "");
 }
 
 /// Fill the unit factors and the first streamed values of `joint` into `readback`. True when the drive gave the
-/// factors of torque, velocity and position. A factor it did not give keeps its start value.
+/// factors of torque, at the motor and on the position shaft, velocity and position. A factor it did not give keeps
+/// its start value.
 bool read_scaling(const SdoReader& sdo, const rclcpp::Logger& logger, const JointConfig& joint,
                   const UnitOverrides& overrides, DriveReadback& readback)
 {
   const bool counts_and_revolutions = feed_constant_disabled(sdo, logger, joint, overrides);
   const auto torque = torque_factor(sdo, logger, joint, overrides);
+  const auto ratio = position_shaft_ratio(sdo, logger, joint);
+  const auto shaft_torque = torque && ratio ? std::optional(*torque * *ratio) : std::nullopt;
   const auto velocity = counts_and_revolutions ? velocity_factor(sdo, logger, joint, overrides) : std::nullopt;
   const auto angle = counts_and_revolutions ? position_factor(sdo, logger, joint, overrides) : std::nullopt;
 
   SiFactors& f = readback.si_factors;
   const std::pair<Unit, std::optional<double>> found[] = {
     { Unit::MOTOR_TORQUE, torque },
+    { Unit::SHAFT_TORQUE, shaft_torque },
     { Unit::ANGULAR_VELOCITY, velocity },
     { Unit::ANGLE, angle },
   };
@@ -337,17 +386,18 @@ bool read_scaling(const SdoReader& sdo, const rclcpp::Logger& logger, const Join
       si_factor(f, unit) = *value;
     }
   }
-  // Reverse mounting negates the factors of the four signed quantities below.
+  // Reverse mounting negates the factors of the five signed quantities below.
   if (joint.invert)
   {
-    for (const Unit directed : { Unit::OUTPUT_TORQUE, Unit::MOTOR_TORQUE, Unit::ANGULAR_VELOCITY, Unit::ANGLE })
+    for (const Unit directed :
+         { Unit::OUTPUT_TORQUE, Unit::MOTOR_TORQUE, Unit::SHAFT_TORQUE, Unit::ANGULAR_VELOCITY, Unit::ANGLE })
     {
       si_factor(f, directed) = -si_factor(f, directed);
     }
   }
   seed_command_values(sdo, logger, joint, readback);
-  log_scaling(sdo, logger, joint, f);
-  return torque && velocity && angle;
+  log_scaling(logger, joint, f);
+  return torque && shaft_torque && velocity && angle;
 }
 
 /// Decide what a missing unit factor means. A joint that may be powered stops the bring-up (false). A joint that is
@@ -547,7 +597,7 @@ void log_stopping_setup(const SdoReader& sdo, const rclcpp::Logger& logger, cons
     if (deceleration && readback[j].units_known)
     {
       readback[j].quick_stop_deceleration = *deceleration * step;
-      std::snprintf(ramp, sizeof(ramp), "quick stop ramp %.4g rad/s^2 at the motor (0x6085 = %u)",
+      std::snprintf(ramp, sizeof(ramp), "quick stop ramp %.4g rad/s^2 on the position shaft (0x6085 = %u)",
                     readback[j].quick_stop_deceleration, *deceleration);
     }
 
@@ -688,9 +738,10 @@ bool write_si_entries(const SdoReader& reader, const SdoWriter& writer, const rc
       }
       else
       {
-        RCLCPP_INFO(logger, "Joint '%s': 0x%04X:%u = %lld for %.6g %s at the motor (sdo_si).", joints[j].name.c_str(),
+        const bool torque = entry.quantity == SiQuantity::TORQUE;
+        RCLCPP_INFO(logger, "Joint '%s': 0x%04X:%u = %lld for %.6g %s %s (sdo_si).", joints[j].name.c_str(),
                     entry.object.index, entry.object.subindex, static_cast<long long>(*raw), entry.value,
-                    si_unit_name(entry.quantity));
+                    si_unit_name(entry.quantity), torque ? "at the motor" : "on the position shaft");
       }
     }
   }

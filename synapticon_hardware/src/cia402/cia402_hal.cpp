@@ -31,9 +31,9 @@ using Clock = std::chrono::steady_clock;
 // Time limit for enable(), disable() and each drive action to get a drive to its target state.
 constexpr std::chrono::seconds WALK_TIMEOUT{ 5 };
 
-// Standstill: the speed (rad/s, motor side) stays below REST_SPEED for REST_TIME. A single slow sample is not enough,
-// because the speed passes zero when a drive overshoots. On a ramped stop the power goes off at standstill, or after
-// RAMP_WAIT_LIMIT in Quick Stop Active at the latest.
+// Standstill: the speed (rad/s, position shaft) stays below REST_SPEED for REST_TIME. A single slow sample is not
+// enough, because the speed passes zero when a drive overshoots. On a ramped stop the power goes off at standstill, or
+// after RAMP_WAIT_LIMIT in Quick Stop Active at the latest.
 constexpr double REST_SPEED = 0.1;
 constexpr std::chrono::milliseconds REST_TIME{ 50 };
 constexpr std::chrono::seconds RAMP_WAIT_LIMIT{ 3 };

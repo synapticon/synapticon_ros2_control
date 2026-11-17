@@ -86,7 +86,7 @@ protected:
   virtual uint16_t error_code(std::size_t joint) const = 0;
   /// Controlword sent one cycle ago.
   virtual uint16_t last_controlword(std::size_t joint) const = 0;
-  /// Absolute motor side speed in rad/s.
+  /// Absolute speed in rad/s, on the shaft of the position encoder.
   virtual double speed(std::size_t joint) const = 0;
   /// Measured position, in the same unit as the position targets that the transport sends.
   virtual double transport_position(std::size_t joint) const = 0;

@@ -102,7 +102,7 @@ struct DriveReadback
   std::optional<double> max_torque;
   /// The quick stop option code (0x605A). -1 if it could not be read.
   int quick_stop_option_code{ -1 };
-  /// The quick stop ramp in rad/s^2, motor side. NaN if it could not be read.
+  /// The quick stop ramp in rad/s^2, on the position shaft. NaN if it could not be read.
   double quick_stop_deceleration{ std::numeric_limits<double>::quiet_NaN() };
 };
 

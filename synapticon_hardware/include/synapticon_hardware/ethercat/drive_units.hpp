@@ -31,13 +31,14 @@ std::optional<double> velocity_step(uint32_t velocity_unit);
 /// revolutions.
 inline constexpr uint32_t FEED_CONSTANT_DISABLED = 0xFFFFFFFFu;
 
-/// What the value of a unit-dependent object is counted in. Each is on the motor side, like the drive's objects.
+/// What the value of a unit-dependent object is counted in. Velocities and positions are on the position shaft, the
+/// shaft of the position encoder, and torques at the motor, as in the drive's objects.
 enum class SiQuantity
 {
   VELOCITY,      ///< rad/s, one step of the velocity unit
   ACCELERATION,  ///< rad/s^2, one step of the velocity unit per second
   POSITION,      ///< rad, one count of the position encoder
-  TORQUE,        ///< Nm, a thousandth of the rated torque
+  TORQUE,        ///< Nm at the motor, a thousandth of the motor's rated torque
 };
 
 /// The SI unit of `quantity`, for messages.

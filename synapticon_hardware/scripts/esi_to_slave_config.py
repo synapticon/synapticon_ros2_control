@@ -120,7 +120,8 @@ PDO_LAYOUT = (
         PdoEntry(0x6061, 0, "mode the drive is running in", "mode_of_operation"),
         PdoEntry(0x6064, 0, "measured position", "position", scaled=True),
         PdoEntry(0x606C, 0, "measured velocity", "velocity", scaled=True),
-        PdoEntry(0x6077, 0, "measured torque", "effort", scaled=True),
+        PdoEntry(0x6077, 0, "measured motor torque, which the HAL gives on the shaft of the position encoder",
+                 "effort", scaled=True),
         PdoEntry(0x603F, 0, "code of the last error", "error_code"),
     )),
     # Diagnostics. These objects are in no predefined PDO, they come from the object dictionary.
@@ -141,8 +142,8 @@ PDO_LAYOUT = (
 
 STARTUP_SDOS = (
     StartupSdo(0x605A, 0, "int16", 6, "quick stop option code"),
-    StartupSdo(0x6085, 0, "uint32", 200.0, "quick stop deceleration in rad/s^2 at the motor, see the note on 0x605A",
-               active=False, si=True),
+    StartupSdo(0x6085, 0, "uint32", 200.0, "quick stop deceleration in rad/s^2 on the position shaft, see the note "
+               "on 0x605A", active=False, si=True),
     StartupSdo(0x2060, 3, "real32", 1.0, "gain of the inner torque loop", variants=IMPEDANCE_ONLY),
     StartupSdo(0x2150, 1, "uint8", 1, "torque sensor type, see the impedance note", active=False,
                variants=IMPEDANCE_ONLY),
@@ -168,8 +169,10 @@ Bring-up reads 0x605A back, and the quick stop deceleration 0x6085 too. This fil
 commissioning of the drive. To set it at every bring-up, enable its sdo_si entry below.
 
 'sdo' holds values without a unit, written as they are. An object whose unit depends on the drive's
-commissioning goes into 'sdo_si' with si_value in SI units at the motor: bring-up reads the drive's
-units first and converts it. Any other object in 'sdo' needs 'raw: true' to say the value is meant as written.
+commissioning goes into 'sdo_si' with si_value in SI units: bring-up reads the drive's units first and
+converts it. Velocities and positions are on the shaft of the position encoder. Torques are in Nm at the
+motor, as the drive counts them in thousandths of the motor's rated torque (0x6076).
+Any other object in 'sdo' needs 'raw: true' to say the value is meant as written.
 """,
     "impedance": """\
 Impedance mode:

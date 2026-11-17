@@ -39,13 +39,16 @@ inline constexpr CoeAddress VELOCITY_UNIT{ 0x60A9, 0 };
 inline constexpr CoeAddress FEED_CONSTANT_FEED{ 0x6092, 1 };
 /// Number 1 or 2: the encoder whose count is the position. It replaces 0x608F, which SOMANET does not have.
 inline constexpr CoeAddress POSITION_ENCODER{ 0x2012, 9 };
+/// Number 1 or 2: the encoder for commutation and torque control, which sits on the motor shaft.
+inline constexpr CoeAddress COMMUTATION_ENCODER{ 0x2010, 12 };
 /// Counts per turn of encoder 1.
 inline constexpr CoeAddress ENCODER_1_RESOLUTION{ 0x2110, 3 };
 /// Counts per turn of encoder 2.
 inline constexpr CoeAddress ENCODER_2_RESOLUTION{ 0x2112, 3 };
-/// Motor turns of the gear ratio. Only logged, the states stay on the motor side.
+/// UDINT, motor turns of the gear ratio between the motor and the position shaft. The drive scales velocities to the
+/// position shaft with it, unless the position encoder is the commutation encoder. Torque values stay at the motor.
 inline constexpr CoeAddress GEAR_MOTOR_REVOLUTIONS{ 0x6091, 1 };
-/// Output turns of the gear ratio. Only logged.
+/// UDINT, position shaft turns of the gear ratio.
 inline constexpr CoeAddress GEAR_SHAFT_REVOLUTIONS{ 0x6091, 2 };
 /// @}
 
@@ -75,7 +78,7 @@ inline constexpr CoeAddress SOFTWARE_VERSION{ 0x100A, 0 };
 /// @{
 /// INT16, what the drive does on a quick stop. See QuickStopReaction.
 inline constexpr CoeAddress QUICK_STOP_OPTION{ 0x605A, 0 };
-/// UDINT, the quick stop ramp in velocity units (0x60A9) per second.
+/// UDINT, the quick stop ramp in velocity units (0x60A9) per second, on the position shaft.
 inline constexpr CoeAddress QUICK_STOP_DECELERATION{ 0x6085, 0 };
 /// UDINT, the allowed following error in increments.
 inline constexpr CoeAddress FOLLOWING_ERROR_WINDOW{ 0x6065, 0 };

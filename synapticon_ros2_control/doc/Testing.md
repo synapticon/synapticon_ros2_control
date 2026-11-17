@@ -263,7 +263,7 @@ A Ctrl-C during the bring-up ends `hold` and `move` before the drive gets power.
    ```
 
    Three things show that the drive is fine.
-   The log names the units it read from the drive ("one raw step on the motor side").
+   The log names the units it read from the drive ("one raw step is").
    The printed position, in rad, follows your hand.
    And the statusword says Switch On Disabled: in its low byte, bit 6 is set and bits 0 to 3 are clear.
 

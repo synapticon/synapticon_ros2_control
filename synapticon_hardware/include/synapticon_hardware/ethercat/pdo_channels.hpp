@@ -29,17 +29,21 @@ namespace synapticon_hardware::ethercat
 
 /// @brief What one raw step of a channel is worth. Multiplying by the unit's factor gives the SI value.
 ///
-/// Three units depend on the drive and get their factor at bring-up: ANGLE (one encoder count), ANGULAR_VELOCITY
-/// (one step of 0x60A9) and MOTOR_TORQUE (a thousandth of the rated torque). The others are fixed milli units:
-/// OUTPUT_TORQUE is mNm at the output shaft (0x2052, 0x2053), STIFFNESS mNm/rad, DAMPING mNm s/rad, TORQUE_LIMIT mNm,
-/// VOLTAGE mV and CURRENT mA. TEMPERATURE is taken as a thousandth of a degree C, since the ESI gives no unit.
-/// RAW values pass unchanged. COUNT is the number of units, used as an array size.
+/// Four units depend on the drive and get their factor at bring-up. ANGLE (one count of the position encoder) and
+/// ANGULAR_VELOCITY (one step of 0x60A9) are on the position shaft: the shaft of the encoder that counts the
+/// position, to which the drive scales velocities with its gear ratio 0x6091. MOTOR_TORQUE is a thousandth of the
+/// motor's rated torque 0x6076, at the motor. SHAFT_TORQUE is the same step on the position shaft, that is times the
+/// gear ratio the drive applies. The others are fixed milli units: OUTPUT_TORQUE is mNm at the output shaft (0x2052,
+/// 0x2053), STIFFNESS mNm/rad, DAMPING mNm s/rad, TORQUE_LIMIT mNm, VOLTAGE mV and CURRENT mA. TEMPERATURE is taken
+/// as a thousandth of a degree C, since the ESI gives no unit. RAW values pass unchanged. COUNT is the number of
+/// units, used as an array size.
 enum class Unit : std::size_t
 {
   RAW,
   ANGLE,
   ANGULAR_VELOCITY,
   MOTOR_TORQUE,
+  SHAFT_TORQUE,
   OUTPUT_TORQUE,
   STIFFNESS,
   DAMPING,
@@ -50,7 +54,7 @@ enum class Unit : std::size_t
   COUNT
 };
 
-/// One factor per Unit, for one joint. All are on the motor side, except OUTPUT_TORQUE.
+/// One factor per Unit, for one joint.
 using SiFactors = std::array<double, static_cast<std::size_t>(Unit::COUNT)>;
 
 /// The factor that `factors` holds for `unit`.
@@ -71,7 +75,8 @@ constexpr SiFactors unread_si_factors()
 {
   SiFactors factors{};
   factors.fill(1.0e-3);
-  for (const Unit read_from_drive : { Unit::RAW, Unit::ANGLE, Unit::ANGULAR_VELOCITY, Unit::MOTOR_TORQUE })
+  for (const Unit read_from_drive :
+       { Unit::RAW, Unit::ANGLE, Unit::ANGULAR_VELOCITY, Unit::MOTOR_TORQUE, Unit::SHAFT_TORQUE })
   {
     factors[static_cast<std::size_t>(read_from_drive)] = 1.0;
   }
@@ -106,7 +111,7 @@ constexpr Channel<int8_t, DriveState> STATE_BYTES[] = {
 constexpr Channel<double, DriveState> STATE_REALS[] = {
   { "position", &DriveState::position, Unit::ANGLE },
   { "velocity", &DriveState::velocity, Unit::ANGULAR_VELOCITY },
-  { "effort", &DriveState::effort, Unit::MOTOR_TORQUE },
+  { "effort", &DriveState::effort, Unit::SHAFT_TORQUE },
   { "joint_torque_demand", &DriveState::joint_torque_demand, Unit::OUTPUT_TORQUE },
   { "motor_current", &DriveState::motor_current, Unit::CURRENT },
   { "dc_link_voltage", &DriveState::dc_link_voltage, Unit::VOLTAGE },

@@ -39,7 +39,7 @@ public:
   bool quick_stop_available(std::size_t joint) const override;
   /// The joint's quick stop option code (0x605A) from bring-up. -1 if it was not read.
   int quick_stop_option_code(std::size_t joint) const;
-  /// The joint's quick stop ramp from bring-up in rad/s^2, motor side. NaN if it was not read.
+  /// The joint's quick stop ramp from bring-up in rad/s^2, on the position shaft. NaN if it was not read.
   double quick_stop_deceleration(std::size_t joint) const;
 
 protected:

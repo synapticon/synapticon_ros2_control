@@ -56,7 +56,7 @@ struct DriveState
 {
   double position{ 0.0 };  ///< [rad] measured position.
   double velocity{ 0.0 };  ///< [rad/s] measured velocity.
-  double effort{ 0.0 };    ///< [Nm] measured torque.
+  double effort{ 0.0 };    ///< [Nm] measured torque, on the same shaft as position and velocity.
 
   uint16_t status_word{ 0 };  ///< CiA 402 statusword (0x6041).
   /// The CiA 402 state, a `cia402::DeviceState` value. The HAL does not set it: the hardware interface derives it

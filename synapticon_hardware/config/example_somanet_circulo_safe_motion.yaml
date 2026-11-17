@@ -16,8 +16,10 @@ assign_activate: 0x0300  # distributed clock activation from the ESI file
 # commissioning of the drive. To set it at every bring-up, enable its sdo_si entry below.
 #
 # 'sdo' holds values without a unit, written as they are. An object whose unit depends on the drive's
-# commissioning goes into 'sdo_si' with si_value in SI units at the motor: bring-up reads the drive's
-# units first and converts it. Any other object in 'sdo' needs 'raw: true' to say the value is meant as written.
+# commissioning goes into 'sdo_si' with si_value in SI units: bring-up reads the drive's units first and
+# converts it. Velocities and positions are on the shaft of the position encoder. Torques are in Nm at the
+# motor, as the drive counts them in thousandths of the motor's rated torque (0x6076).
+# Any other object in 'sdo' needs 'raw: true' to say the value is meant as written.
 #
 # Impedance mode:
 #   0x2060:3  gain of the inner torque loop. Raise it in small steps.
@@ -33,7 +35,7 @@ sdo:
   # torque sensor type, see the impedance note
   # - { index: 0x2150, sub_index: 1, type: uint8, value: 1 }
 sdo_si:
-  # quick stop deceleration in rad/s^2 at the motor, see the note on 0x605A
+  # quick stop deceleration in rad/s^2 on the position shaft, see the note on 0x605A
   # - { index: 0x6085, sub_index: 0, type: uint32, si_value: 200.0 }
 
 rpdo:
@@ -66,7 +68,7 @@ tpdo:
       - { index: 0x6064, sub_index: 0, type: int32, state_interface: position, factor: 1.0 }
       # measured velocity
       - { index: 0x606c, sub_index: 0, type: int32, state_interface: velocity, factor: 1.0 }
-      # measured torque
+      # measured motor torque, which the HAL gives on the shaft of the position encoder
       - { index: 0x6077, sub_index: 0, type: int16, state_interface: effort, factor: 1.0 }
       # code of the last error
       - { index: 0x603f, sub_index: 0, type: uint16, state_interface: error_code }
