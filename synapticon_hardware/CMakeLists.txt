@@ -120,6 +120,7 @@ if(BUILD_TESTING)
   hardware_test(ethercat/test_bus_config)
   hardware_test(ethercat/test_drive_checks)
   hardware_test(ethercat/test_drive_units)
+  hardware_test(ethercat/test_ethercat_pdo_hal)
   hardware_test(ethercat/test_joint_config)
   hardware_test(ethercat/test_robot_config)
   # The slave_config generator, against a small ESI file built from the example slave_config.

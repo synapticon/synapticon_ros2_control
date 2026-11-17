@@ -20,7 +20,8 @@ struct BusConfig
 {
   /// Frames per second [Hz]. Also the rate of the distributed clock.
   double control_frequency{ 500.0 };
-  /// How long [s] start() gives the drives, once the bus is in OP, to send a statusword other than 0.
+  /// How long [s] start() gives the drives, once the bus is in OP, to send a statusword other than 0 and to run the
+  /// mode of operation of their joint.
   double readiness_timeout_s{ 20.0 };
   /// Keep an impedance joint's target where its quick stop started, for as long as the drive is in Quick Stop
   /// Active. The drive does not brake by itself in that mode. False leaves the drive alone, which helps diagnose it.

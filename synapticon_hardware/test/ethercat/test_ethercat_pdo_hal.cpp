@@ -1,0 +1,187 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025-2026 Synapticon GmbH
+// Copyright (c) 2026 b-robotized GmbH
+
+/// @file
+/// @brief The wait of EthercatPdoHal for valid data after OP, on drives whose process data a test sets.
+
+#include <cstddef>
+#include <cstdint>
+#include <fstream>
+#include <string>
+#include <utility>
+#include <vector>
+
+#include <gtest/gtest.h>
+
+#include "synapticon_hardware/ethercat/coe_objects.hpp"
+#include "synapticon_hardware/ethercat/ethercat_pdo_hal.hpp"
+
+namespace
+{
+namespace ec = synapticon_hardware::ethercat;
+using synapticon_hardware::DriveState;
+using synapticon_hardware::HalConfig;
+
+constexpr uint16_t SWITCH_ON_DISABLED = 0x40;
+constexpr double CONTROL_FREQUENCY = 1000.0;
+constexpr double TIMEOUT_S = 0.05;
+
+/// A slave_config without entries beyond its head, written to a temporary file. Returns its path.
+std::string empty_slave_config()
+{
+  const std::string path = ::testing::TempDir() + "ethercat_pdo_hal.yaml";
+  std::ofstream(path) << "vendor_id: 0x22d2\nproduct_id: 0x302\n";
+  return path;
+}
+
+/// @brief An EthercatPdoHal whose drives report the statusword and mode a test sets, from a given read on.
+class ScriptedBus : public ec::EthercatPdoHal
+{
+public:
+  explicit ScriptedBus(std::vector<ec::JointConfig> joints)
+    : EthercatPdoHal("test_ethercat_pdo_hal"), joints_(std::move(joints))
+  {
+    for (auto& joint : joints_)
+    {
+      joint.slave_config_file = empty_slave_config();
+    }
+    set_up_drives(joints_, true, CONTROL_FREQUENCY);
+  }
+
+  /// From read `after_reads` on, `joint` reports `statusword` and the mode of operation `mode`.
+  void report(std::size_t joint, uint16_t statusword, int mode, int after_reads = 0)
+  {
+    scripts_.push_back({ joint, statusword, mode, after_reads });
+  }
+
+  bool wait()
+  {
+    streaming_ = true;
+    return wait_for_streaming(joints_, CONTROL_FREQUENCY, TIMEOUT_S);
+  }
+
+  bool setup(const HalConfig&) override
+  {
+    return true;
+  }
+  bool connect() override
+  {
+    return true;
+  }
+  bool start() override
+  {
+    return true;
+  }
+  bool stop() override
+  {
+    return true;
+  }
+  bool disconnect() override
+  {
+    return true;
+  }
+  bool read(std::vector<DriveState>&) override
+  {
+    return true;
+  }
+  bool is_connected() const override
+  {
+    return true;
+  }
+
+protected:
+  bool exchange_read() override
+  {
+    ++reads_;
+    for (const auto& script : scripts_)
+    {
+      if (reads_ > script.after_reads)
+      {
+        inputs_[script.joint][ec::slot::STATUS_WORD] = script.statusword;
+        inputs_[script.joint][ec::slot::MODE_DISPLAY] = script.mode;
+      }
+    }
+    return true;
+  }
+  bool exchange_write() override
+  {
+    return true;
+  }
+  int upload(uint16_t, uint16_t, uint8_t, std::vector<uint8_t>&, std::size_t&, uint32_t&) const override
+  {
+    return -1;
+  }
+  int download(uint16_t, uint16_t, uint8_t, const std::vector<uint8_t>&, uint32_t&) const override
+  {
+    return -1;
+  }
+
+private:
+  struct Script
+  {
+    std::size_t joint;
+    uint16_t statusword;
+    int mode;
+    int after_reads;
+  };
+  std::vector<ec::JointConfig> joints_;
+  std::vector<Script> scripts_;
+  int reads_{ 0 };
+};
+
+ec::JointConfig joint(const std::string& name, int mode, bool energize = true)
+{
+  ec::JointConfig config;
+  config.name = name;
+  config.mode_of_operation = mode;
+  config.energize = energize;
+  return config;
+}
+
+TEST(WaitForStreaming, EndsWhenEveryDriveRunsItsJointsMode)
+{
+  ScriptedBus bus({ joint("a", ec::mode::IMPEDANCE), joint("b", ec::mode::CSP) });
+  bus.report(0, SWITCH_ON_DISABLED, ec::mode::IMPEDANCE);
+  bus.report(1, SWITCH_ON_DISABLED, ec::mode::CSP);
+  EXPECT_TRUE(bus.wait());
+}
+
+TEST(WaitForStreaming, WaitsForADriveThatTakesItsModeLater)
+{
+  ScriptedBus bus({ joint("a", ec::mode::CSP) });
+  bus.report(0, SWITCH_ON_DISABLED, 0);
+  bus.report(0, SWITCH_ON_DISABLED, ec::mode::CSP, 5);
+  EXPECT_TRUE(bus.wait());
+}
+
+TEST(WaitForStreaming, RefusesADriveInAnotherMode)
+{
+  ScriptedBus bus({ joint("a", ec::mode::IMPEDANCE) });
+  bus.report(0, SWITCH_ON_DISABLED, ec::mode::CSP);
+  EXPECT_FALSE(bus.wait());
+}
+
+TEST(WaitForStreaming, RefusesADriveThatReportsNoMode)
+{
+  ScriptedBus bus({ joint("a", ec::mode::CSP) });
+  bus.report(0, SWITCH_ON_DISABLED, 0);
+  EXPECT_FALSE(bus.wait());
+}
+
+TEST(WaitForStreaming, IgnoresTheModeOfAJointThatIsNeverPowered)
+{
+  ScriptedBus bus({ joint("a", ec::mode::IMPEDANCE, false), joint("b", ec::mode::CSP) });
+  bus.report(0, SWITCH_ON_DISABLED, ec::mode::CSP);
+  bus.report(1, SWITCH_ON_DISABLED, ec::mode::CSP);
+  EXPECT_TRUE(bus.wait());
+}
+
+TEST(WaitForStreaming, StillRefusesADriveWithoutStatusword)
+{
+  ScriptedBus bus({ joint("a", ec::mode::CSP) });
+  bus.report(0, 0, ec::mode::CSP);
+  EXPECT_FALSE(bus.wait());
+}
+
+}  // namespace

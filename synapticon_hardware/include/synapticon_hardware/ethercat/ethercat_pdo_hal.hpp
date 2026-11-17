@@ -59,8 +59,9 @@ protected:
   bool check_drives(const std::vector<JointConfig>& joints, const SdoRetry& retry);
 
   /// Right after the bus reached OP: exchange process data, with controlword 0, until the drive of every joint that
-  /// may be powered sends a statusword. False after `timeout_s` or on a failed exchange. Joints that are only read
-  /// are not waited for. Reads no SDO: the bus is running, and an SDO read would block the master.
+  /// may be powered sends a statusword and runs the joint's mode of operation (0x6061). False after `timeout_s` or
+  /// on a failed exchange, so that no joint gets power in another mode than the one it is configured for. Joints that
+  /// are only read are not waited for. Reads no SDO: the bus is running, and an SDO read would block the master.
   bool wait_for_streaming(const std::vector<JointConfig>& joints, double control_frequency, double timeout_s);
 
   /// Convert the arrays from the drives into one DriveState per joint, in SI units. `states` is resized to fit.
@@ -89,6 +90,12 @@ private:
   void apply_readback(std::size_t joint, const DriveReadback& readback);
   /// True when no joint that may be powered still reads statusword 0.
   bool all_streaming(const std::vector<JointConfig>& joints) const;
+  /// The mode of operation that `joint`'s drive reports (0x6061).
+  int mode_display(std::size_t joint) const;
+  /// True when `joint` (number `j`) is never powered or its drive runs the joint's mode of operation.
+  bool in_mode(const JointConfig& joint, std::size_t j) const;
+  /// True when in_mode() holds for every joint.
+  bool all_in_mode(const std::vector<JointConfig>& joints) const;
 
   // Quick stop values per joint, from bring-up.
   std::vector<int> option_codes_;

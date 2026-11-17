@@ -134,7 +134,7 @@ bool EthercatPdoHal::wait_for_streaming(const std::vector<JointConfig>& joints, 
       RCLCPP_ERROR(log(), "start(): the process data exchange failed while waiting for the first valid data.");
       return false;
     }
-    if (all_streaming(joints))
+    if (all_streaming(joints) && all_in_mode(joints))
     {
       return true;
     }
@@ -144,10 +144,24 @@ bool EthercatPdoHal::wait_for_streaming(const std::vector<JointConfig>& joints, 
     }
     std::this_thread::sleep_for(cycle);
   }
-  RCLCPP_ERROR(log(),
-               "start(): no valid data from every drive within %.1f s of OP (statusword still 0). Check the PDO "
-               "mapping of the slave_config, or raise readiness_timeout_s for a slow bus.",
-               timeout_s);
+  if (!all_streaming(joints))
+  {
+    RCLCPP_ERROR(log(),
+                 "start(): no valid data from every drive within %.1f s of OP (statusword still 0). Check the PDO "
+                 "mapping of the slave_config, or raise readiness_timeout_s for a slow bus.",
+                 timeout_s);
+    return false;
+  }
+  for (std::size_t j = 0; j < joints.size(); ++j)
+  {
+    if (!in_mode(joints[j], j))
+    {
+      RCLCPP_ERROR(log(),
+                   "start(): joint '%s' runs mode %d (0x6061) %.1f s after OP, but is configured for mode %d. Check "
+                   "the 0x6060 default of its slave_config, and that the slave_config maps 0x6061.",
+                   joints[j].name.c_str(), mode_display(j), timeout_s, joints[j].mode_of_operation);
+    }
+  }
   return false;
 }
 
@@ -241,6 +255,28 @@ void EthercatPdoHal::apply_readback(std::size_t joint, const DriveReadback& read
       outputs_[joint][index] = *value;
     }
   }
+}
+
+int EthercatPdoHal::mode_display(std::size_t joint) const
+{
+  return static_cast<int>(inputs_[joint][slot::MODE_DISPLAY]);
+}
+
+bool EthercatPdoHal::in_mode(const JointConfig& joint, std::size_t j) const
+{
+  return !joint.energize || mode_display(j) == joint.mode_of_operation;
+}
+
+bool EthercatPdoHal::all_in_mode(const std::vector<JointConfig>& joints) const
+{
+  for (std::size_t j = 0; j < joints.size(); ++j)
+  {
+    if (!in_mode(joints[j], j))
+    {
+      return false;
+    }
+  }
+  return true;
 }
 
 bool EthercatPdoHal::all_streaming(const std::vector<JointConfig>& joints) const

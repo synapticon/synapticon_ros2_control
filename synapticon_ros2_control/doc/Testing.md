@@ -337,6 +337,9 @@ Problems show up at one of four moments. Find the moment first, then your sympto
 
 - `start()` fails, because no drive sends a statusword other than 0.
   On a large bus the drives need more time after OP. Raise `readiness_timeout_s` (20 s by default).
+- `start()` fails, because a joint runs another mode (`0x6061`) than its `mode_of_operation`.
+  The drive refused the mode, or the slave_config's default for `0x6060` does not fit the joint (impedance mode takes
+  it from there). Fix the slave_config or the joint, and check that the slave_config maps `0x6061`.
 
 **Once the drive has power**
 
