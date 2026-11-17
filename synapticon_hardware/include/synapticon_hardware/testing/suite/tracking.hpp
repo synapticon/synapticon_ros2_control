@@ -33,7 +33,7 @@ using cia402::DeviceState;
 TEST_F(SingleDrive, LinkHealthReportsTheDriveOnlineInOp)
 {
   ASSERT_TRUE(start({}));
-  tick(cycles(0.02));
+  ASSERT_NO_FATAL_FAILURE(tick(cycles(0.02)));
   synapticon_hardware::LinkHealth health;
   drive_->link_health(health);
   ASSERT_EQ(health.drives.size(), 1u);
@@ -86,7 +86,7 @@ TEST_F(SingleDrive, CspTracksASmallMove)
   {
     setpoint_.velocity = v * std::min(1.0, (i + 1) / (0.2 * BENCH_RATE_HZ));
     setpoint_.position += setpoint_.velocity * DT;
-    tick();
+    ASSERT_NO_FATAL_FAILURE(tick());
     max_error = std::max(max_error, std::abs(reading_.position - setpoint_.position));
     if (i >= cycles(0.3))  // 0.1 s after the ramp, at constant speed
     {
@@ -95,7 +95,7 @@ TEST_F(SingleDrive, CspTracksASmallMove)
     }
   }
   setpoint_.velocity = 0.0;
-  tick(cycles(0.5));
+  ASSERT_NO_FATAL_FAILURE(tick(cycles(0.5)));
   EXPECT_LT(max_error, 0.1) << "the drive lagged the streamed target";
   EXPECT_NEAR(reading_.position, setpoint_.position, 0.02) << "the joint did not settle on the target";
   EXPECT_NEAR(sum / summed, v, 0.15 * std::abs(v) + bench().velocity_step(0))
@@ -114,7 +114,7 @@ TEST_F(SingleDrive, CsvTracksASmallMove)
   for (int i = 0; i < cycles(0.6); ++i)
   {
     setpoint_.velocity = v * std::min(1.0, (i + 1) / (0.2 * BENCH_RATE_HZ));
-    tick();
+    ASSERT_NO_FATAL_FAILURE(tick());
     if (i >= cycles(0.3))
     {
       sum += reading_.velocity;
@@ -122,7 +122,7 @@ TEST_F(SingleDrive, CsvTracksASmallMove)
     }
   }
   setpoint_.velocity = 0.0;
-  tick(cycles(0.5));
+  ASSERT_NO_FATAL_FAILURE(tick(cycles(0.5)));
   // A drive with a coarse velocity unit gets the target cut to a whole unit.
   EXPECT_NEAR(sum / summed, v, 0.1 + bench().velocity_step(0)) << "the drive did not follow the streamed velocity";
   EXPECT_LT(joint_speed(), 0.05) << "the joint did not stop";
@@ -138,13 +138,13 @@ TEST_F(SingleDrive, CsvQuickStopFromMotionStops)
   for (int i = 0; i < cycles(0.4); ++i)
   {
     setpoint_.velocity = v * std::min(1.0, (i + 1) / (0.2 * BENCH_RATE_HZ));
-    tick();
+    ASSERT_NO_FATAL_FAILURE(tick());
   }
   const double p_request = reading_.position;
-  act(DriveAction::QUICK_STOP);
-  tick(cycles(0.3));
+  ASSERT_NO_FATAL_FAILURE(act(DriveAction::QUICK_STOP));
+  ASSERT_NO_FATAL_FAILURE(tick(cycles(0.3)));
   const double p_stopped = reading_.position;
-  tick(cycles(1.0));
+  ASSERT_NO_FATAL_FAILURE(tick(cycles(1.0)));
   EXPECT_EQ(drive_state(), DeviceState::QUICK_STOP_ACTIVE);
   EXPECT_LT(std::abs(p_stopped - p_request), 0.2) << "the joint ran on after the quick stop";
   EXPECT_NEAR(reading_.position, p_stopped, 0.02) << "the joint did not stay where it stopped";
@@ -160,7 +160,7 @@ TEST_F(SingleDrive, ImpedanceEffortWithZeroGainsIsTheJointTorqueDemand)
   ASSERT_NO_FATAL_FAILURE(energize());
   setpoint_.stiffness = 0.0;
   setpoint_.damping = 0.0;
-  tick(cycles(0.05));
+  ASSERT_NO_FATAL_FAILURE(tick(cycles(0.05)));
   EXPECT_NEAR(reading_.joint_torque_demand, 0.0, 0.02) << "no command, no demand";
 
   // Small enough for friction to hold a free joint, and the watchdog covers the case it does not.
@@ -171,11 +171,11 @@ TEST_F(SingleDrive, ImpedanceEffortWithZeroGainsIsTheJointTorqueDemand)
   const int samples = cycles(0.2);
   for (int i = 0; i < samples; ++i)
   {
-    tick();
+    ASSERT_NO_FATAL_FAILURE(tick());
     sum += reading_.joint_torque_demand;
   }
   setpoint_.effort = 0.0;
-  tick(cycles(0.05));
+  ASSERT_NO_FATAL_FAILURE(tick(cycles(0.05)));
   EXPECT_NEAR(sum / samples, effort, 0.02) << "the effort did not reach the joint torque demand";
 }
 

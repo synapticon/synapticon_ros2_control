@@ -348,7 +348,7 @@ protected:
   ///
   /// Once the test has a fatal failure, a watchdog trip or a stop request among them, every cycle commands
   /// disable_voltage and tick() returns after one cycle. The helpers that loop stop as well, so a test body that goes
-  /// on moves nothing.
+  /// on moves nothing. The test bodies call them in ASSERT_NO_FATAL_FAILURE, so that they end there.
   void tick(int count = 1)
   {
     for (int i = 0; i < count; ++i)
@@ -397,6 +397,16 @@ protected:
     return !HasFatalFailure() && done() ? seconds : -1.0;
   }
 
+  /// Cycle until `done`, at most `seconds`, and fail the test, fatally, with `failure` when it does not come. A fatal
+  /// failure that ends the cycling, a watchdog trip or a stop request, is not followed by another one.
+  void reach(const std::function<bool()>& done, double seconds, const std::string& failure)
+  {
+    if (tick_until(done, seconds) < 0.0 && !HasFatalFailure())
+    {
+      FAIL() << failure << " (within " << seconds << " s)";
+    }
+  }
+
   /// A drive_action request: the action for one cycle, then NONE, with the streamed motion carried on through it.
   void act(DriveAction action)
   {
@@ -417,9 +427,9 @@ protected:
   void energize()
   {
     hold_here();
-    act(DriveAction::ENABLE);
-    ASSERT_GE(tick_until([this] { return drive_state() == cia402::DeviceState::OPERATION_ENABLED; }, 2.0), 0.0)
-        << "drive did not reach Operation Enabled";
+    ASSERT_NO_FATAL_FAILURE(act(DriveAction::ENABLE));
+    ASSERT_NO_FATAL_FAILURE(reach([this] { return drive_state() == cia402::DeviceState::OPERATION_ENABLED; }, 2.0,
+                                  "drive did not reach Operation Enabled"));
     tick(cycles(0.05));
   }
 
@@ -601,14 +611,12 @@ protected:
     ASSERT_NO_FATAL_FAILURE(energize());
     limit_travel(1.2);  // wide enough for the drive's reaction and for its turn after a Fault Reset
     setpoint_.position += step * sign_;
-    ASSERT_GE(tick_until(
-                  [this] {
-                    return drive_state() == cia402::DeviceState::FAULT_REACTION_ACTIVE ||
-                           drive_state() == cia402::DeviceState::FAULT;
-                  },
-                  0.5),
-              0.0)
-        << "the step did not fault the drive";
+    ASSERT_NO_FATAL_FAILURE(reach(
+        [this] {
+          return drive_state() == cia402::DeviceState::FAULT_REACTION_ACTIVE ||
+                 drive_state() == cia402::DeviceState::FAULT;
+        },
+        0.5, "the step did not fault the drive"));
   }
 
   std::shared_ptr<Cia402Hal> drive_;
@@ -798,6 +806,16 @@ protected:
     return !HasFatalFailure() && done() ? seconds : -1.0;
   }
 
+  /// Cycle until `done`, at most `seconds`, and fail the test, fatally, with `failure` when it does not come. A fatal
+  /// failure that ends the cycling, a watchdog trip or a stop request, is not followed by another one.
+  void reach(const std::function<bool()>& done, double seconds, const std::string& failure)
+  {
+    if (tick_until(done, seconds) < 0.0 && !HasFatalFailure())
+    {
+      FAIL() << failure << " (within " << seconds << " s)";
+    }
+  }
+
   /// A drive_action request for the joints in `joints`, all in the same cycle.
   void act(const std::vector<std::size_t>& joints, DriveAction action)
   {
@@ -826,15 +844,13 @@ protected:
   void energize_both()
   {
     hold_here();
-    act({ 0, 1 }, DriveAction::ENABLE);
-    ASSERT_GE(tick_until(
-                  [this] {
-                    return drive_state(0) == cia402::DeviceState::OPERATION_ENABLED &&
-                           drive_state(1) == cia402::DeviceState::OPERATION_ENABLED;
-                  },
-                  2.0),
-              0.0)
-        << "the drives did not reach Operation Enabled";
+    ASSERT_NO_FATAL_FAILURE(act({ 0, 1 }, DriveAction::ENABLE));
+    ASSERT_NO_FATAL_FAILURE(reach(
+        [this] {
+          return drive_state(0) == cia402::DeviceState::OPERATION_ENABLED &&
+                 drive_state(1) == cia402::DeviceState::OPERATION_ENABLED;
+        },
+        2.0, "the drives did not reach Operation Enabled"));
     tick(cycles(0.05));
   }
 

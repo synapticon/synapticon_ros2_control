@@ -33,11 +33,11 @@ TEST_F(DrivePair, BothComeUpAndGoDownTogether)
 {
   ASSERT_TRUE(start());
   ASSERT_TRUE(drive_->enable());
-  sample();
+  ASSERT_NO_FATAL_FAILURE(sample());
   EXPECT_EQ(drive_state(0), DeviceState::OPERATION_ENABLED);
   EXPECT_EQ(drive_state(1), DeviceState::OPERATION_ENABLED);
   ASSERT_TRUE(drive_->disable());
-  sample();
+  ASSERT_NO_FATAL_FAILURE(sample());
   EXPECT_EQ(drive_state(0), DeviceState::SWITCH_ON_DISABLED);
   EXPECT_EQ(drive_state(1), DeviceState::SWITCH_ON_DISABLED);
 }
@@ -47,11 +47,12 @@ TEST_F(DrivePair, AQuickStopOfOneLeavesTheOtherEnabledAndMoving)
 {
   ASSERT_TRUE(start());
   ASSERT_NO_FATAL_FAILURE(energize_both());
-  set_off(1, 0.3);
+  ASSERT_NO_FATAL_FAILURE(set_off(1, 0.3));
   const double p_before = readings_[1].position;
-  act({ 0 }, DriveAction::QUICK_STOP);
-  ASSERT_GE(tick_until([this] { return drive_state(0) == DeviceState::QUICK_STOP_ACTIVE; }, 0.05), 0.0);
-  tick(cycles(1.0));
+  ASSERT_NO_FATAL_FAILURE(act({ 0 }, DriveAction::QUICK_STOP));
+  ASSERT_NO_FATAL_FAILURE(reach([this] { return drive_state(0) == DeviceState::QUICK_STOP_ACTIVE; }, 0.05,
+                                "joint_1 did not reach Quick Stop Active"));
+  ASSERT_NO_FATAL_FAILURE(tick(cycles(1.0)));
   EXPECT_EQ(drive_state(0), DeviceState::QUICK_STOP_ACTIVE);
   EXPECT_EQ(drive_state(1), DeviceState::OPERATION_ENABLED) << "the other drive was touched";
   EXPECT_EQ(drive_->active_drive_action(1), DriveAction::NONE);
@@ -65,20 +66,16 @@ TEST_F(DrivePair, ADisableVoltageOfOneLeavesTheOtherInQuickStop)
 {
   ASSERT_TRUE(start());
   ASSERT_NO_FATAL_FAILURE(energize_both());
-  act({ 0, 1 }, DriveAction::QUICK_STOP);  // both in the same cycle
-  ASSERT_GE(tick_until(
-                [this] {
-                  return drive_state(0) == DeviceState::QUICK_STOP_ACTIVE &&
-                         drive_state(1) == DeviceState::QUICK_STOP_ACTIVE;
-                },
-                0.05),
-            0.0)
-      << "a quick stop for both did not reach both";
-  act({ 1 }, DriveAction::DISABLE_VOLTAGE);
-  EXPECT_GE(tick_until([this] { return drive_state(1) == DeviceState::SWITCH_ON_DISABLED; },
-                       0.05 + bench().disable_delay(1)),
-            0.0);
-  tick(cycles(0.5));
+  ASSERT_NO_FATAL_FAILURE(act({ 0, 1 }, DriveAction::QUICK_STOP));  // both in the same cycle
+  ASSERT_NO_FATAL_FAILURE(reach(
+      [this] {
+        return drive_state(0) == DeviceState::QUICK_STOP_ACTIVE && drive_state(1) == DeviceState::QUICK_STOP_ACTIVE;
+      },
+      0.05, "a quick stop for both did not reach both"));
+  ASSERT_NO_FATAL_FAILURE(act({ 1 }, DriveAction::DISABLE_VOLTAGE));
+  ASSERT_NO_FATAL_FAILURE(reach([this] { return drive_state(1) == DeviceState::SWITCH_ON_DISABLED; },
+                                0.05 + bench().disable_delay(1), "joint_2 did not reach Switch On Disabled"));
+  ASSERT_NO_FATAL_FAILURE(tick(cycles(0.5)));
   EXPECT_EQ(drive_state(0), DeviceState::QUICK_STOP_ACTIVE) << "the other drive was touched";
   EXPECT_EQ(drive_state(1), DeviceState::SWITCH_ON_DISABLED);
 }
@@ -91,20 +88,21 @@ TEST_F(DrivePair, AFaultOnOneLeavesTheOtherRunning)
   ASSERT_TRUE(start({ .following_error = FollowingError::FAULT }));
   max_lag_ = 1.2;
   ASSERT_NO_FATAL_FAILURE(energize_both());
-  set_off(1, 0.3);
+  ASSERT_NO_FATAL_FAILURE(set_off(1, 0.3));
   setpoints_[0].position += 0.02;  // a jump joint_1 cannot follow within the window
-  ASSERT_GE(tick_until([this] { return drive_state(0) == DeviceState::FAULT; }, 0.5), 0.0)
-      << "the step did not fault joint_1";
-  tick(cycles(0.5));
+  ASSERT_NO_FATAL_FAILURE(
+      reach([this] { return drive_state(0) == DeviceState::FAULT; }, 0.5, "the step did not fault joint_1"));
+  ASSERT_NO_FATAL_FAILURE(tick(cycles(0.5)));
   EXPECT_EQ(drive_state(1), DeviceState::OPERATION_ENABLED) << "the fault spread to the other drive";
 
-  act({ 0 }, DriveAction::QUICK_STOP);
-  tick(2);
+  ASSERT_NO_FATAL_FAILURE(act({ 0 }, DriveAction::QUICK_STOP));
+  ASSERT_NO_FATAL_FAILURE(tick(2));
   EXPECT_EQ(drive_->active_drive_action(0), DriveAction::NONE) << "should complete at once";
   setpoints_[0].position = readings_[0].position;
-  tick(cycles(0.02));
-  act({ 0 }, DriveAction::RESET_FAULT);
-  EXPECT_GE(tick_until([this] { return drive_state(0) == DeviceState::SWITCH_ON_DISABLED; }, 1.0), 0.0);
+  ASSERT_NO_FATAL_FAILURE(tick(cycles(0.02)));
+  ASSERT_NO_FATAL_FAILURE(act({ 0 }, DriveAction::RESET_FAULT));
+  ASSERT_NO_FATAL_FAILURE(reach([this] { return drive_state(0) == DeviceState::SWITCH_ON_DISABLED; }, 1.0,
+                                "joint_1 did not reach Switch On Disabled"));
   EXPECT_EQ(drive_state(1), DeviceState::OPERATION_ENABLED);
 }
 

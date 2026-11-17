@@ -51,6 +51,7 @@ TEST_F(SingleDrive, AFollowingErrorFaultFromAStepIsMeasured)
     }
     return !std::isnan(fault.t) && now.t > fault.t + 0.3 && at_rest(s);
   });
+  ASSERT_FALSE(HasFatalFailure());
   ASSERT_FALSE(std::isnan(reaction.t)) << "the step did not fault the drive";
   const double travel = std::abs(reading_.position - reaction.position);
   const double braking = reaction.speed * reaction.speed / (2.0 * DECEL);
@@ -129,6 +130,7 @@ TEST_F(SingleDrive, AClientQuickStopOnAReportedFollowingErrorStopsAndHolds)
       }
       return !std::isnan(stopping.t) && now.t > stopping.t + 0.3 && at_rest(s);
     });
+    ASSERT_FALSE(HasFatalFailure());
     setpoint_.drive_action = DriveAction::NONE;
     ASSERT_FALSE(std::isnan(reported.t)) << variant.name << ": no following error was reported";
     ASSERT_FALSE(std::isnan(stopping.t)) << variant.name << ": no Quick Stop Active";
@@ -154,7 +156,7 @@ TEST_F(SingleDrive, AClientQuickStopOnAReportedFollowingErrorStopsAndHolds)
     EXPECT_EQ(drive_state(), DeviceState::QUICK_STOP_ACTIVE) << variant.name << ": must end up holding";
     EXPECT_LT(std::abs(reading_.position - p_step), 2.5) << variant.name << ": ran away";
     const double p_held = reading_.position;
-    tick(cycles(0.5));
+    ASSERT_NO_FATAL_FAILURE(tick(cycles(0.5)));
     EXPECT_NEAR(reading_.position, p_held, 0.02) << variant.name << ": did not hold";
     release_drives();
     sign = -sign;
@@ -179,6 +181,7 @@ TEST_F(SingleDrive, AReportedFollowingErrorKeepsTheDriveRunningAndIsVisible)
     }
     return s.back().t > 0.3 && at_rest(s);
   });
+  ASSERT_FALSE(HasFatalFailure());
   std::printf("REPORTED FOLLOWING ERROR: statusword bit 13 %s, error code 0x%04X, state %s, "
               "%.3f rad from the target\n",
               bit13 ? "seen" : "never seen", error_code, cia402::device_state_name(drive_state()),
@@ -200,27 +203,28 @@ TEST_F(SingleDrive, AQuickStoppedDriveIgnoresSetpointsUntilEnabled)
   ASSERT_NO_FATAL_FAILURE(energize());
   limit_travel(0.5);
   EXPECT_TRUE(drive_->forwarding_setpoints(0));
-  run_at(0.5, 0.3);
+  ASSERT_NO_FATAL_FAILURE(run_at(0.5, 0.3));
   limit_travel(0.5);
-  act(DriveAction::QUICK_STOP);
+  ASSERT_NO_FATAL_FAILURE(act(DriveAction::QUICK_STOP));
   EXPECT_FALSE(drive_->forwarding_setpoints(0)) << "a stop action must start ignoring at once";
-  carry_on(1.0);  // the controller carries on, its target ends 0.5 rad from the joint
+  ASSERT_NO_FATAL_FAILURE(carry_on(1.0));  // the controller carries on, its target ends 0.5 rad from the joint
   ASSERT_EQ(drive_state(), DeviceState::QUICK_STOP_ACTIVE);
   EXPECT_FALSE(drive_->forwarding_setpoints(0));
 
   // The recovery re-commands the controller, here to the joint's own position, then enables.
   hold_here();
-  act(DriveAction::ENABLE);
+  ASSERT_NO_FATAL_FAILURE(act(DriveAction::ENABLE));
   EXPECT_TRUE(drive_->forwarding_setpoints(0)) << "enable must resume forwarding at once";
-  ASSERT_GE(tick_until([this] { return drive_state() == DeviceState::OPERATION_ENABLED; }, 2.0), 0.0);
+  ASSERT_NO_FATAL_FAILURE(reach([this] { return drive_state() == DeviceState::OPERATION_ENABLED; }, 2.0,
+                                "did not reach Operation Enabled"));
   const double p_enabled = reading_.position;
-  tick(cycles(0.2));
+  ASSERT_NO_FATAL_FAILURE(tick(cycles(0.2)));
   EXPECT_NEAR(reading_.position, p_enabled, 0.01) << "a stale target reached the drive";
 
   // What the controller streams now is what the drive follows.
   const double target = p_enabled + 0.05 * sign_;
   setpoint_.position = target;
-  tick(cycles(0.5));
+  ASSERT_NO_FATAL_FAILURE(tick(cycles(0.5)));
   EXPECT_NEAR(reading_.position, target, 0.01) << "the streamed target did not reach the drive";
 }
 
@@ -229,27 +233,26 @@ TEST_F(SingleDrive, TheTargetStreamedDuringTheEnableWalkIsTheFirstTheDriveFollow
 {
   ASSERT_TRUE(start({}));
   ASSERT_NO_FATAL_FAILURE(energize());
-  act(DriveAction::DISABLE);
-  ASSERT_GE(tick_until([this] { return drive_state() == DeviceState::SWITCH_ON_DISABLED; }, 1.0), 0.0);
-  tick(cycles(0.1));
+  ASSERT_NO_FATAL_FAILURE(act(DriveAction::DISABLE));
+  ASSERT_NO_FATAL_FAILURE(reach([this] { return drive_state() == DeviceState::SWITCH_ON_DISABLED; }, 1.0,
+                                "did not reach Switch On Disabled"));
+  ASSERT_NO_FATAL_FAILURE(tick(cycles(0.1)));
   // A target a little away from the joint, streamed from before the enable request on.
   const double target = reading_.position + 0.05 * sign_;
   setpoint_.position = target;
   setpoint_.velocity = 0.0;
   limit_travel(0.3);
-  act(DriveAction::ENABLE);
+  ASSERT_NO_FATAL_FAILURE(act(DriveAction::ENABLE));
   bool moved_before_enabled = false;
   const double p_walk = reading_.position;
-  ASSERT_GE(tick_until(
-                [&] {
-                  moved_before_enabled |= std::abs(reading_.position - p_walk) > 0.01;
-                  return drive_state() == DeviceState::OPERATION_ENABLED;
-                },
-                2.0),
-            0.0)
-      << "did not reach Operation Enabled";
+  ASSERT_NO_FATAL_FAILURE(reach(
+      [&] {
+        moved_before_enabled |= std::abs(reading_.position - p_walk) > 0.01;
+        return drive_state() == DeviceState::OPERATION_ENABLED;
+      },
+      2.0, "did not reach Operation Enabled"));
   EXPECT_FALSE(moved_before_enabled) << "the joint moved while the drive was not yet enabled";
-  tick(cycles(0.5));
+  ASSERT_NO_FATAL_FAILURE(tick(cycles(0.5)));
   EXPECT_NEAR(reading_.position, target, 0.01) << "the drive did not follow the streamed target";
 }
 
@@ -258,11 +261,10 @@ TEST_F(SingleDrive, TheLifecycleEnableResumesForwarding)
 {
   ASSERT_TRUE(start({}));
   ASSERT_NO_FATAL_FAILURE(energize());
-  act(DriveAction::DISABLE_VOLTAGE);
+  ASSERT_NO_FATAL_FAILURE(act(DriveAction::DISABLE_VOLTAGE));
   EXPECT_FALSE(drive_->forwarding_setpoints(0));
-  ASSERT_GE(tick_until([this] { return drive_state() == DeviceState::SWITCH_ON_DISABLED; },
-                       0.1 + bench().disable_delay(0)),
-            0.0);
+  ASSERT_NO_FATAL_FAILURE(reach([this] { return drive_state() == DeviceState::SWITCH_ON_DISABLED; },
+                                0.1 + bench().disable_delay(0), "did not reach Switch On Disabled"));
   hold_here();
   ASSERT_TRUE(drive_->write({ setpoint_ }));
   ASSERT_TRUE(drive_->enable());
@@ -278,21 +280,23 @@ TEST_F(SingleDrive, AFaultedDriveIgnoresSetpointsThroughTheResetUntilEnabled)
   ASSERT_NO_FATAL_FAILURE(energize());
   limit_travel(1.2);
   setpoint_.position += 0.02 * sign_;
-  ASSERT_GE(tick_until([this] { return drive_state() == DeviceState::FAULT; }, 0.5), 0.0)
-      << "the step did not fault the drive";
-  tick(1);
+  ASSERT_NO_FATAL_FAILURE(
+      reach([this] { return drive_state() == DeviceState::FAULT; }, 0.5, "the step did not fault the drive"));
+  ASSERT_NO_FATAL_FAILURE(tick(1));
   EXPECT_FALSE(drive_->forwarding_setpoints(0)) << "a reported Fault must start ignoring";
 
   hold_here();
-  tick(cycles(0.02));
-  act(DriveAction::RESET_FAULT);
-  ASSERT_GE(tick_until([this] { return drive_state() == DeviceState::SWITCH_ON_DISABLED; }, 1.0), 0.0);
+  ASSERT_NO_FATAL_FAILURE(tick(cycles(0.02)));
+  ASSERT_NO_FATAL_FAILURE(act(DriveAction::RESET_FAULT));
+  ASSERT_NO_FATAL_FAILURE(reach([this] { return drive_state() == DeviceState::SWITCH_ON_DISABLED; }, 1.0,
+                                "did not reach Switch On Disabled"));
   EXPECT_FALSE(drive_->forwarding_setpoints(0)) << "a reset is not a decision to run again";
 
   hold_here();
-  act(DriveAction::ENABLE);
+  ASSERT_NO_FATAL_FAILURE(act(DriveAction::ENABLE));
   EXPECT_TRUE(drive_->forwarding_setpoints(0));
-  ASSERT_GE(tick_until([this] { return drive_state() == DeviceState::OPERATION_ENABLED; }, 2.0), 0.0);
+  ASSERT_NO_FATAL_FAILURE(reach([this] { return drive_state() == DeviceState::OPERATION_ENABLED; }, 2.0,
+                                "did not reach Operation Enabled"));
   EXPECT_TRUE(drive_->forwarding_setpoints(0)) << "staying in Fault during the walk undid the enable";
 }
 
@@ -303,11 +307,11 @@ TEST_F(SingleDrive, AFaultedDriveIgnoresSetpointsThroughTheResetUntilEnabled)
 /// A disable of a faulted drive leaves it in Fault, with its error code: it is de-energised already.
 TEST_F(SingleDrive, ADisableLeavesAFaultAlone)
 {
-  provoke_step_fault(1000.0, 0.02);
-  ASSERT_GE(tick_until([this] { return drive_state() == DeviceState::FAULT; }, 0.5), 0.0);
+  ASSERT_NO_FATAL_FAILURE(provoke_step_fault(1000.0, 0.02));
+  ASSERT_NO_FATAL_FAILURE(reach([this] { return drive_state() == DeviceState::FAULT; }, 0.5, "did not reach Fault"));
   const uint16_t error_code = reading_.error_code;
-  act(DriveAction::DISABLE);
-  tick(cycles(0.3));
+  ASSERT_NO_FATAL_FAILURE(act(DriveAction::DISABLE));
+  ASSERT_NO_FATAL_FAILURE(tick(cycles(0.3)));
   EXPECT_EQ(drive_->active_drive_action(0), DriveAction::NONE) << "should complete at once";
   EXPECT_EQ(drive_state(), DeviceState::FAULT) << "a disable reset the fault";
   EXPECT_EQ(reading_.error_code, error_code) << "the error code was lost";
@@ -316,11 +320,11 @@ TEST_F(SingleDrive, ADisableLeavesAFaultAlone)
 /// The same for disable_voltage.
 TEST_F(SingleDrive, ADisableVoltageLeavesAFaultAlone)
 {
-  provoke_step_fault(1000.0, 0.02);
-  ASSERT_GE(tick_until([this] { return drive_state() == DeviceState::FAULT; }, 0.5), 0.0);
+  ASSERT_NO_FATAL_FAILURE(provoke_step_fault(1000.0, 0.02));
+  ASSERT_NO_FATAL_FAILURE(reach([this] { return drive_state() == DeviceState::FAULT; }, 0.5, "did not reach Fault"));
   const uint16_t error_code = reading_.error_code;
-  act(DriveAction::DISABLE_VOLTAGE);
-  tick(cycles(0.3));
+  ASSERT_NO_FATAL_FAILURE(act(DriveAction::DISABLE_VOLTAGE));
+  ASSERT_NO_FATAL_FAILURE(tick(cycles(0.3)));
   EXPECT_EQ(drive_->active_drive_action(0), DriveAction::NONE) << "should complete at once";
   EXPECT_EQ(drive_state(), DeviceState::FAULT) << "a disable_voltage reset the fault";
   EXPECT_EQ(reading_.error_code, error_code) << "the error code was lost";
@@ -331,15 +335,15 @@ TEST_F(SingleDrive, AStopRequestedDuringTheFaultReactionDoesNotResetTheFault)
 {
   // 200 rad/s^2 keeps Fault Reaction Active long enough to request the stop within it (about 30 ms
   // from a 0.05 rad step), and the reaction brakes the joint within about 0.15 rad.
-  provoke_step_fault(200.0, 0.05);
+  ASSERT_NO_FATAL_FAILURE(provoke_step_fault(200.0, 0.05));
   if (drive_state() != DeviceState::FAULT_REACTION_ACTIVE)
   {
     GTEST_SKIP() << "the drive went to Fault before a request could reach Fault Reaction Active";
   }
-  act(DriveAction::DISABLE_VOLTAGE);
-  ASSERT_GE(tick_until([this] { return drive_state() == DeviceState::FAULT; }, 0.5), 0.0);
+  ASSERT_NO_FATAL_FAILURE(act(DriveAction::DISABLE_VOLTAGE));
+  ASSERT_NO_FATAL_FAILURE(reach([this] { return drive_state() == DeviceState::FAULT; }, 0.5, "did not reach Fault"));
   const uint16_t error_code = reading_.error_code;
-  tick(cycles(0.3));
+  ASSERT_NO_FATAL_FAILURE(tick(cycles(0.3)));
   EXPECT_EQ(drive_state(), DeviceState::FAULT) << "the pending disable_voltage reset the fault";
   EXPECT_EQ(reading_.error_code, error_code) << "the error code was lost";
 }
@@ -347,32 +351,33 @@ TEST_F(SingleDrive, AStopRequestedDuringTheFaultReactionDoesNotResetTheFault)
 /// An enable of a faulted drive is refused until a reset_fault, after which it succeeds.
 TEST_F(SingleDrive, AnEnableOfAFaultedDriveIsRefusedUntilAResetFault)
 {
-  provoke_step_fault(1000.0, 0.02);
-  ASSERT_GE(tick_until([this] { return drive_state() == DeviceState::FAULT; }, 0.5), 0.0);
+  ASSERT_NO_FATAL_FAILURE(provoke_step_fault(1000.0, 0.02));
+  ASSERT_NO_FATAL_FAILURE(reach([this] { return drive_state() == DeviceState::FAULT; }, 0.5, "did not reach Fault"));
   hold_here();
-  tick(cycles(0.02));
-  act(DriveAction::ENABLE);
+  ASSERT_NO_FATAL_FAILURE(tick(cycles(0.02)));
+  ASSERT_NO_FATAL_FAILURE(act(DriveAction::ENABLE));
   EXPECT_EQ(drive_->active_drive_action(0), DriveAction::NONE) << "the enable was not refused";
   EXPECT_FALSE(drive_->forwarding_setpoints(0)) << "a refused enable must not resume forwarding";
-  tick(cycles(0.3));
+  ASSERT_NO_FATAL_FAILURE(tick(cycles(0.3)));
   EXPECT_EQ(drive_state(), DeviceState::FAULT) << "the enable reset the fault";
 
-  act(DriveAction::RESET_FAULT);
-  ASSERT_GE(tick_until([this] { return drive_state() == DeviceState::SWITCH_ON_DISABLED; }, 1.0), 0.0);
+  ASSERT_NO_FATAL_FAILURE(act(DriveAction::RESET_FAULT));
+  ASSERT_NO_FATAL_FAILURE(reach([this] { return drive_state() == DeviceState::SWITCH_ON_DISABLED; }, 1.0,
+                                "did not reach Switch On Disabled"));
   hold_here();
-  act(DriveAction::ENABLE);
-  EXPECT_GE(tick_until([this] { return drive_state() == DeviceState::OPERATION_ENABLED; }, 2.0), 0.0)
-      << "the enable after the reset failed";
+  ASSERT_NO_FATAL_FAILURE(act(DriveAction::ENABLE));
+  ASSERT_NO_FATAL_FAILURE(reach([this] { return drive_state() == DeviceState::OPERATION_ENABLED; }, 2.0,
+                                "the enable after the reset failed"));
 }
 
 /// The lifecycle disable() leaves a faulted drive in Fault and still succeeds.
 TEST_F(SingleDrive, TheLifecycleDisableLeavesAFaultAlone)
 {
-  provoke_step_fault(1000.0, 0.02);
-  ASSERT_GE(tick_until([this] { return drive_state() == DeviceState::FAULT; }, 0.5), 0.0);
+  ASSERT_NO_FATAL_FAILURE(provoke_step_fault(1000.0, 0.02));
+  ASSERT_NO_FATAL_FAILURE(reach([this] { return drive_state() == DeviceState::FAULT; }, 0.5, "did not reach Fault"));
   const uint16_t error_code = reading_.error_code;
   EXPECT_TRUE(drive_->disable());
-  sample();
+  ASSERT_NO_FATAL_FAILURE(sample());
   EXPECT_EQ(drive_state(), DeviceState::FAULT) << "disable() reset the fault";
   EXPECT_EQ(reading_.error_code, error_code) << "the error code was lost";
 }
@@ -380,13 +385,13 @@ TEST_F(SingleDrive, TheLifecycleDisableLeavesAFaultAlone)
 /// The lifecycle enable() refuses a faulted drive instead of resetting it.
 TEST_F(SingleDrive, TheLifecycleEnableRefusesAFaultedDrive)
 {
-  provoke_step_fault(1000.0, 0.02);
-  ASSERT_GE(tick_until([this] { return drive_state() == DeviceState::FAULT; }, 0.5), 0.0);
+  ASSERT_NO_FATAL_FAILURE(provoke_step_fault(1000.0, 0.02));
+  ASSERT_NO_FATAL_FAILURE(reach([this] { return drive_state() == DeviceState::FAULT; }, 0.5, "did not reach Fault"));
   hold_here();
-  tick(cycles(0.02));
+  ASSERT_NO_FATAL_FAILURE(tick(cycles(0.02)));
   ASSERT_TRUE(drive_->write({ setpoint_ }));
   EXPECT_FALSE(drive_->enable()) << "enable() went ahead with a faulted drive";
-  sample();
+  ASSERT_NO_FATAL_FAILURE(sample());
   EXPECT_EQ(drive_state(), DeviceState::FAULT) << "enable() reset the fault";
 }
 
@@ -397,18 +402,18 @@ TEST_F(SingleDrive, TheLifecycleEnableRefusesADriveThatFaultedAfterAnEarlierEnab
   hold_here();
   ASSERT_TRUE(drive_->write({ setpoint_ }));
   ASSERT_TRUE(drive_->enable());
-  sample();
+  ASSERT_NO_FATAL_FAILURE(sample());
   hold_here();
-  tick(cycles(0.05));
+  ASSERT_NO_FATAL_FAILURE(tick(cycles(0.05)));
   limit_travel(1.2);
   setpoint_.position += 0.02 * sign_;
-  ASSERT_GE(tick_until([this] { return drive_state() == DeviceState::FAULT; }, 0.5), 0.0)
-      << "the step did not fault the drive";
+  ASSERT_NO_FATAL_FAILURE(
+      reach([this] { return drive_state() == DeviceState::FAULT; }, 0.5, "the step did not fault the drive"));
   hold_here();
-  tick(cycles(0.02));
+  ASSERT_NO_FATAL_FAILURE(tick(cycles(0.02)));
   ASSERT_TRUE(drive_->write({ setpoint_ }));
   EXPECT_FALSE(drive_->enable()) << "enable() reported success for a faulted drive";
-  sample();
+  ASSERT_NO_FATAL_FAILURE(sample());
   EXPECT_EQ(drive_state(), DeviceState::FAULT) << "enable() reset the fault";
 }
 
@@ -418,9 +423,9 @@ TEST_F(SingleDrive, AMonitoredJointRefusesEnergisingRequests)
   ASSERT_TRUE(start({ .energize = false }));
   for (const DriveAction action : { DriveAction::ENABLE, DriveAction::QUICK_STOP })
   {
-    act(action);
+    ASSERT_NO_FATAL_FAILURE(act(action));
     EXPECT_EQ(drive_->active_drive_action(0), DriveAction::NONE);
-    tick(cycles(0.2));
+    ASSERT_NO_FATAL_FAILURE(tick(cycles(0.2)));
     EXPECT_EQ(drive_state(), DeviceState::SWITCH_ON_DISABLED);
   }
 }

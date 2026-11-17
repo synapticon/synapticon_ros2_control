@@ -231,6 +231,8 @@ The suite lives in `synapticon_hardware`, as headers for test executables:
 
 A test asks for its drive settings in `start()`, for example `start({ .quick_stop_deceleration = 2.0 })`.
 A test that moves the joint arms the watchdog with `limit_travel()` right after `energize()`, before the first motion.
+It calls each fixture helper that cycles in `ASSERT_NO_FATAL_FAILURE`, and waits for a state with `reach()`.
+So a watchdog trip or a stop request ends the test there, and its own checks add no failures.
 It uses the HAL only through `Cia402Hal`.
 
 Each HAL brings a `HalBench`, which applies the settings in its own way.

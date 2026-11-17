@@ -38,15 +38,15 @@ TEST_F(SingleDrive, ImpedanceQuickStopHoldsAndDisableVoltageCuts)
   ASSERT_NO_FATAL_FAILURE(energize());
   const double p0 = reading_.position;
   limit_travel(0.05);
-  act(DriveAction::QUICK_STOP);
-  ASSERT_GE(tick_until([this] { return drive_state() == DeviceState::QUICK_STOP_ACTIVE; }, 0.05), 0.0);
-  tick(cycles(1.0));
+  ASSERT_NO_FATAL_FAILURE(act(DriveAction::QUICK_STOP));
+  ASSERT_NO_FATAL_FAILURE(reach([this] { return drive_state() == DeviceState::QUICK_STOP_ACTIVE; }, 0.05,
+                                "did not reach Quick Stop Active"));
+  ASSERT_NO_FATAL_FAILURE(tick(cycles(1.0)));
   EXPECT_EQ(drive_state(), DeviceState::QUICK_STOP_ACTIVE);
   EXPECT_NEAR(reading_.position, p0, 0.01);
-  act(DriveAction::DISABLE_VOLTAGE);
-  EXPECT_GE(tick_until([this] { return drive_state() == DeviceState::SWITCH_ON_DISABLED; },
-                       0.1 + bench().disable_delay(0)),
-            0.0);
+  ASSERT_NO_FATAL_FAILURE(act(DriveAction::DISABLE_VOLTAGE));
+  ASSERT_NO_FATAL_FAILURE(reach([this] { return drive_state() == DeviceState::SWITCH_ON_DISABLED; },
+                                0.1 + bench().disable_delay(0), "did not reach Switch On Disabled"));
 }
 
 /// Impedance mode: a quick stop from motion stops the joint and keeps it there while new targets keep coming.
@@ -61,13 +61,13 @@ TEST_F(SingleDrive, ImpedanceQuickStopFromMotionStops)
   setpoint_.damping = test_gains(0).damping;
   ASSERT_NO_FATAL_FAILURE(energize());
   limit_travel(0.8);
-  run_at(0.5, 0.8);
+  ASSERT_NO_FATAL_FAILURE(run_at(0.5, 0.8));
   const double p_request = reading_.position;
   limit_travel(0.6);
-  act(DriveAction::QUICK_STOP);
-  carry_on(0.3);
+  ASSERT_NO_FATAL_FAILURE(act(DriveAction::QUICK_STOP));
+  ASSERT_NO_FATAL_FAILURE(carry_on(0.3));
   const double p_stopped = reading_.position;
-  carry_on(1.0);
+  ASSERT_NO_FATAL_FAILURE(carry_on(1.0));
   EXPECT_EQ(drive_state(), DeviceState::QUICK_STOP_ACTIVE);
   EXPECT_LT(std::abs(p_stopped - p_request), 0.2) << "the joint ran on after the quick stop";
   EXPECT_NEAR(reading_.position, p_stopped, 0.02) << "the joint did not stay where it stopped";
@@ -84,11 +84,11 @@ TEST_F(SingleDrive, ImpedanceWithoutTheHoldStopsAtTheLastForwardedTarget)
   setpoint_.damping = test_gains(0).damping;
   ASSERT_NO_FATAL_FAILURE(energize());
   limit_travel(0.8);
-  run_at(0.5, 0.8);
+  ASSERT_NO_FATAL_FAILURE(run_at(0.5, 0.8));
   const double last_forwarded = setpoint_.position;  // the request's own cycle is not forwarded
   limit_travel(0.6);
-  act(DriveAction::QUICK_STOP);
-  carry_on(1.5);
+  ASSERT_NO_FATAL_FAILURE(act(DriveAction::QUICK_STOP));
+  ASSERT_NO_FATAL_FAILURE(carry_on(1.5));
   EXPECT_EQ(drive_state(), DeviceState::QUICK_STOP_ACTIVE);
   EXPECT_GT(std::abs(setpoint_.position - last_forwarded), 0.5) << "the controller did not run on";
   EXPECT_NEAR(reading_.position, last_forwarded, 0.05) << "the joint did not stop at the last target";
@@ -105,15 +105,15 @@ TEST_F(SingleDrive, ImpedanceRampedDisableFromMotionStops)
   setpoint_.damping = test_gains(0).damping;
   ASSERT_NO_FATAL_FAILURE(energize());
   limit_travel(0.8);
-  run_at(0.5, 0.8);
+  ASSERT_NO_FATAL_FAILURE(run_at(0.5, 0.8));
   const double p_request = reading_.position;
   limit_travel(0.6);
-  act(DriveAction::DISABLE);
+  ASSERT_NO_FATAL_FAILURE(act(DriveAction::DISABLE));
   bool reached = false;
   for (int i = 0; i < cycles(1.0) && !reached; ++i)
   {
     setpoint_.position += setpoint_.velocity * DT;
-    tick();
+    ASSERT_NO_FATAL_FAILURE(tick());
     reached = drive_state() == DeviceState::SWITCH_ON_DISABLED;
   }
   EXPECT_TRUE(reached) << "did not reach Switch On Disabled within 1 s";
@@ -131,15 +131,15 @@ TEST_F(SingleDrive, ImpedanceQuickStopWithOptionCodeTwoStopsThenDeEnergises)
   setpoint_.damping = test_gains(0).damping;
   ASSERT_NO_FATAL_FAILURE(energize());
   limit_travel(0.8);
-  run_at(0.5, 0.8);
+  ASSERT_NO_FATAL_FAILURE(run_at(0.5, 0.8));
   const double p_request = reading_.position;
   limit_travel(0.6);
-  act(DriveAction::QUICK_STOP);
+  ASSERT_NO_FATAL_FAILURE(act(DriveAction::QUICK_STOP));
   bool reached = false;
   for (int i = 0; i < cycles(1.5) && !reached; ++i)
   {
     setpoint_.position += setpoint_.velocity * DT;  // the motion controller carries on
-    tick();
+    ASSERT_NO_FATAL_FAILURE(tick());
     reached = drive_state() == DeviceState::SWITCH_ON_DISABLED;
   }
   EXPECT_TRUE(reached) << "did not de-energise within 1.5 s";
