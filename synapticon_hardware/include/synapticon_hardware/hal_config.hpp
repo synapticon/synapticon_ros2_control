@@ -65,17 +65,17 @@ inline std::string param_or(const ParameterMap& map, const std::string& name, co
 inline bool read_flag(std::string_view text)
 {
   const auto spelled = [text](std::string_view word) {
-    return std::ranges::equal(text, word, [](char a, char b) {
+    return std::equal(text.begin(), text.end(), word.begin(), word.end(), [](char a, char b) {
       return std::tolower(static_cast<unsigned char>(a)) == std::tolower(static_cast<unsigned char>(b));
     });
   };
   constexpr std::array<std::string_view, 2> set_words{ "true", "1" };
   constexpr std::array<std::string_view, 2> clear_words{ "false", "0" };
-  if (std::ranges::any_of(set_words, spelled))
+  if (std::any_of(set_words.begin(), set_words.end(), spelled))
   {
     return true;
   }
-  if (std::ranges::any_of(clear_words, spelled))
+  if (std::any_of(clear_words.begin(), clear_words.end(), spelled))
   {
     return false;
   }

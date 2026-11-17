@@ -74,7 +74,10 @@ inline double& si_factor(SiFactors& factors, Unit unit)
 constexpr SiFactors unread_si_factors()
 {
   SiFactors factors{};
-  factors.fill(1.0e-3);
+  for (double& factor : factors)
+  {
+    factor = 1.0e-3;
+  }
   for (const Unit read_from_drive :
        { Unit::RAW, Unit::ANGLE, Unit::ANGULAR_VELOCITY, Unit::MOTOR_TORQUE, Unit::SHAFT_TORQUE })
   {
