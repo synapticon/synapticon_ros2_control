@@ -331,11 +331,23 @@ EthercatSoemHal::~EthercatSoemHal()
 
 // --- Setup ---------------------------------------------------------------------------------------
 
-bool EthercatSoemHal::setup(SoemConfig config, std::vector<JointConfig> joints)
+bool EthercatSoemHal::begin_setup()
 {
   if (bus_)
   {
     RCLCPP_ERROR(logger(), "setup() refused: the HAL is brought up, disconnect() first.");
+    return false;
+  }
+  set_up_ = false;
+  config_ = SoemConfig{};
+  joints_.clear();
+  return true;
+}
+
+bool EthercatSoemHal::setup(SoemConfig config, std::vector<JointConfig> joints)
+{
+  if (!begin_setup())
+  {
     return false;
   }
   if (joints.empty() || config.network_interface.empty())
@@ -417,6 +429,10 @@ std::optional<std::vector<JointConfig>> drives_from(const std::vector<synapticon
 
 bool EthercatSoemHal::setup(const HalConfig& description)
 {
+  if (!begin_setup())
+  {
+    return false;
+  }
   HalConfig config = description;  // a robot definition file may fill in joints and defaults
   if (std::string error; !ec::apply_robot_config(config, error))
   {
@@ -669,6 +685,11 @@ bool EthercatSoemHal::disconnect()
 bool EthercatSoemHal::is_connected() const
 {
   return bus_ && bus_->open;
+}
+
+std::size_t EthercatSoemHal::joint_count() const
+{
+  return joints_.size();
 }
 
 void EthercatSoemHal::link_health(LinkHealth& health) const

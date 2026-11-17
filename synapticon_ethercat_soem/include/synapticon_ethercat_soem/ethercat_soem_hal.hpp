@@ -75,6 +75,8 @@ public:
   bool stop() override;
   bool disconnect() override;
   bool is_connected() const override;
+  /// The joints of the last successful setup(), also before connect().
+  std::size_t joint_count() const override;
   void link_health(LinkHealth& health) const override;
 
 protected:
@@ -91,6 +93,9 @@ private:
   /// The SOEM context with its buffers, the process data and each drive's layout in it.
   struct Bus;
 
+  /// Refuse a setup while the HAL is brought up, otherwise forget the configuration of the setup before. False, logged,
+  /// when refused.
+  bool begin_setup();
   /// Find each joint's drive and check its identity. False, logged, when one is missing or another device.
   bool find_drives();
   /// Write each drive's startup SDOs. False, logged, at the first one that fails.

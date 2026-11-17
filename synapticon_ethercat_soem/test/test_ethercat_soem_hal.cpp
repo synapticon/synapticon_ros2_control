@@ -126,6 +126,31 @@ TEST(EthercatSoemHalSetup, TakesAWholeNumberOfAtLeastOneAsMaxBadCycles)
   EXPECT_TRUE(hal.setup(config));
 }
 
+/// joint_count() gives the joints of setup() before connect() as well.
+TEST(EthercatSoemHalSetup, CountsTheJointsBeforeConnect)
+{
+  EthercatSoemHal hal;
+  EXPECT_EQ(hal.joint_count(), 0u);
+  ASSERT_TRUE(hal.setup(bus("eth_test"), { joint(example_slave_config()) }));
+  EXPECT_EQ(hal.joint_count(), 1u);
+}
+
+/// A failed setup() keeps nothing, also not the configuration of a setup() that succeeded before, in both overloads.
+TEST(EthercatSoemHalSetup, AFailedSetupKeepsNoConfiguration)
+{
+  EthercatSoemHal typed;
+  ASSERT_TRUE(typed.setup(bus("eth_test"), { joint(example_slave_config()) }));
+  EXPECT_FALSE(typed.setup(bus(""), { joint(example_slave_config()) }));
+  EXPECT_EQ(typed.joint_count(), 0u);
+  EXPECT_FALSE(typed.connect()) << "connect() must not bring the bus up with the earlier configuration";
+
+  EthercatSoemHal described;
+  ASSERT_TRUE(described.setup(description("eth_test")));
+  EXPECT_FALSE(described.setup(description("eth_test", { { "mode_of_operation", "4" } })));
+  EXPECT_EQ(described.joint_count(), 0u);
+  EXPECT_FALSE(described.connect());
+}
+
 // --- Bring-up without a drive --------------------------------------------------------------------
 
 TEST(EthercatSoemHalBringUp, IsRefusedBeforeSetup)
