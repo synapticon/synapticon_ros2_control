@@ -33,12 +33,15 @@ enum class DriveAction : uint8_t
   // Codes >= 128 are reserved for vendor actions declared in the drive's slave_config.
 };
 
-/// Name and code table for DriveAction, so a new action reaches every configuration path at once.
-inline constexpr struct
+/// One entry of DRIVE_ACTION_NAMES: a DriveAction and its name in a configuration.
+struct DriveActionName
 {
   const char* name;
   DriveAction action;
-} DRIVE_ACTION_NAMES[] = {
+};
+
+/// Name and code table for DriveAction, so a new action reaches every configuration path at once.
+inline constexpr DriveActionName DRIVE_ACTION_NAMES[] = {
   { "none", DriveAction::NONE },
   { "enable", DriveAction::ENABLE },
   { "switch_on", DriveAction::SWITCH_ON },

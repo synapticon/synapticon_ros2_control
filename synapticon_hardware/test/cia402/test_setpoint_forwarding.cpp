@@ -117,7 +117,7 @@ TEST(SetpointForwarding, StayingInFaultDoesNotUndoAnEnable)
 }
 
 /// With the state applied before the action, a fresh fault is seen and the enable requested now still wins.
-TEST(SetpointForwarding, AFreshFaultThenAnEnableInTheSameCycleEndsForwarding)
+TEST(SetpointForwarding, AFreshFaultThenAnEnableInTheSameCycleForwards)
 {
   SetpointForwarding joint;
   joint.on_state(DeviceState::OPERATION_ENABLED);

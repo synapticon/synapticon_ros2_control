@@ -108,9 +108,9 @@ protected:
   }
 
   /// Logger of this HAL.
-  rclcpp::Logger log() const
+  const rclcpp::Logger& log() const
   {
-    return rclcpp::get_logger(logger_name_);
+    return logger_;
   }
 
   bool streaming_{ false };
@@ -192,6 +192,7 @@ private:
   void report_enable_timeout() const;
 
   std::string logger_name_;
+  rclcpp::Logger logger_;
   std::vector<DriveSlot> drives_;
   std::chrono::nanoseconds period_{ 1000000 };
   bool invalid_reported_{ false };  ///< write() logged an invalid setpoint in the cycle before

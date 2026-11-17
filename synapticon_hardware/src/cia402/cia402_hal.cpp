@@ -39,7 +39,8 @@ constexpr std::chrono::milliseconds REST_TIME{ 50 };
 constexpr std::chrono::seconds RAMP_WAIT_LIMIT{ 3 };
 }  // namespace
 
-Cia402Hal::Cia402Hal(std::string logger_name) : logger_name_(std::move(logger_name))
+Cia402Hal::Cia402Hal(std::string logger_name)
+  : logger_name_(std::move(logger_name)), logger_(rclcpp::get_logger(logger_name_))
 {
 }
 
