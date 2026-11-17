@@ -128,7 +128,9 @@ std::optional<uint32_t> read_u32(const SdoReader& sdo, const rclcpp::Logger& log
 /// - an impedance joint's drive has no torque sensor type, or it cannot be read,
 /// - an impedance joint's drive runs firmware older than MINIMUM_FIRMWARE, or its version cannot be read.
 ///
-/// A quick stop option code other than 2 or 6 is reported, but does not stop bring-up.
+/// A quick stop option code other than 2 or 6 is reported, but does not stop bring-up. Neither does a geared drive
+/// whose position encoder is the commutation encoder: its states are at the motor, its torque commands on the
+/// output side, and a warning says so.
 bool check_drives(const SdoReader& sdo, const SdoWriter& writer, const std::vector<JointConfig>& joints,
                   const std::vector<SlaveConfigUnits>& units, const rclcpp::Logger& logger,
                   std::vector<DriveReadback>& readback);

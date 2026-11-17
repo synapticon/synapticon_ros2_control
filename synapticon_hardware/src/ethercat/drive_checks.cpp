@@ -220,8 +220,9 @@ std::optional<double> torque_factor(const SdoReader& sdo, const rclcpp::Logger& 
 /// the position shaft.
 ///
 /// The drive scales velocities to the shaft of its position encoder with the gear ratio 0x6091, unless the position
-/// encoder is the commutation encoder on the motor shaft: then it ignores the ratio. A drive without 0x6091 has no
-/// ratio. Nothing, with a warning, when the ratio is 0, cannot be read, or the two encoders cannot be read or name no
+/// encoder is the commutation encoder on the motor shaft: then it ignores the ratio, and a ratio other than 1:1 is
+/// warned about, as the torque commands stay on the output side. A drive without 0x6091 has no ratio. Nothing, with a
+/// warning, when the ratio is 0, cannot be read, or the two encoders cannot be read or name no
 /// encoder 1 or 2, so they cannot tell whether the drive applies it.
 std::optional<double> position_shaft_ratio(const SdoReader& sdo, const rclcpp::Logger& logger, const JointConfig& joint)
 {
@@ -262,6 +263,12 @@ std::optional<double> position_shaft_ratio(const SdoReader& sdo, const rclcpp::L
   }
   if (*position_encoder == *commutation_encoder)
   {
+    RCLCPP_WARN(logger,
+                "Joint '%s': its position encoder is the commutation encoder (0x2012:9 = 0x2010:12 = %u), so the "
+                "drive ignores its gear ratio %u:%u (0x6091). The position, velocity and effort states are at the "
+                "motor, while the torque commands (effort, max_joint_torque, stiffness, damping) are on the output "
+                "side: they differ by the gear ratio.",
+                joint.name.c_str(), *position_encoder, motor_turns, shaft_turns);
     return 1.0;  // the position is counted on the motor shaft
   }
   return static_cast<double>(motor_turns) / shaft_turns;

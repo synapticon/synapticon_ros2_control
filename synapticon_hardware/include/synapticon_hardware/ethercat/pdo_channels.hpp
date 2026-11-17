@@ -37,6 +37,9 @@ namespace synapticon_hardware::ethercat
 /// 0x2053), STIFFNESS mNm/rad, DAMPING mNm s/rad, TORQUE_LIMIT mNm, VOLTAGE mV and CURRENT mA. TEMPERATURE is taken
 /// as a thousandth of a degree C, since the ESI gives no unit. RAW values pass unchanged. COUNT is the number of
 /// units, used as an array size.
+///
+/// When the position encoder is the commutation encoder, the drive ignores its gear ratio: the position shaft is then
+/// the motor shaft, while the fixed output torque units stay on the output side, a factor of the gear ratio apart.
 enum class Unit : std::size_t
 {
   RAW,

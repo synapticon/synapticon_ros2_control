@@ -21,6 +21,7 @@
 
 #include "synapticon_hardware/ethercat/coe_objects.hpp"
 #include "synapticon_hardware/ethercat/drive_checks.hpp"
+#include "../log_capture.hpp"
 
 namespace
 {
@@ -208,6 +209,30 @@ TEST_F(DriveChecks, GivesTheTorqueAtTheMotorWhenThePositionIsCountedThere)
 {
   ASSERT_TRUE(check({ joint() }));
   EXPECT_DOUBLE_EQ(si(Unit::SHAFT_TORQUE), si(Unit::MOTOR_TORQUE));
+}
+
+/// A geared drive whose position is counted on the motor shaft comes up, with a warning that its states are at the
+/// motor while its torque commands are on the output side.
+TEST_F(DriveChecks, WarnsThatAGearedDriveCountingAtTheMotorHasItsTorqueCommandsOnTheOutput)
+{
+  const synapticon_hardware::test::LogCapture log;
+  ASSERT_TRUE(check({ joint() }));  // encoder 1 counts the position and commutates, gear ratio 100:1
+  EXPECT_EQ(log.count("Joint 'joint_1': its position encoder is the commutation encoder"), 1u);
+  EXPECT_EQ(log.count("ignores its gear ratio 100:1 (0x6091)"), 1u);
+}
+
+/// Without that warning when the position is counted behind the gear, or the gear ratio is 1:1.
+TEST_F(DriveChecks, DoesNotWarnAboutTheGearWhenStatesAndTorqueCommandsAreOnTheSameShaft)
+{
+  const synapticon_hardware::test::LogCapture log;
+  drives_.healthy_drive();
+  drives_.put(coe::POSITION_ENCODER, 2);
+  drives_.put(coe::ENCODER_2_RESOLUTION, 1000);
+  ASSERT_TRUE(check({ joint() }, false));
+  drives_.healthy_drive();
+  drives_.put(coe::GEAR_MOTOR_REVOLUTIONS, 1);
+  ASSERT_TRUE(check({ joint() }, false));
+  EXPECT_EQ(log.count("ignores its gear ratio"), 0u);
 }
 
 /// With the position counted behind the gear, the effort state is the motor torque times the gear ratio.

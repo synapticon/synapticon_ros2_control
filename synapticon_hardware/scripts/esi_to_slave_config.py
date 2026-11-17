@@ -154,6 +154,9 @@ STARTUP_SDOS = (
 NOTES = {
     "units": """\
 All factors are 1. The HAL reads the units of the drive at bring-up and converts to SI units itself.
+Positions, velocities and the effort state are on the shaft of the position encoder, the torque commands on the
+output shaft. On a geared drive whose position encoder is the commutation encoder, that shaft is the motor shaft,
+so the states and the torque commands differ by the gear ratio. Bring-up warns about it.
 """,
     "modes": """\
 The robot description picks the mode of each joint: mode_of_operation 8 is CSP, -6 is impedance.
