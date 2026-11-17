@@ -110,7 +110,7 @@ When a step fails, see [Troubleshooting](#5-troubleshooting).
 
 ## 3. Hardware-in-the-loop suite
 
-`ethercat_soem_hil_test` runs `EthercatSoemHal` directly at 1 kHz, without ros2_control.
+`ethercat_soem_hil_test` runs `EthercatSoemHal` directly at 500 Hz, without ros2_control.
 It holds two kinds of tests:
 
 - the drive action suite, which works on any HAL and also runs on simulated drives in `colcon test`
@@ -208,8 +208,14 @@ So no test starts with the armed detection of an earlier fault test.
 
 At the end, the suite writes back the `0x6085` it found on each drive.
 `0x605A` keeps the value of the base config (6 for the example config).
-Two bring-up tests change a value for one bring-up and write the old value back right after:
-MaxJointTorque (`0x2054`) set to 0, and the torque sensor type (`0x2150:1`) set to None.
+Four bring-up tests change drive objects for a bring-up and write the old values back right after:
+
+- MaxJointTorque (`0x2054`), set to 0
+- the torque sensor type (`0x2150:1`), set to None
+- the max motor speed (`0x6080`) and the following error window (`0x6065`), set in SI units
+- the drive's impedance gains (`0x2060:1` and `0x2060:2`), set to marked values
+
+A test that fails or is killed between the change and the write-back leaves the changed value on the drive.
 
 To get the drive back exactly as commissioned, power-cycle it after the run.
 

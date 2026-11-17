@@ -2,8 +2,9 @@
 
 The ros2_control hardware for Synapticon SOMANET drives, and everything the drive layers share.
 
-The hardware interface `SynapticonSystemInterface` is what ros2_control loads, on the SOEM master.
-A HAL is loaded by its plugin name:
+The hardware interface `SynapticonSystemInterface` is what ros2_control loads.
+It talks to the drives through the SOEM master itself and does not load a HAL yet.
+The HALs are plugins: `drive_check` and the tests load one by its plugin name,
 `ethercat_soem` for real drives (from `synapticon_ethercat_soem`), `mock` or `mock_cia402` without them.
 
 What else is in the package:

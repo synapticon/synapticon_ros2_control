@@ -17,8 +17,9 @@
 /// run_ethercat_hil_tests(argc, argv). Each test's drive settings become SDO entries of a
 /// slave_config derived from a base config. The suite writes the quick stop objects and the following error objects
 /// (the vendor defaults, except in the fault tests), and restores the quick stop deceleration it found at the end.
-/// The bring-up tests set MaxJointTorque and the torque sensor type for one bring-up each and write back what they
-/// found. Drives keep SDO values until a power cycle.
+/// Some bring-up tests change a drive object (MaxJointTorque, the torque sensor type, the max motor speed, the
+/// following error window, the impedance gains) and write back what they found. A test that fails or is killed in
+/// between leaves the changed value. Drives keep SDO values until a power cycle.
 ///
 /// Environment (all optional):
 ///   SYNAPTICON_HIL_ROBOT         robot definition YAML of the bench: its first joint is the bench drive, its second
