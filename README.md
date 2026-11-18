@@ -307,7 +307,8 @@ joints:
 
 Every joint with a drive needs an entry. More settings are optional:
 
-- `energize: false` keeps a drive unpowered: it is set up and read, and requests to enable it are refused.
+- `energize: false` keeps a drive unpowered: it is set up and read, and the hardware ignores requests to enable it
+  (the service still answers that it posted them, the log says why nothing happens).
   This helps with a broken drive that is still on the bus.
 - `invert: true` flips position, velocity and effort, for a drive mounted the other way round.
   Turning the joint axis in the URDF is the cleaner fix.
@@ -461,7 +462,7 @@ ros2 service call /drive_controller/set_drive_action synapticon_control_msgs/srv
 
 The answer is `success=True, message="Posted 'reset_fault' for all drives"`.
 The faulted drives go to Switch On Disabled and stay de-energised until the next `enable`.
-`enable` is refused while a drive is in Fault, so a reset always comes first.
+The hardware ignores an `enable` while a drive is in Fault, and the log says so, so a reset always comes first.
 
 From a stop or a fault until the next `enable`, the hardware ignores the motion controller's setpoints for that drive.
 The motion controller may keep streaming. Re-command it, then enable.
