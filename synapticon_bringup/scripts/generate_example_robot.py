@@ -128,6 +128,15 @@ def controller_data(names):
         manager[controller] = ({"type": kind}, note)
     return {
         "controller_manager": {"ros__parameters": manager},
+        "joint_state_broadcaster": {
+            "ros__parameters": {
+                "joints": names,
+                "interfaces": (
+                    ["position", "velocity", "effort"],
+                    "the joint motion only, the drive states are on drive_status",
+                ),
+            }
+        },
         "drive_controller": {
             "ros__parameters": {
                 "joints": names,

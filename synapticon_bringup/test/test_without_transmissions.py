@@ -323,9 +323,9 @@ def test_the_urdf_of_the_plain_variant_has_no_transmission():
     )
 
 
-def drive_controller_joints(param_file):
+def controller_joints(param_file, controller):
     with open(param_file, encoding="utf-8") as stream:
-        return yaml.safe_load(stream)["drive_controller"]["ros__parameters"]["joints"]
+        return yaml.safe_load(stream)[controller]["ros__parameters"]["joints"]
 
 
 @pytest.mark.parametrize(
@@ -337,7 +337,7 @@ def drive_controller_joints(param_file):
     ids=["kept as it is", "transmissions left out"],
 )
 def test_the_files_for_the_launch(with_transmission, override, joints):
-    """The launch gets the robot definition to use, and the drive controller gets the joints that have a drive."""
+    """The launch gets the robot definition, the drive controller the joints with a drive, the broadcaster all."""
     robot = gripper()
     if not with_transmission:
         robot["transmissions"] = []
@@ -352,4 +352,7 @@ def test_the_files_for_the_launch(with_transmission, override, joints):
         for name in joint_names(launched)
         if joint(launched, name).get("drive", True)
     ] == joints
-    assert drive_controller_joints(param_file) == joints
+    assert controller_joints(param_file, "drive_controller") == joints
+    assert controller_joints(param_file, "joint_state_broadcaster") == joint_names(
+        launched
+    )

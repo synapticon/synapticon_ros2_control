@@ -21,6 +21,11 @@ controller_manager:
     motor_command_controller:  # commands in impedance mode
       type: synapticon_controllers/MotorCommandController
 
+joint_state_broadcaster:
+  ros__parameters:
+    joints: [joint_1, motor_1]
+    interfaces: [position, velocity, effort]  # the joint motion only, the drive states are on drive_status
+
 drive_controller:
   ros__parameters:
     joints: [motor_1]

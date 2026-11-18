@@ -139,14 +139,14 @@ def _declarations():
 
 
 def _robot_to_launch(context, *args, **kwargs):
-    """Prepare the robot definition to launch and the drive controller's joints."""
+    """Prepare the robot definition to launch and the joint lists that depend on it."""
     robot_config, param_file, disabled = prepare_launch_files(
         Arg("robot_config").perform(context),
         Arg("disable_transmissions").perform(context),
     )
     actions = [
         SetLaunchConfiguration("robot_config_in_use", robot_config),
-        SetLaunchConfiguration("drive_controller_param_file", param_file),
+        SetLaunchConfiguration("controller_joints_param_file", param_file),
     ]
     if disabled:
         actions.append(
@@ -193,9 +193,10 @@ def _spawner():
             "/controller_manager",
             "--controller-manager-timeout",
             CONTROLLER_MANAGER_WAIT_S,
-            # Holds only the drive controller's joints. The spawner passes a file only to the controllers it names.
+            # Holds only the joint lists of the drive controller and the joint state broadcaster. The spawner passes a
+            # file only to the controllers it names.
             "--param-file",
-            Arg("drive_controller_param_file"),
+            Arg("controller_joints_param_file"),
         ],
     )
 

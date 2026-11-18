@@ -264,12 +264,18 @@ def prepare_launch_files(path, override=""):
     Everything the example launch needs from a robot definition.
 
     Returns (robot_config_path, param_file_path, disabled). The parameter file lists the joints of the drive
-    controller, which change when the transmissions are left out.
+    controller and of the joint state broadcaster, which change when the transmissions are left out.
     """
     robot_config, disabled = robot_config_to_launch(path, override)
-    joints = joints_with_drive(_read_yaml(robot_config))
+    config = _read_yaml(robot_config)
+    all_joints = [joint["name"] for joint in config.get("joints") or []]
     param_file = write_temporary_yaml(
-        "drive_controller_joints_",
-        {"drive_controller": {"ros__parameters": {"joints": joints}}},
+        "controller_joints_",
+        {
+            "drive_controller": {
+                "ros__parameters": {"joints": joints_with_drive(config)}
+            },
+            "joint_state_broadcaster": {"ros__parameters": {"joints": all_joints}},
+        },
     )
     return robot_config, param_file, disabled
