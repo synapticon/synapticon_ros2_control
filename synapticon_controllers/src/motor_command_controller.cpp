@@ -155,6 +155,16 @@ void MotorCommandController::on_command(const std::shared_ptr<MotorCommand>& msg
       targets->per_joint.push_back(
           { msg->position[i], msg->velocity[i], msg->torque_feedforward[i], gain(msg->stiffness), gain(msg->damping) });
     }
+    targets->unknown_names =
+        static_cast<std::size_t>(std::count_if(msg->name.begin(), msg->name.end(), [this](const std::string& name) {
+          return std::find(joints_.begin(), joints_.end(), name) == joints_.end();
+        }));
+    if (targets->unknown_names != 0)
+    {
+      RCLCPP_WARN_THROTTLE(get_node()->get_logger(), *get_node()->get_clock(), 1000,
+                           "A MotorCommand names %zu joint(s) this controller does not command. They are ignored.",
+                           targets->unknown_names);
+    }
   }
   targets_.writeFromNonRT(targets);
 }

@@ -50,6 +50,13 @@ public:
   {
     on_command(std::make_shared<MotorCommand>(command));
   }
+
+  /// How many names of the last message the controller does not have.
+  std::size_t unknown_names()
+  {
+    const auto* latest = targets_.readFromNonRT();
+    return latest && *latest ? (*latest)->unknown_names : 0;
+  }
 };
 
 /// A command for `names` with distinct values per joint, so that a swapped mapping shows.
@@ -239,6 +246,19 @@ TEST_F(MotorCommandControllerTest, NanValuesAreNotRefused)
   EXPECT_DOUBLE_EQ(value(1, POSITION), 21.0);
   EXPECT_TRUE(std::isnan(value(1, STIFFNESS)));
   EXPECT_DOUBLE_EQ(value(1, DAMPING), 25.0);
+}
+
+/// Names the controller does not have are counted for the warning, and the known joints still get their values.
+TEST_F(MotorCommandControllerTest, UnknownNamesAreReportedAndIgnored)
+{
+  controller_->inject(command({ "joint_1", "joint_typo" }));
+  update();
+  EXPECT_EQ(controller_->unknown_names(), 1u);
+  expect_commanded(0, 0);
+  expect_held(1);
+
+  controller_->inject(command(JOINTS));
+  EXPECT_EQ(controller_->unknown_names(), 0u);
 }
 
 TEST_F(MotorCommandControllerTest, AJointMissingFromTheCommandIsHeld)
