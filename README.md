@@ -315,6 +315,7 @@ Every joint with a drive needs an entry. More settings are optional:
 - `mode_of_operation` sets this joint's mode, where `impedance` sets it for all.
   CSV (9) needs the `velocity` command, which `impedance:=true` declares.
 - `stiffness`, `damping` and `max_joint_torque` override `command_defaults` for this joint.
+  `max_joint_torque` is a limit of the drive, in its units, so only a joint with a drive takes one.
 
 `command_defaults` decide what a drive gets where a command leaves a value out, for example a `MotorCommand` with empty
 `stiffness` and `damping`, or the hold at activation.
@@ -326,6 +327,15 @@ Every impedance joint that may be powered needs all three values, from here or f
 Without them bring-up stops, because the drive would run on whatever it stored last.
 A value of 0 is allowed, with a warning.
 Bring-up logs what each drive held and what it starts with.
+
+A missing position means "hold".
+While the drive has power, the joint holds the last valid position target.
+While it has none, the hold follows the measured position, so the next enable does not pull the joint back.
+A missing velocity or effort becomes 0.
+An infinite value or a negative gain is invalid: `motor_command_controller` refuses such a message and its joints
+hold.
+If an invalid value still reaches the hardware, it stops with an error and disables all drives.
+[issue #88](https://github.com/synapticon/synapticon_ros2_control/issues/88) is about one strategy for missing and invalid values.
 
 A `<param>` in the URDF itself wins over the file.
 The `<hardware>` parameters `default_slave_config` and `mode_of_operation` count for the joints whose entry does not
@@ -381,9 +391,14 @@ ros2 topic pub --once /motor_command_controller/commands synapticon_control_msgs
   "{name: [joint_2], position: [-0.3], velocity: [0.0], torque_feedforward: [0.0], stiffness: [8.0], damping: [0.2]}"
 ```
 
-This moves `joint_2` only. A joint that the message does not name holds where it is.
+The enable comes first here, because until the first message every joint holds where it is.
+This moves `joint_2` only. A joint that the message does not name holds too.
+A name that `motor_command_controller` does not know gives a warning.
 `position`, `velocity` and `torque_feedforward` need one value per name.
 `stiffness` and `damping` may be empty. Then the joints get the `command_defaults` of the robot definition.
+A message that breaks these rules, or carries an invalid value, is refused, and the joints hold.
+`motor_command_controller` does not use the field `mode`, which
+[synapticon_control_msgs#7](https://github.com/synapticon/synapticon_control_msgs/pull/7) removes.
 
 ### 6.3. Launch arguments
 
@@ -529,6 +544,8 @@ Launch it with `robot:=geared`. The rules behind it:
   works against the transmission.
 - Position, velocity and effort always go through the transmission. Stiffness and damping go through only if the
   plugin supports gains. Otherwise each motor gets the values of its own joint entry.
+- The torque limit `max_joint_torque` belongs to the drive, so each motor takes the one of its own joint entry.
+  A joint without a drive cannot take one, nor the drive states or `drive_action`: bring-up refuses them.
 - If a joint without a drive only has state interfaces, it is just measured, and each motor takes the commands of its
   own joint. All joints without a drive in one transmission take commands, or none of them does.
 

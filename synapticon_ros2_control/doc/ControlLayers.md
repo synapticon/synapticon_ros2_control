@@ -179,7 +179,8 @@ by itself. The example is a quick stop in a torque-type mode, where the drive ke
 law on the streamed target and only a frozen target brings the joint to a stop. Such a hold replaces an
 ignored controller setpoint. It never competes with one, and it is never a judgement about the setpoint.
 
-Apart from this hold, every setpoint the hardware layer sends comes from a controller.
+Apart from this hold, and the hold of a joint whose position no controller gives, every setpoint the hardware
+layer sends comes from a controller.
 
 ## Recovery
 

@@ -86,6 +86,7 @@ activate:
 | `on_deactivate` | `disable()`, `stop()` | drives off, no data |
 | `on_cleanup` | `disconnect()`, released | bus closed |
 | `on_error` | `disconnect()`, released | bus closed, and ros2_control leaves the hardware unconfigured |
+| `on_shutdown` | as `on_cleanup` | bus closed, also when the hardware was only configured |
 
 `on_deactivate` reports an error when `disable()` fails, after `stop()`.
 A drive may then stay powered until its own watchdog takes it down, since no process data arrives any more.
@@ -99,6 +100,14 @@ Activation never powers a drive. Powering is always a separate request: the driv
 controller's service `~/set_drive_action`.
 The service refuses requests while the drive controller is inactive.
 A request that was not carried out before a deactivation is dropped, so an activation never powers a drive by itself.
+
+A joint whose position no controller gives holds.
+While its drive has power, it holds the last valid position target.
+While it has none, the hold follows the measured position, so that an enable never pulls the joint back.
+When a controller releases a joint's command interfaces, they return to "not given": the joint holds, with velocity
+and effort 0 and the default gains.
+When the drive controller releases a joint's `drive_action`, the hardware disables that drive if it has power.
+So a drive keeps power only while a drive controller is active.
 
 The design aims at several dozen drives on one bus.
 The control loop runs for all of them at once, 500 times a second in the examples, so all slow work happens before it starts.
