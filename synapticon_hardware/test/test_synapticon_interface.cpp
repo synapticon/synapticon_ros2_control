@@ -151,13 +151,14 @@ class RecordingSystem : public SynapticonSystemInterface
 {
 public:
   RecordingMockHal* client{ nullptr };
+  std::shared_ptr<RecordingMockHal> kept;  ///< keeps the last HAL alive after the component let go of it
 
 protected:
   std::shared_ptr<SynapticonHalI> make_hal() override
   {
-    auto owned = std::make_shared<RecordingMockHal>();
-    client = owned.get();
-    return owned;
+    kept = std::make_shared<RecordingMockHal>();
+    client = kept.get();
+    return kept;
   }
 };
 
@@ -758,6 +759,17 @@ TEST_F(SynapticonSystemInterfaceTest, ReleasingTheDriveActionOfAPoweredDriveDisa
   cycle();
   EXPECT_EQ(commanded_action(0), DriveAction::DISABLE);
   EXPECT_EQ(commanded_action(1), DriveAction::NONE) << "a drive without power needs no disable";
+}
+
+/// A shutdown from ACTIVE takes the drives down and lets go of the bus.
+TEST_F(SynapticonSystemInterfaceTest, AShutdownLetsGoOfTheBus)
+{
+  cycle();
+  const auto hal = system_.kept;
+  EXPECT_EQ(system_.on_shutdown(lifecycle_state(lifecycle_msgs::msg::State::PRIMARY_STATE_ACTIVE, "active")),
+            CallbackReturn::SUCCESS);
+  EXPECT_FALSE(hal->is_connected());
+  EXPECT_EQ(system_.write(rclcpp::Time(0), rclcpp::Duration(0, 0)), hardware_interface::return_type::OK);
 }
 
 /// A joint behind a transmission holds through its motor: the motor's command stays while the motor sags.

@@ -246,6 +246,18 @@ CallbackReturn SynapticonSystemInterface::on_error(const rclcpp_lifecycle::State
   return on_cleanup(previous_state);
 }
 
+CallbackReturn SynapticonSystemInterface::on_shutdown(const rclcpp_lifecycle::State& previous_state)
+{
+  exchanging_ = false;
+  if (hal_)
+  {
+    // Both succeed without doing anything when no drive has power or the data exchange does not run.
+    hal_->disable();
+    hal_->stop();
+  }
+  return on_cleanup(previous_state);
+}
+
 CallbackReturn SynapticonSystemInterface::on_cleanup(const rclcpp_lifecycle::State& /*previous_state*/)
 {
   exchanging_ = false;

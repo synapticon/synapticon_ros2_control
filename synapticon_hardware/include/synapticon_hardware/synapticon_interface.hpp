@@ -57,6 +57,8 @@ public:
   hardware_interface::CallbackReturn on_cleanup(const rclcpp_lifecycle::State& previous_state) override;
   /// Lets go of the HAL like on_cleanup(). A failed deactivation also lands here.
   hardware_interface::CallbackReturn on_error(const rclcpp_lifecycle::State& previous_state) override;
+  /// Takes any drive with power down, then lets go of the HAL like on_cleanup(), from whatever state.
+  hardware_interface::CallbackReturn on_shutdown(const rclcpp_lifecycle::State& previous_state) override;
 
   /// Sets the command interfaces a controller releases to "not given", so its last commands stop counting. A joint
   /// holds, see HoldReference. A released drive_action of a drive that may have power becomes a disable, so that
