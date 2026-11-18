@@ -37,7 +37,7 @@ from ament_index_python.packages import (
     get_package_share_directory,
     PackageNotFoundError,
 )
-from synapticon_bringup.testing import example_joints, robot_bus_setting, robot_files
+from synapticon_bringup.testing import drive_joints, robot_bus_setting, robot_files
 
 # Time for the master to release the bus between two steps [s].
 BUS_RELEASE_S = 8.0
@@ -309,7 +309,7 @@ def main():
             "ethercat_soem needs --network-interface, or network_interface in the robot definition"
         )
     if args.only is None:
-        several = len(example_joints(args.robot)) > 1
+        several = len(drive_joints(args.robot)) > 1
         args.only = (
             ["pairs", "bringup", "joints"] if several else ["suite", "path", "bringup"]
         )

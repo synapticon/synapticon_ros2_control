@@ -43,6 +43,7 @@ from diagnostic_msgs.msg import DiagnosticStatus
 import launch_testing.markers
 import pytest
 from synapticon_bringup.testing import (
+    drive_joints,
     example_controllers,
     example_joints,
     example_test_description,
@@ -61,6 +62,10 @@ from synapticon_control_msgs.srv import (
 
 ROBOT = hil_robot("2dof")
 JOINTS = example_joints(ROBOT)
+if drive_joints(ROBOT) != JOINTS:
+    raise ValueError(
+        f"the multi-joint test needs a robot without transmissions, every joint with its own drive: {ROBOT}"
+    )
 SOAK_S = float(os.environ.get("SYNAPTICON_HIL_SOAK_S", "") or "60")
 # A host without real-time scheduling misses a few cycles per minute, which the drives ride through.
 OVERRUNS_PER_MINUTE = 10

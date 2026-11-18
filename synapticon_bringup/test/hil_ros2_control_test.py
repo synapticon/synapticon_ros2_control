@@ -30,8 +30,9 @@ import launch_testing.markers
 import pytest
 from std_msgs.msg import Float64MultiArray
 from synapticon_bringup.testing import (
+    commanded_joints,
+    drive_joints,
     env_flag,
-    example_joints,
     example_test_description,
     hil_launch_arguments,
     hil_robot,
@@ -42,12 +43,14 @@ from synapticon_control_msgs.msg import DriveStatus, MotorCommand
 from synapticon_control_msgs.srv import SetDriveAction
 
 ROBOT = hil_robot("1dof")
-JOINTS = example_joints(ROBOT)
-if len(JOINTS) != 1:
+COMMANDED, DRIVES = commanded_joints(ROBOT), drive_joints(ROBOT)
+if len(COMMANDED) != 1 or len(DRIVES) != 1:
     raise ValueError(
-        f"the path test needs a robot with one joint, {ROBOT} has {len(JOINTS)}"
+        f"the path test needs a robot with one commanded joint and one drive, {ROBOT} has "
+        f"{len(COMMANDED)} and {len(DRIVES)}"
     )
-JOINT = JOINTS[0]
+# The joint the test commands and measures, and the joint whose drive it switches. They differ behind a transmission.
+JOINT, DRIVE = COMMANDED[0], DRIVES[0]
 IMPEDANCE = env_flag("SYNAPTICON_HIL_IMPEDANCE")
 COMMAND_CONTROLLER = (
     "motor_command_controller" if IMPEDANCE else "forward_position_controller"
@@ -109,7 +112,7 @@ class TestRos2ControlPath(StackTestCase):
         return self.probe.positions.get(JOINT)
 
     def _drive_state(self):
-        drive = self.probe.drives.get(JOINT)
+        drive = self.probe.drives.get(DRIVE)
         return drive.device_state if drive else None
 
     def _on_cycle(self):
@@ -145,7 +148,7 @@ class TestRos2ControlPath(StackTestCase):
 
     def _drive_action(self, action):
         """Request a drive action by name on the joint under test."""
-        request = SetDriveAction.Request(action=action, dof_names=[JOINT])
+        request = SetDriveAction.Request(action=action, dof_names=[DRIVE])
         return self.probe.call(self.action_client, request)
 
     def _command(self, position):
@@ -186,14 +189,14 @@ class TestRos2ControlPath(StackTestCase):
     def _reported_as(self, message):
         """True once /diagnostics reports the joint's drive with `message`."""
         return (
-            lambda: getattr(self.probe.drive_reports.get(JOINT), "message", None)
+            lambda: getattr(self.probe.drive_reports.get(DRIVE), "message", None)
             == message
         )
 
     def _reported_at(self, level):
         """True once /diagnostics reports the joint's drive at `level`."""
         return (
-            lambda: getattr(self.probe.drive_reports.get(JOINT), "level", None) == level
+            lambda: getattr(self.probe.drive_reports.get(DRIVE), "level", None) == level
         )
 
     def _expect_accepted(self, action):
@@ -207,7 +210,7 @@ class TestRos2ControlPath(StackTestCase):
             STACK_TIMEOUT_S,
             "the stack",
         )
-        self.assertTrue(self.probe.drives[JOINT].online, f"{JOINT} is not online")
+        self.assertTrue(self.probe.drives[DRIVE].online, f"{DRIVE} is not online")
         self.assertEqual(
             self._drive_state(),
             DriveStatus.STATE_SWITCH_ON_DISABLED,
@@ -233,7 +236,7 @@ class TestRos2ControlPath(StackTestCase):
             "Operation Enabled on /diagnostics",
         )
         self.assertEqual(
-            self.probe.drive_reports[JOINT].level, DiagnosticStatus.OK, "level"
+            self.probe.drive_reports[DRIVE].level, DiagnosticStatus.OK, "level"
         )
 
         self._ramp_to(start + MOVE_RAD)

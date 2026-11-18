@@ -32,6 +32,7 @@ from diagnostic_msgs.msg import DiagnosticStatus
 import launch_testing.markers
 import pytest
 from synapticon_bringup.testing import (
+    drive_joints,
     env_flag,
     example_joints,
     example_test_description,
@@ -56,6 +57,7 @@ STATE_TIMEOUT_S = 10.0
 BAD_OUTPUT = ("!! ", "0x2054 is 0")
 BRING_UP_FAILED = "connect() failed"
 JOINTS = example_joints(ROBOT)
+DRIVES = drive_joints(ROBOT)  # a transmission output has no drive
 
 
 @pytest.mark.launch_test
@@ -78,7 +80,7 @@ class TestBringUp(StackTestCase):
 
     def _wait_for_stack(self, proc_output):
         """Wait for the bring-up to succeed or fail, failing with its warnings and errors."""
-        expected = f"{len(JOINTS)} drive(s) exchange valid data"
+        expected = f"{len(DRIVES)} drive(s) exchange valid data"
         outcome = re.compile(re.escape(expected) + "|" + re.escape(BRING_UP_FAILED))
         proc_output.waitFor(outcome, timeout=STACK_TIMEOUT_S)
         lines = output_lines(proc_output)
@@ -93,7 +95,7 @@ class TestBringUp(StackTestCase):
 
     def _check_drives(self):
         """Every drive is online, de-energised, fault free and in the requested mode."""
-        for name in JOINTS:
+        for name in DRIVES:
             drive = self.probe.drives[name]
             with self.subTest(joint=name):
                 self.assertTrue(drive.online, "not online")
@@ -108,7 +110,7 @@ class TestBringUp(StackTestCase):
 
     def _check_drive_reports(self):
         """/diagnostics reports every drive under its joint name, online and de-energised."""
-        for name in JOINTS:
+        for name in DRIVES:
             report = self.probe.drive_reports[name]
             values = {entry.key: entry.value for entry in report.values}
             with self.subTest(joint=name):
@@ -131,14 +133,14 @@ class TestBringUp(StackTestCase):
         self.assertEqual(not_finite, [], "joints without a finite position")
 
         self.probe.wait_for(
-            lambda: set(JOINTS) <= set(self.probe.drives),
+            lambda: set(DRIVES) <= set(self.probe.drives),
             STATE_TIMEOUT_S,
             "every drive on drive_status",
         )
         self._check_drives()
 
         self.probe.wait_for(
-            lambda: set(JOINTS) <= set(self.probe.drive_reports),
+            lambda: set(DRIVES) <= set(self.probe.drive_reports),
             STATE_TIMEOUT_S,
             "every drive on /diagnostics",
         )

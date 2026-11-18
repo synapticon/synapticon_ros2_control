@@ -25,6 +25,7 @@ import launch.launch_description_sources
 import launch_testing.actions
 import rclpy
 from sensor_msgs.msg import JointState
+from synapticon_bringup.transmissions import joints_with_drive
 from synapticon_control_msgs.msg import DriveStatusArray
 import yaml
 
@@ -121,6 +122,17 @@ def robot_bus_setting(robot, key, default):
 def example_joints(robot):
     """Joint names of the robot definition of `robot` (see robot_files), in its order."""
     return [joint["name"] for joint in _read_yaml(robot_files(robot)[0])["joints"]]
+
+
+def drive_joints(robot):
+    """The joints of `robot` (see robot_files) that have a drive, in their order. A transmission output has none."""
+    return joints_with_drive(_read_yaml(robot_files(robot)[0]))
+
+
+def commanded_joints(robot):
+    """The joints of `robot` (see robot_files) that take commands, in order. A motor behind a transmission does not."""
+    joints = _read_yaml(robot_files(robot)[0])["joints"]
+    return [joint["name"] for joint in joints if joint.get("commanded", True)]
 
 
 def hil_test_gains(robot, joint):

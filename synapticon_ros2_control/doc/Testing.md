@@ -272,6 +272,7 @@ It brings up the 1 DOF example on the `ethercat_soem` HAL and then:
 6. disables
 
 A watchdog cuts the voltage when the joint strays more than 0.8 rad from its commanded target.
+On a robot with a transmission, the test commands the output joint and switches the drive of its motor.
 Along the way, the test checks that the drive's entry on `/diagnostics` follows the enable and the quick stop.
 
 ### Steps
@@ -412,6 +413,7 @@ a similar count means the machine, not the number of drives.
 `run_hil_tests.py` runs the automated hardware tests that fit the robot, waits between the runs, prints a summary,
 and exits with 0 only when every run passed.
 It is installed in every build, together with the tests it runs.
+It counts the robot's drives, not its joints: the output of a transmission has no drive.
 Its runs keep ROS discovery on this machine, so they never reach a stack on another bench.
 
 Ctrl-C, a closed terminal or a lost SSH session stop the running test the way its own Ctrl-C would.

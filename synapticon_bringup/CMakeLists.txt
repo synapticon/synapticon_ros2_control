@@ -36,10 +36,11 @@ if(BUILD_TESTING)
     set(_next_domain_id ${_next_domain_id} PARENT_SCOPE)
   endfunction()
 
-  # Running without transmissions, the example robot generator and the hardware test runner.
+  # Running without transmissions, the example robot generator, the hardware test runner and its helpers.
   ament_add_pytest_test(test_without_transmissions test/test_without_transmissions.py TIMEOUT 60)
   ament_add_pytest_test(test_generate_example_robot test/test_generate_example_robot.py TIMEOUT 60)
   ament_add_pytest_test(test_hil_test_gains test/test_hil_test_gains.py TIMEOUT 60)
+  ament_add_pytest_test(test_hil_robots test/test_hil_robots.py TIMEOUT 60)
   ament_add_pytest_test(test_run_hil_tests test/test_run_hil_tests.py TIMEOUT 60)
 
   # The geared example on the mock HAL, with and without its transmission.
