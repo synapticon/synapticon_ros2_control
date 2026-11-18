@@ -107,6 +107,12 @@ CONTROLLER_TYPES = {
 }
 
 
+# Longest line of a generated file.
+LINE_LIMIT = 120
+# The example launch overrides these joint lists, because they change when it runs a robot without its transmissions.
+SET_BY_LAUNCH = "the example launch sets it from the robot definition"
+
+
 def controller_data(names):
     """The controller configuration as data, with a note per key."""
     manager = {
@@ -130,7 +136,7 @@ def controller_data(names):
         "controller_manager": {"ros__parameters": manager},
         "joint_state_broadcaster": {
             "ros__parameters": {
-                "joints": names,
+                "joints": (names, SET_BY_LAUNCH),
                 "interfaces": (
                     ["position", "velocity", "effort"],
                     "the joint motion only, the drive states are on drive_status",
@@ -139,7 +145,7 @@ def controller_data(names):
         },
         "drive_controller": {
             "ros__parameters": {
-                "joints": names,
+                "joints": (names, SET_BY_LAUNCH),
                 "fault_reaction": (
                     Hint({"enabled": True}),
                     "quick stop all joints when one fails",
@@ -202,7 +208,12 @@ def yaml_lines(data, indent=0):
                     + "}"
                 )
         elif isinstance(value, list):
-            lines.append(f"{pad}{key}: {flow(value, len(pad) + len(key) + 2)}{comment}")
+            text = f"{pad}{key}: {flow(value, len(pad) + len(key) + 2)}"
+            # A note that would make the last line too long goes on a line of its own, above the key.
+            if len(text.splitlines()[-1] + comment) > LINE_LIMIT:
+                lines.append(f"{pad}# {note}")
+                comment = ""
+            lines.append(text + comment)
         else:
             lines.append(f"{pad}{key}: {scalar(value)}{comment}")
     return lines
