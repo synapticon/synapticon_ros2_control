@@ -103,10 +103,16 @@ class TestRos2ControlPath(StackTestCase):
         )
 
     def tearDown(self):
-        """Leave the drive de-energised."""
-        if self._drive_state() not in (None, DriveStatus.STATE_SWITCH_ON_DISABLED):
-            self._drive_action(SetDriveAction.Request.DISABLE_VOLTAGE)
-        super().tearDown()
+        """Leave the drive de-energised, and fail loudly when the drive controller refuses."""
+        try:
+            if self._drive_state() not in (None, DriveStatus.STATE_SWITCH_ON_DISABLED):
+                response = self._drive_action(SetDriveAction.Request.DISABLE_VOLTAGE)
+                if not response.success:
+                    raise AssertionError(
+                        f"disable_voltage refused, {DRIVE} may still have power: {response.message}"
+                    )
+        finally:
+            super().tearDown()
 
     def _position(self):
         return self.probe.positions.get(JOINT)

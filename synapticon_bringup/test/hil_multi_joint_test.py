@@ -136,15 +136,23 @@ class TestMultiJoint(StackTestCase):
         )
 
     def tearDown(self):
-        """Leave every drive de-energised."""
-        powered = [
-            name
-            for name in JOINTS
-            if self._state(name) not in (None, DriveStatus.STATE_SWITCH_ON_DISABLED)
-        ]
-        if powered:
-            self._drive_action(SetDriveAction.Request.DISABLE_VOLTAGE, powered)
-        super().tearDown()
+        """Leave every drive de-energised, and fail loudly when the drive controller refuses."""
+        try:
+            powered = [
+                name
+                for name in JOINTS
+                if self._state(name) not in (None, DriveStatus.STATE_SWITCH_ON_DISABLED)
+            ]
+            if powered:
+                response = self._drive_action(
+                    SetDriveAction.Request.DISABLE_VOLTAGE, powered
+                )
+                if not response.success:
+                    raise AssertionError(
+                        f"disable_voltage refused, {powered} may still have power: {response.message}"
+                    )
+        finally:
+            super().tearDown()
 
     # --- Following the stack ------------------------------------------------------------------------------------
 
