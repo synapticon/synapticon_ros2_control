@@ -733,6 +733,21 @@ TEST_F(SynapticonSystemInterfaceTest, APoweredJointHoldsItsLastTarget)
   EXPECT_DOUBLE_EQ(system_.client->last_commands.at(0).position, 0.6);
 }
 
+/// A controller that releases its interfaces leaves no command behind: the joint holds, and its velocity is 0.
+TEST_F(SynapticonSystemInterfaceTest, ReleasedCommandInterfacesStopCounting)
+{
+  system_.client->status_words = { OPERATION_ENABLED, OPERATION_ENABLED };
+  system_.client->positions = { 1.0, 0.0 };
+  const auto position = system_.get_command_interface_handle("joint_1/position");
+  ASSERT_TRUE(position->set_value(0.6));
+  cycle();
+  ASSERT_EQ(system_.perform_command_mode_switch({}, { "joint_1/position" }), hardware_interface::return_type::OK);
+  EXPECT_TRUE(std::isnan(position->get_optional<double>().value()));
+  system_.client->positions[0] = 0.4;
+  cycle();
+  EXPECT_DOUBLE_EQ(system_.client->last_commands.at(0).position, 0.6) << "the hold of the last target";
+}
+
 /// A joint behind a transmission holds through its motor: the motor's command stays while the motor sags.
 TEST_F(SynapticonSystemInterfaceTransmissionTest, AJointBehindATransmissionHoldsWithItsMotorsPower)
 {

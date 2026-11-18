@@ -58,6 +58,11 @@ public:
   /// Lets go of the HAL like on_cleanup(). A failed deactivation also lands here.
   hardware_interface::CallbackReturn on_error(const rclcpp_lifecycle::State& previous_state) override;
 
+  /// Sets the command interfaces a controller releases to "not given", so its last commands stop counting. A joint
+  /// holds, see HoldReference.
+  hardware_interface::return_type perform_command_mode_switch(const std::vector<std::string>& start_interfaces,
+                                                              const std::vector<std::string>& stop_interfaces) override;
+
   hardware_interface::return_type read(const rclcpp::Time& time, const rclcpp::Duration& period) override;
   hardware_interface::return_type write(const rclcpp::Time& time, const rclcpp::Duration& period) override;
 
@@ -123,6 +128,8 @@ private:
   std::vector<uint8_t> drive_powered_;
   std::vector<uint8_t> joint_powered_;
   HoldReference hold_;
+  // What a released command interface is set to, one command per joint. Sized once, so a switch allocates no buffer.
+  std::vector<DriveCommand> release_commands_;
 
   InterfaceBinding binding_;
   HandleAccessReport access_report_;

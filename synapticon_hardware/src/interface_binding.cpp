@@ -8,6 +8,7 @@
 
 #include "synapticon_hardware/interface_binding.hpp"
 
+#include <algorithm>
 #include <type_traits>
 
 #include <hardware_interface/types/hardware_interface_type_values.hpp>
@@ -155,14 +156,14 @@ bool bind_state_field(const NamedField<FieldT, OwnerT, Extra> (&table)[N], const
   return true;
 }
 
-/// bind_state_field() for command handles.
-template <typename FieldT, typename OwnerT, typename Extra, std::size_t N>
-bool bind_command_field(const NamedField<FieldT, OwnerT, Extra> (&table)[N], const std::string& interface_name,
-                        const std::string& handle_name, OwnerT& owner,
+/// bind_state_field() for the command handles of joint `joint`.
+template <typename FieldT, typename Extra, std::size_t N>
+bool bind_command_field(const NamedField<FieldT, DriveCommand, Extra> (&table)[N], const std::string& interface_name,
+                        const std::string& handle_name, std::size_t joint, DriveCommand& owner,
                         const hardware_interface::CommandInterface::SharedPtr& handle,
                         std::vector<CommandSource<FieldT>>& sources, bool& matched)
 {
-  FieldT OwnerT::*const field = find_field(table, interface_name);
+  FieldT DriveCommand::*const field = find_field(table, interface_name);
   if (field == nullptr)
   {
     return true;
@@ -172,8 +173,30 @@ bool bind_command_field(const NamedField<FieldT, OwnerT, Extra> (&table)[N], con
   {
     return false;
   }
-  sources.push_back(CommandSource<FieldT>{ handle, &(owner.*field) });
+  sources.push_back(CommandSource<FieldT>{ handle, &(owner.*field), joint, field });
   return true;
+}
+
+/// Set each source in `sources` whose handle is named in `released` to its field's value in `resets`, on the field
+/// and on the handle. `to_handle` turns the value into what the handle stores. Returns the number of refusals.
+template <typename T, typename Convert>
+std::size_t reset_sources(const std::vector<CommandSource<T>>& sources, const std::vector<std::string>& released,
+                          const std::vector<DriveCommand>& resets, Convert to_handle)
+{
+  std::size_t refused = 0;
+  for (const auto& source : sources)
+  {
+    if (std::find(released.begin(), released.end(), source.handle->get_name()) == released.end())
+    {
+      continue;
+    }
+    *source.destination = resets[source.joint].*source.field;
+    if (!source.handle->set_value(to_handle(*source.destination)))
+    {
+      ++refused;
+    }
+  }
+  return refused;
 }
 
 /// Whether `table` has an entry named `name`.
@@ -246,7 +269,7 @@ bool InterfaceBinding::bind(const hardware_interface::HardwareInfo& info,
   for (std::size_t j = 0; j < joints; ++j)
   {
     ok = bind_joint_states(info.joints[j], component, states[j], slave_health[j]) && ok;
-    ok = bind_joint_commands(info.joints[j], component, commands[j]) && ok;
+    ok = bind_joint_commands(info.joints[j], j, component, commands[j]) && ok;
   }
   for (const auto& gpio : info.gpios)
   {
@@ -316,7 +339,7 @@ bool InterfaceBinding::bind_joint_states(const hardware_interface::ComponentInfo
   return ok;
 }
 
-bool InterfaceBinding::bind_joint_commands(const hardware_interface::ComponentInfo& joint,
+bool InterfaceBinding::bind_joint_commands(const hardware_interface::ComponentInfo& joint, std::size_t index,
                                            hardware_interface::HardwareComponentInterface& component,
                                            DriveCommand& command)
 {
@@ -333,13 +356,13 @@ bool InterfaceBinding::bind_joint_commands(const hardware_interface::ComponentIn
     }
     const auto handle = component.get_command_interface_handle(handle_name);
     bool matched = false;
-    ok = bind_command_field(JOINT_COMMAND_REAL, ci.name, handle_name, command, handle, command_sources_double_,
+    ok = bind_command_field(JOINT_COMMAND_REAL, ci.name, handle_name, index, command, handle, command_sources_double_,
                             matched) &&
          ok;
     if (!matched)
     {
-      ok = bind_command_field(JOINT_COMMAND_ACTION, ci.name, handle_name, command, handle, command_sources_action_,
-                              matched) &&
+      ok = bind_command_field(JOINT_COMMAND_ACTION, ci.name, handle_name, index, command, handle,
+                              command_sources_action_, matched) &&
            ok;
     }
     if (!matched)
@@ -438,6 +461,14 @@ InterfaceBinding::RefusedReads InterfaceBinding::pull_commands() const
     }
   }
   return refused;
+}
+
+std::size_t InterfaceBinding::reset_released(const std::vector<std::string>& released,
+                                             const std::vector<DriveCommand>& resets) const
+{
+  return reset_sources(command_sources_double_, released, resets, [](double value) { return value; }) +
+         reset_sources(command_sources_action_, released, resets,
+                       [](DriveAction action) { return static_cast<uint8_t>(action); });
 }
 
 std::size_t InterfaceBinding::push_command_seeds() const

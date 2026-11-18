@@ -66,6 +66,7 @@ CallbackReturn SynapticonSystemInterface::on_init(const hardware_interface::Hard
   drive_commands_.assign(drives_.drive_count(), DriveCommand{});
   drive_powered_.assign(drives_.drive_count(), 0u);
   joint_powered_.assign(joints, 0u);
+  release_commands_.assign(joints, not_given_command());
   if (!transmissions_.load(info_, drives_))
   {
     return CallbackReturn::ERROR;
@@ -332,6 +333,20 @@ return_type SynapticonSystemInterface::write(const rclcpp::Time& /*time*/, const
   access_report_.command_reads(refused.setpoints, refused.actions);
   commands_to_drives();
   return hal_->write(drive_commands_) ? return_type::OK : return_type::ERROR;
+}
+
+return_type SynapticonSystemInterface::perform_command_mode_switch(const std::vector<std::string>& /*start_interfaces*/,
+                                                                   const std::vector<std::string>& stop_interfaces)
+{
+  if (stop_interfaces.empty())
+  {
+    return return_type::OK;
+  }
+  if (const std::size_t refused = binding_.reset_released(stop_interfaces, release_commands_); refused != 0)
+  {
+    RCLCPP_ERROR(logger(), "%zu released command interface(s) could not be reset.", refused);
+  }
+  return return_type::OK;
 }
 
 }  // namespace synapticon_hardware
