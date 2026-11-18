@@ -215,6 +215,7 @@ CallbackReturn DriveController::on_activate(const rclcpp_lifecycle::State& /*pre
 
   // The reaction keeps its latch from the last activation. Only a configure starts a new one.
   reset_reaction();
+  prepare_reaction_event_message();
   RCLCPP_INFO(get_node()->get_logger(), "Drive fault reaction %s.",
               reaction_enabled_ ? "enabled: a joint entering Fault, leaving the bus or reporting a "
                                   "following error quick-stops every joint and latches" :

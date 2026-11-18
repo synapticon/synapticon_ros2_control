@@ -6,7 +6,10 @@
 /// @file
 /// @brief DriveController's drive fault reaction: the step per cycle, the service queries and the events.
 
+#include <algorithm>
+#include <array>
 #include <chrono>
+#include <cstring>
 #include <memory>
 #include <optional>
 #include <string>
@@ -28,7 +31,77 @@ namespace
 {
 constexpr const char* DISABLED_MESSAGE =
     "Refused: the fault reaction is off. Set fault_reaction.enabled to turn it on.";
+
+/// The name lists of the event message, which borrow their strings from the spare ones.
+template <typename Msg>
+std::array<std::vector<std::string>*, 4> name_lists(Msg& msg)
+{
+  return { &msg.triggered_by, &msg.condition_name, &msg.acted_on, &msg.latched_joints };
+}
+
+/// Give the strings of `list` back to `spare` and empty it. Moving a string hands over its buffer, so nothing
+/// allocates or frees, as long as `spare` has the capacity.
+void give_back(std::vector<std::string>& list, std::vector<std::string>& spare)
+{
+  for (auto& text : list)
+  {
+    spare.push_back(std::move(text));
+  }
+  list.clear();
+}
+
+/// Append `text` to `list` in a spare string. Without a spare string left, this allocates.
+void append(std::vector<std::string>& list, std::vector<std::string>& spare, const char* text)
+{
+  if (spare.empty())
+  {
+    list.emplace_back(text);
+    return;
+  }
+  std::string borrowed = std::move(spare.back());
+  spare.pop_back();
+  borrowed.assign(text);
+  list.push_back(std::move(borrowed));
+}
 }  // namespace
+
+void DriveController::prepare_reaction_event_message()
+{
+  if (!reaction_event_rt_)
+  {
+    return;
+  }
+  const std::size_t count = joint_names_.size();
+  std::size_t longest = 0;
+  for (const auto& name : joint_names_)
+  {
+    longest = std::max(longest, name.size());
+  }
+  for (const auto& condition : CONDITION_NAMES)
+  {
+    longest = std::max(longest, std::strlen(condition.name));
+  }
+  constexpr std::size_t NAME_LISTS = 4;
+  reaction_event_rt_->lock();
+  ReactionEventMsg& msg = reaction_event_rt_->msg_;
+  spare_strings_.reserve(NAME_LISTS * count);
+  for (auto* list : name_lists(msg))
+  {
+    give_back(*list, spare_strings_);
+    list->reserve(count);
+  }
+  spare_strings_.resize(NAME_LISTS * count);
+  for (auto& text : spare_strings_)
+  {
+    text.reserve(longest);
+  }
+  msg.condition.reserve(count);
+  msg.error_code.reserve(count);
+  msg.error_report.reserve(count);
+  msg.event.reserve(64);
+  msg.action.reserve(32);
+  reaction_event_rt_->unlock();
+}
 
 void DriveController::step_reaction(const rclcpp::Time& time)
 {
@@ -152,18 +225,19 @@ void DriveController::publish_reaction_event(const rclcpp::Time& time, const Rea
     RCLCPP_WARN(get_node()->get_logger(), "Fault reaction event not published: publisher busy.");
     return;
   }
-  // Cleared rather than replaced, so the vectors keep their capacity.
+  // Cleared rather than replaced, so the vectors and strings keep their capacity. The name lists return their strings
+  // to the spare ones first.
   ReactionEventMsg& msg = reaction_event_rt_->msg_;
   msg.header.stamp = time;
   msg.event.clear();
   msg.action.clear();
-  msg.triggered_by.clear();
+  for (auto* list : name_lists(msg))
+  {
+    give_back(*list, spare_strings_);
+  }
   msg.condition.clear();
-  msg.condition_name.clear();
   msg.error_code.clear();
   msg.error_report.clear();
-  msg.acted_on.clear();
-  msg.latched_joints.clear();
   if (fired != nullptr)
   {
     msg.event = fired->event_name;
@@ -171,22 +245,22 @@ void DriveController::publish_reaction_event(const rclcpp::Time& time, const Rea
     for (std::size_t k = 0; k < fired->triggered.size(); ++k)
     {
       const std::size_t j = fired->triggered[k];
-      msg.triggered_by.push_back(joint_names_[j]);
+      append(msg.triggered_by, spare_strings_, joint_names_[j].c_str());
       msg.condition.push_back(static_cast<uint8_t>(fired->conditions[k]));
-      msg.condition_name.push_back(name_in(CONDITION_NAMES, fired->conditions[k], "unknown"));
+      append(msg.condition_name, spare_strings_, name_in(CONDITION_NAMES, fired->conditions[k], "unknown"));
       msg.error_code.push_back(state_interfaces_[slots_[j].error_code].get_optional<uint16_t>().value_or(0));
       msg.error_report.push_back(error_report_of(j));
     }
     for (const std::size_t j : fired->acted_on)
     {
-      msg.acted_on.push_back(joint_names_[j]);
+      append(msg.acted_on, spare_strings_, joint_names_[j].c_str());
     }
   }
   for (std::size_t j = 0; j < joint_names_.size(); ++j)
   {
     if (reaction_->latched(j))
     {
-      msg.latched_joints.push_back(joint_names_[j]);
+      append(msg.latched_joints, spare_strings_, joint_names_[j].c_str());
     }
   }
   msg.latched = reaction_->any_latched();

@@ -182,8 +182,10 @@ protected:
   /// One cycle of the fault reaction: a pending query from the services, then the policy, then the latch flags.
   void step_reaction(const rclcpp::Time& time);
   void answer_reaction_query(const rclcpp::Time& time, const ReactionQuery& query);
-  /// Publish an event (`fired` set) or a clear (`fired` null).
+  /// Publish an event (`fired` set) or a clear (`fired` null). It allocates nothing once the message is prepared.
   void publish_reaction_event(const rclcpp::Time& time, const ReactionEvent* fired);
+  /// Size the event message and the spare strings for the joints, outside the control loop.
+  void prepare_reaction_event_message();
   /// Hand a query to update() and wait for its answer. Returns whether it was accepted, with the reason in `reason`.
   bool ask_update_loop(ReactionQuery query, std::string& reason);
   /// The first of `joints` (all joints when empty) that the fault reaction holds latched.
@@ -251,6 +253,9 @@ protected:
   /// ~/fault_reaction, transient local, so a late subscriber still gets the last event.
   rclcpp::Publisher<ReactionEventMsg>::SharedPtr reaction_event_pub_;
   std::unique_ptr<realtime_tools::RealtimePublisher<ReactionEventMsg>> reaction_event_rt_;
+  /// Strings with room for the longest name the event message carries. The message borrows them, so that filling it
+  /// in update() allocates nothing.
+  std::vector<std::string> spare_strings_;
 
   // Totals since activation, for the throttled reports.
   uint64_t refused_writes_total_ = 0;
