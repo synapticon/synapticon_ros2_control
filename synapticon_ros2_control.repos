@@ -1,0 +1,8 @@
+# Source dependencies that are not released ROS 2 packages. Import them into the workspace before rosdep:
+#
+#   vcs import src < src/synapticon_ros2_control/synapticon_ros2_control.repos
+repositories:
+  synapticon_control_msgs:
+    type: git
+    url: https://github.com/synapticon/synapticon_control_msgs.git
+    version: 48dae68d664868dd8eee88e034a2eec0b7eabec8

@@ -1,6 +1,6 @@
 # soem_source
 
-The [SOEM](https://github.com/OpenEtherCATsociety/SOEM) (Simple Open EtherCAT Master) library, vendored.
+The [SOEM](https://github.com/OpenEtherCATsociety/SOEM) (Simple Open EtherCAT Master) library, vendored for the SOEM HAL.
 The package builds it for Linux as a static library with position-independent code and exports the CMake target
 `soem_source::soem`. The headers are installed into `include/soem_source`.
 

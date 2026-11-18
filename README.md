@@ -117,11 +117,12 @@ git clone https://github.com/synapticon/synapticon_ros2_control
 ```
 Install build tools:
 ```bash
-sudo apt install python3-colcon-common-extensions
+sudo apt install python3-colcon-common-extensions python3-vcstool
 ```
-Build the package:
+Build the package, after importing its source dependencies:
 ```bash
 cd ~/ros2_ws
+vcs import src < src/synapticon_ros2_control/synapticon_ros2_control.repos
 rosdep install --from-paths src -y --ignore-src
 colcon build
 ```
@@ -165,11 +166,20 @@ The commands below are for a build from source.
 
 **VERIFICATION**
 
-The ethernet device name, to which the drive is connected, is required. This could be checked with the `ifconfig` command. Ethernet adapters usually start with `en`. To check if the master could be run and if the slaves are found, execute the following  in the terminal (replace `YOUR_ETHERNET_INTERFACE` with the one found with `ifconfig`).
+The name of the network interface the drive is wired to is required. `ip link` lists the interfaces, Ethernet adapters usually start with `en`.
+SOEM needs the raw socket capability, which `net_raw_shell.sh` grants to a shell (it asks for your sudo password, see the [README of synapticon_ethercat_soem](synapticon_ethercat_soem/README.md)).
+Replace `YOUR_ETHERNET_INTERFACE` with your interface:
 ```bash
-sudo /home/$USER/ros2_ws/install/synapticon_hardware/bin/torque_control_executable YOUR_ETHERNET_INTERFACE
+cd ~/ros2_ws && source install/setup.bash
+"$(ros2 pkg prefix synapticon_ethercat_soem)/lib/synapticon_ethercat_soem/net_raw_shell.sh" --interface YOUR_ETHERNET_INTERFACE
 ```
-Before running other scripts, stop this one by CTRL+C (or wait - it will shutdown automatically after a while).
+In the shell it opens, check that SOEM finds the drive and print its state for 10 seconds. This never energises the drive:
+```bash
+source /opt/ros/jazzy/setup.bash && source install/setup.bash
+ros2 run synapticon_hardware drive_check read --hal ethercat_soem --network-interface YOUR_ETHERNET_INTERFACE
+```
+The bundled slave_config fits a SOMANET Circulo. For another drive, generate one with `esi_to_slave_config.py` and pass it with `--config`.
+Leave the shell with `exit`.
 
 ##### 2.2.1.3. Demo
 For turning the motor in different modes, five terminals are required and in all of them execute:
@@ -345,7 +355,8 @@ They do not contain the package layout described here.
 | Package | Content |
 |---|---|
 | `synapticon_ros2_control` | Metapackage |
-| `synapticon_hardware` | The ros2_control hardware interface `SynapticonSystemInterface` and `torque_control_executable` |
+| `synapticon_hardware` | The ros2_control hardware interface `SynapticonSystemInterface`, the drive interface `SynapticonHalI` with its mock and CiA 402 parts, and `drive_check` |
+| `synapticon_ethercat_soem` | `EthercatSoemHal`, the `SynapticonHalI` implementation on the SOEM EtherCAT master |
 | `synapticon_description` | The robot descriptions of the 1 and 2 DOF setups |
 | `synapticon_bringup` | Launch files, controller and RViz configurations |
 | `soem_source` | The vendored [SOEM](https://github.com/OpenEtherCATsociety/SOEM) EtherCAT master library |
