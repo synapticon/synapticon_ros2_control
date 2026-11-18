@@ -688,7 +688,9 @@ Use a slave_config that sets `0x605A = 6`, as the example config does.
    In impedance mode, command the position with the `MotorCommand` of step 4 instead.
    Pass: Operation Enabled, and the joint does not jump.
 
-10. Disable before you take the load off, then stop the launch with Ctrl-C:
+10. Take the load off, or support the joint, while the drive still holds it.
+    A disable removes the power after the ramp, and a joint without a brake would drop the load.
+    Then disable and stop the launch with Ctrl-C:
 
     ```bash
     ros2 service call /drive_controller/set_drive_action synapticon_control_msgs/srv/SetDriveAction "{action: disable, dof_names: []}"
