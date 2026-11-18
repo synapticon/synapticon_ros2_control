@@ -581,6 +581,29 @@ TEST_F(TwoDrives, ARequestStaysUntilEveryJointHasWrittenIt)
   EXPECT_EQ(written(RIGHT), DriveAction::NONE);
 }
 
+/// Two requests for the same action before the next cycle both act: the second joins the waiting first.
+TEST_F(TwoDrives, TwoRequestsForOneActionInOneCycleBothAct)
+{
+  EXPECT_TRUE(dc_->act(ActionNames::QUICK_STOP, { LEFT }));
+  EXPECT_TRUE(dc_->act(ActionNames::QUICK_STOP, { RIGHT }));
+  cycle();
+  EXPECT_EQ(written(LEFT), DriveAction::QUICK_STOP);
+  EXPECT_EQ(written(RIGHT), DriveAction::QUICK_STOP);
+  cycle();
+  EXPECT_EQ(written(LEFT), DriveAction::NONE);
+  EXPECT_EQ(written(RIGHT), DriveAction::NONE);
+}
+
+/// A request for all joints joined with one for some is for all joints.
+TEST_F(TwoDrives, AMergedRequestForAllJointsStaysForAll)
+{
+  EXPECT_TRUE(dc_->disable({ LEFT }));
+  EXPECT_TRUE(dc_->disable());
+  cycle();
+  EXPECT_EQ(written(LEFT), DriveAction::DISABLE);
+  EXPECT_EQ(written(RIGHT), DriveAction::DISABLE);
+}
+
 TEST_F(TwoDrives, AnUnknownJointNameRejectsTheWholeRequest)
 {
   EXPECT_FALSE(dc_->enable({ LEFT, "no_such_joint" }));

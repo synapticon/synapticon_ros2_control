@@ -176,6 +176,25 @@ inline bool names_joint(const std::vector<std::string>& joints, const std::strin
   return joints.empty() || std::find(joints.begin(), joints.end(), joint) != joints.end();
 }
 
+/// The joints of two requests for the same action together. A request that names no joint is for all of them.
+inline std::vector<std::string> merged_joints(const std::vector<std::string>& first,
+                                              const std::vector<std::string>& second)
+{
+  if (first.empty() || second.empty())
+  {
+    return {};
+  }
+  std::vector<std::string> joints = first;
+  for (const auto& joint : second)
+  {
+    if (std::find(joints.begin(), joints.end(), joint) == joints.end())
+    {
+      joints.push_back(joint);
+    }
+  }
+  return joints;
+}
+
 using RequestSnapshot = std::array<std::shared_ptr<ActionRequest>, NUM_REQUEST_SLOTS>;
 /// One action per request source, NONE where the source asks nothing of the joint.
 using SourceActions = std::array<DriveAction, NUM_REQUEST_SLOTS>;

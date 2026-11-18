@@ -209,9 +209,12 @@ protected:
 
   // Requests of ~/set_drive_action, one slot per action, written by the callback and read by update(). update() never
   // clears a slot: it notes the id of each request it is done with, and a slot whose id it has noted holds nothing new.
+  // A request for a slot that still holds a waiting one merges into it.
   std::array<realtime_tools::RealtimeBuffer<std::shared_ptr<ActionRequest>>, NUM_REQUEST_SLOTS> request_slots_;
-  std::array<std::atomic<uint64_t>, NUM_REQUEST_SLOTS> posted_request_ids_{};  ///< by the callback
-  std::array<uint64_t, NUM_REQUEST_SLOTS> finished_request_ids_{};             ///< by update()
+  std::array<std::atomic<uint64_t>, NUM_REQUEST_SLOTS> posted_request_ids_{};    ///< by the callback
+  std::array<std::atomic<uint64_t>, NUM_REQUEST_SLOTS> finished_request_ids_{};  ///< by update()
+  /// One callback posts at a time, so that a merge sees the request it merges into.
+  std::mutex post_mutex_;
   std::vector<rclcpp::ServiceBase::SharedPtr> services_;
   /// Whether the controller is active, for the service callbacks: an inactive one takes no request.
   std::atomic<bool> active_{ false };

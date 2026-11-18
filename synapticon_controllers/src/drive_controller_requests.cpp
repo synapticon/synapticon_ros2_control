@@ -48,10 +48,17 @@ void DriveController::post_request(DriveAction action, std::vector<std::string> 
 {
   const auto slot = static_cast<std::size_t>(std::find(REQUESTABLE_ACTIONS.begin(), REQUESTABLE_ACTIONS.end(), action) -
                                              REQUESTABLE_ACTIONS.begin());
+  std::lock_guard<std::mutex> guard(post_mutex_);
   auto request = std::make_shared<ActionRequest>();
   request->action = action;
   request->joints = std::move(joints);
   request->id = ++posted_request_ids_[slot];
+  // A request that update() is not done with yet takes the new joints along, so that neither gets lost.
+  const std::shared_ptr<ActionRequest> waiting = *request_slots_[slot].readFromNonRT();
+  if (waiting && waiting->id != finished_request_ids_[slot].load())
+  {
+    request->joints = merged_joints(waiting->joints, request->joints);
+  }
   request_slots_[slot].writeFromNonRT(request);
 }
 

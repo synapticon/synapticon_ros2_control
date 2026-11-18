@@ -332,7 +332,7 @@ void DriveController::dispatch_actions()
   for (std::size_t s = 0; s < NUM_REQUEST_SLOTS; ++s)
   {
     const auto* request = request_slots_[s].readFromRT();
-    if (request && *request && (*request)->id != finished_request_ids_[s])
+    if (request && *request && (*request)->id != finished_request_ids_[s].load())
     {
       requests[s] = *request;
     }
@@ -401,7 +401,7 @@ void DriveController::dispatch_actions()
   {
     if (requests[s] && done[s])
     {
-      finished_request_ids_[s] = requests[s]->id;
+      finished_request_ids_[s].store(requests[s]->id);
     }
   }
 }
