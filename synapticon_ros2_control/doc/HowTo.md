@@ -52,7 +52,7 @@ One entry per joint. The fields to look at first:
 | Field | Healthy value | What else means |
 |---|---|---|
 | `online` | `true` | `false`: the drive left the bus |
-| `device_state_name` | `STATE_OPERATION_ENABLED` while enabled | `STATE_FAULT`: see `error_code` and `error_report` |
+| `device_state_name` | `Operation Enabled` while enabled | `Fault`: see `error_code` and `error_report` |
 | `mode_of_operation` | `-6` impedance, `8` CSP, `9` CSV | another value: the drive runs a mode the description did not ask for |
 | `error_code` | `0` | the CiA 402 error code (0x603F) of the last fault |
 | `latched` | `false` | `true`: the fault reaction holds this joint, see [Clear a latched fault reaction](#clear-a-latched-fault-reaction) |
@@ -162,7 +162,7 @@ response:
 synapticon_control_msgs.srv.SetDriveAction_Response(success=True, message="Posted 'reset_fault' for all drives")
 ```
 
-The faulted drives go to `STATE_SWITCH_ON_DISABLED`, which `drive_status` shows a moment later.
+The faulted drives go to `Switch On Disabled`, which `drive_status` shows a moment later.
 A reset only clears the fault. The drive stays de-energised until you enable it.
 If the fault comes back at once, its cause is still there: read `error_code` first.
 
