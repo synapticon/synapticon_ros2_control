@@ -415,6 +415,7 @@ It is installed in every build, together with the tests it runs.
 Its runs keep ROS discovery on this machine, so they never reach a stack on another bench.
 
 Ctrl-C, a closed terminal or a lost SSH session stop the running test the way its own Ctrl-C would.
+A test that runs out of time is stopped the same way and fails.
 
 With one joint (the default `--robot 1dof`), it runs:
 

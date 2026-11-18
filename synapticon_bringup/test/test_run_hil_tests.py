@@ -33,11 +33,24 @@ def keep_signal_handlers():
         signal.signal(number, handler)
 
 
+def test_a_timeout_stops_the_step_and_fails_it(tmp_path):
+    before = {number: signal.getsignal(number) for number in runner.STOP_SIGNALS}
+    step = runner.Step("sleeper", SLEEPER, timeout_s=0.5)
+    code, lines, interrupted, timed_out = runner.run_step(step, tmp_path / "step.log")
+    assert timed_out and not interrupted
+    assert code != 0
+    assert any(line.startswith("TIMEOUT") for line in lines)
+    # The runner reacts to Ctrl-C again for the next step.
+    assert {
+        number: signal.getsignal(number) for number in runner.STOP_SIGNALS
+    } == before
+
+
 def test_a_stop_signal_stops_the_step(tmp_path):
     step = runner.Step("sleeper", SLEEPER, timeout_s=30.0)
     threading.Timer(0.5, os.kill, (os.getpid(), signal.SIGINT)).start()
-    code, lines, interrupted = runner.run_step(step, tmp_path / "step.log")
-    assert interrupted
+    code, lines, interrupted, timed_out = runner.run_step(step, tmp_path / "step.log")
+    assert interrupted and not timed_out
     assert code != 0
     assert any(line.startswith("INTERRUPTED") for line in lines)
 

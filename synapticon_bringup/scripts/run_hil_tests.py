@@ -171,20 +171,33 @@ def route_stop_signals():
 
 
 def ignore_stop_signals():
-    """Ignore further stop signals, so that a repeated Ctrl-C cannot cut short a step's stop."""
+    """
+    Ignore further stop signals, so that a repeated Ctrl-C cannot cut short a step's stop.
+
+    Returns the handlers before, for restore_stop_signals().
+    """
+    previous = {number: signal.getsignal(number) for number in STOP_SIGNALS}
     for number in STOP_SIGNALS:
         signal.signal(number, signal.SIG_IGN)
+    return previous
+
+
+def restore_stop_signals(previous):
+    """Put back the handlers that ignore_stop_signals() replaced."""
+    for number, handler in previous.items():
+        signal.signal(number, handler)
 
 
 def run_step(step, log_path):
     """
     Run one step, copying its output to the console and the log.
 
-    A stop signal stops the step as its own Ctrl-C would. Returns its exit code, its output and whether it was
-    interrupted.
+    A stop signal stops the step as its own Ctrl-C would. Returns its exit code, its output, whether it was
+    interrupted and whether it ran out of time.
     """
     lines = []
     interrupted = False
+    timed_out = False
     with open(log_path, "w", encoding="utf-8") as log:
         process = subprocess.Popen(
             step.command,
@@ -208,8 +221,11 @@ def run_step(step, log_path):
             reader.start()
             process.wait(timeout=step.timeout_s)
         except subprocess.TimeoutExpired:
+            previous = ignore_stop_signals()
             lines.append(f"TIMEOUT after {step.timeout_s:.0f} s\n")
             stop(process)
+            restore_stop_signals(previous)
+            timed_out = True
         except KeyboardInterrupt:
             ignore_stop_signals()
             lines.append("INTERRUPTED by a stop signal\n")
@@ -217,7 +233,7 @@ def run_step(step, log_path):
             interrupted = True
         if reader.ident is not None:  # started
             reader.join()
-    return process.returncode, lines, interrupted
+    return process.returncode, lines, interrupted, timed_out
 
 
 def summarize(lines):
@@ -317,10 +333,9 @@ def main():
         log_path = (
             log_dir / f"{index + 1}_{re.sub(r'[^a-z0-9]+', '_', step.name.lower())}.log"
         )
-        code, lines, interrupted = run_step(step, log_path)
-        results.append(
-            (step.name, code == 0 and not interrupted, summarize(lines), log_path)
-        )
+        code, lines, interrupted, timed_out = run_step(step, log_path)
+        passed = code == 0 and not interrupted and not timed_out
+        results.append((step.name, passed, summarize(lines), log_path))
         if interrupted:
             break
 
