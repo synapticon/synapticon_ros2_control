@@ -255,12 +255,8 @@ def joint_names(count, given):
     return names
 
 
-def write(path, text, replace):
-    """Write `text` to `path`. Raises FileExistsError when the file exists and `replace` is false."""
-    if path.exists() and not replace:
-        raise FileExistsError(
-            f"{path} is already there, left as it is (--force overwrites)."
-        )
+def write(path, text):
+    """Write `text` to `path`, creating its folder when needed."""
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(text)
     print(f"Created {path}")
@@ -302,16 +298,21 @@ def main(argv=None):
     name = args.robot or f"{args.joints}dof"
     folder = args.out_dir or CONFIG_DIR
     robot_file = folder / f"example_{name}.yaml"
-    try:
-        write(robot_file, robot_definition(name, names), args.force)
-        write(
-            folder / f"example_{name}_controllers.yaml",
-            controller_config(name, names),
-            args.force,
-        )
-    except FileExistsError as error:
-        print(error, file=sys.stderr)
+    files = {
+        robot_file: robot_definition(name, names),
+        folder / f"example_{name}_controllers.yaml": controller_config(name, names),
+    }
+    # Both files are checked before either is written, so that they always come as a matching pair.
+    existing = [path for path in files if path.exists()]
+    if existing and not args.force:
+        for path in existing:
+            print(
+                f"{path} is already there, left as it is (--force overwrites).",
+                file=sys.stderr,
+            )
         return 1
+    for path, text in files.items():
+        write(path, text)
     if args.out_dir:
         print(
             f"Next: run the hardware tests with run_hil_tests.py --robot {robot_file.resolve()}"

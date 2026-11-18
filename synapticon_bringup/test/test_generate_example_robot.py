@@ -90,3 +90,15 @@ def test_out_dir_writes_both_files_there(tmp_path, monkeypatch, capsys):
     ]
     assert not config.exists()
     assert "--robot" in capsys.readouterr().out
+
+
+def test_an_existing_controllers_file_stops_before_any_write(
+    tmp_path, monkeypatch, capsys
+):
+    """When only the controllers file exists, the robot file is not written either: the pair always matches."""
+    monkeypatch.setattr(generator, "CONFIG_DIR", tmp_path)
+    (tmp_path / "example_2dof_controllers.yaml").write_text("old\n")
+    assert generator.main(["--joints", "2"]) == 1
+    assert not (tmp_path / "example_2dof.yaml").exists()
+    assert (tmp_path / "example_2dof_controllers.yaml").read_text() == "old\n"
+    assert "--force" in capsys.readouterr().err
