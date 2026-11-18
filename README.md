@@ -359,16 +359,16 @@ ros2 launch synapticon_bringup example_synapticon.launch.py robot:=2dof slave_co
   network_interface:=<interface>
 ```
 
-Energise the drives, then command a position in rad, one value per joint in the order of the robot definition:
+Command a position in rad, one value per joint in the order of the robot definition, then energise the drives:
 
 ```bash
-ros2 service call /drive_controller/set_drive_action synapticon_control_msgs/srv/SetDriveAction "{action: enable, dof_names: []}"
 ros2 topic pub --once /forward_position_controller/commands std_msgs/msg/Float64MultiArray "{data: [0.5, 0.0]}"
+ros2 service call /drive_controller/set_drive_action synapticon_control_msgs/srv/SetDriveAction "{action: enable, dof_names: []}"
 ros2 topic echo --once /joint_states --field position   # close to [0.5, 0.0] once the move is done
 ```
 
-The drive follows the first target it receives after the enable.
-Make sure the command controller streams a target near the current position before you enable.
+A drive takes the position target that is set when it gets power, and moves there at once.
+So set a target near the current position before you enable, and change it after.
 
 ### 6.2. Impedance
 
