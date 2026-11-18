@@ -576,9 +576,29 @@ TEST_F(TwoDrives, ARequestStaysUntilEveryJointHasWrittenIt)
   }
   cycle();
   EXPECT_EQ(written(RIGHT), DriveAction::ENABLE);
+  EXPECT_EQ(written(LEFT), DriveAction::NONE) << "LEFT took the enable already";
   cycle();
   EXPECT_EQ(written(LEFT), DriveAction::NONE);
   EXPECT_EQ(written(RIGHT), DriveAction::NONE);
+}
+
+/// A pending request never writes again to a joint it is done with, also after another action went there.
+TEST_F(TwoDrives, APendingEnableDoesNotComeBackToADisabledJoint)
+{
+  dc_->enable();
+  {
+    const auto held = lock_action(RIGHT);
+    cycle();
+    EXPECT_EQ(written(LEFT), DriveAction::ENABLE);
+    EXPECT_TRUE(dc_->disable({ LEFT }));
+    cycle();
+    EXPECT_EQ(written(LEFT), DriveAction::DISABLE);
+  }
+  for (int k = 0; k < 3; ++k)
+  {
+    cycle();
+    EXPECT_NE(written(LEFT), DriveAction::ENABLE) << "the operator disabled LEFT after the enable";
+  }
 }
 
 /// Two requests for the same action before the next cycle both act: the second joins the waiting first.
@@ -602,6 +622,26 @@ TEST_F(TwoDrives, AMergedRequestForAllJointsStaysForAll)
   cycle();
   EXPECT_EQ(written(LEFT), DriveAction::DISABLE);
   EXPECT_EQ(written(RIGHT), DriveAction::DISABLE);
+}
+
+/// A request merged into one that already reached a joint does not write there again.
+TEST_F(TwoDrives, AMergedRequestKeepsWhatTheWaitingOneHasDone)
+{
+  dc_->enable({ LEFT, RIGHT });
+  {
+    const auto held = lock_action(RIGHT);
+    cycle();
+    EXPECT_EQ(written(LEFT), DriveAction::ENABLE);
+    EXPECT_TRUE(dc_->disable({ LEFT }));
+    cycle();
+    EXPECT_EQ(written(LEFT), DriveAction::DISABLE);
+    EXPECT_TRUE(dc_->enable({ RIGHT }));  // joins the waiting enable
+  }
+  cycle();
+  EXPECT_EQ(written(RIGHT), DriveAction::ENABLE);
+  EXPECT_EQ(written(LEFT), DriveAction::NONE);
+  cycle();
+  EXPECT_EQ(written(LEFT), DriveAction::NONE);
 }
 
 TEST_F(TwoDrives, AnUnknownJointNameRejectsTheWholeRequest)

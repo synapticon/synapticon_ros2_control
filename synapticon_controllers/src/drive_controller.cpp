@@ -225,6 +225,7 @@ CallbackReturn DriveController::on_activate(const rclcpp_lifecycle::State& /*pre
   for (std::size_t s = 0; s < NUM_REQUEST_SLOTS; ++s)
   {
     finished_request_ids_[s] = posted_request_ids_[s].load();
+    done_by_[s].assign(joint_names_.size(), 0);
   }
   unwritten_actions_.assign(joint_names_.size(), DriveAction::NONE);
 
@@ -349,6 +350,14 @@ void DriveController::dispatch_actions()
   for (std::size_t j = 0; j < joint_names_.size(); ++j)
   {
     SourceActions requested = requested_of(requests, joint_names_[j]);
+    // A request the joint is done with, or one merged into it, never writes there again.
+    for (std::size_t s = 0; s < NUM_REQUEST_SLOTS; ++s)
+    {
+      if (requested[s] != DriveAction::NONE && done_by_[s][j] >= requests[s]->first_id)
+      {
+        requested[s] = DriveAction::NONE;
+      }
+    }
     if (reaction_enabled_ && reaction_->latched(j))
     {
       for (DriveAction& action : requested)
@@ -386,9 +395,15 @@ void DriveController::dispatch_actions()
     refusals.refused_writes += refused ? 1 : 0;
     for (std::size_t s = 0; s < NUM_REQUEST_SLOTS; ++s)
     {
-      if (requested[s] != DriveAction::NONE)
+      if (requested[s] == DriveAction::NONE)
       {
-        done[s] = done[s] && done_with_joint(requested[s], written, held, refused);
+        continue;
+      }
+      const bool done_here = done_with_joint(requested[s], written, held, refused);
+      done[s] = done[s] && done_here;
+      if (done_here)
+      {
+        done_by_[s][j] = requests[s]->id;
       }
     }
     if (reaction != DriveAction::NONE && done_with_joint(reaction, written, held, refused))

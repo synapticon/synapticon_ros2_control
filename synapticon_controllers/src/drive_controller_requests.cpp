@@ -53,10 +53,13 @@ void DriveController::post_request(DriveAction action, std::vector<std::string> 
   request->action = action;
   request->joints = std::move(joints);
   request->id = ++posted_request_ids_[slot];
-  // A request that update() is not done with yet takes the new joints along, so that neither gets lost.
+  request->first_id = request->id;
+  // A request that update() is not done with yet takes the new joints along, so that neither gets lost. If update()
+  // finishes it meanwhile, first_id keeps its joints from getting the action twice.
   const std::shared_ptr<ActionRequest> waiting = *request_slots_[slot].readFromNonRT();
   if (waiting && waiting->id != finished_request_ids_[slot].load())
   {
+    request->first_id = waiting->first_id;
     request->joints = merged_joints(waiting->joints, request->joints);
   }
   request_slots_[slot].writeFromNonRT(request);

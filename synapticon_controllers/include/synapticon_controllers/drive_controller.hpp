@@ -68,6 +68,9 @@ struct ActionRequest
   DriveAction action = DriveAction::NONE;
   std::vector<std::string> joints;
   uint64_t id = 0;  ///< Counts the requests of its slot, so that update() takes each one once.
+  /// The id of the oldest request merged into this one. A joint that a request from first_id on is done with does
+  /// not get the action again.
+  uint64_t first_id = 0;
 };
 
 /// A question for the fault reaction that only update() can answer: release the latch, or apply a
@@ -213,6 +216,8 @@ protected:
   std::array<realtime_tools::RealtimeBuffer<std::shared_ptr<ActionRequest>>, NUM_REQUEST_SLOTS> request_slots_;
   std::array<std::atomic<uint64_t>, NUM_REQUEST_SLOTS> posted_request_ids_{};    ///< by the callback
   std::array<std::atomic<uint64_t>, NUM_REQUEST_SLOTS> finished_request_ids_{};  ///< by update()
+  /// Per slot and joint, the id of the last request that was done with the joint. Sized at activation.
+  std::array<std::vector<uint64_t>, NUM_REQUEST_SLOTS> done_by_;
   /// One callback posts at a time, so that a merge sees the request it merges into.
   std::mutex post_mutex_;
   std::vector<rclcpp::ServiceBase::SharedPtr> services_;
