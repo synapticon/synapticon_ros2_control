@@ -203,8 +203,9 @@ def run_step(step, log_path):
                 lines.append(line)
 
         reader = threading.Thread(target=copy)
-        reader.start()
+        # The step runs in its own session, so from here on every way out of the runner must stop it.
         try:
+            reader.start()
             process.wait(timeout=step.timeout_s)
         except subprocess.TimeoutExpired:
             lines.append(f"TIMEOUT after {step.timeout_s:.0f} s\n")
@@ -214,7 +215,8 @@ def run_step(step, log_path):
             lines.append("INTERRUPTED by a stop signal\n")
             stop(process)
             interrupted = True
-        reader.join()
+        if reader.ident is not None:  # started
+            reader.join()
     return process.returncode, lines, interrupted
 
 

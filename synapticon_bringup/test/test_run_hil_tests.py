@@ -5,8 +5,11 @@
 """Tests of run_hil_tests.py: a step never outlives the runner."""
 
 import importlib.util
+import os
 from pathlib import Path
 import signal
+import sys
+import threading
 
 import pytest
 
@@ -18,6 +21,8 @@ spec = importlib.util.spec_from_file_location(
 runner = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(runner)
 
+SLEEPER = [sys.executable, "-c", "import time; time.sleep(30)"]
+
 
 @pytest.fixture(autouse=True)
 def keep_signal_handlers():
@@ -26,6 +31,15 @@ def keep_signal_handlers():
     yield
     for number, handler in saved.items():
         signal.signal(number, handler)
+
+
+def test_a_stop_signal_stops_the_step(tmp_path):
+    step = runner.Step("sleeper", SLEEPER, timeout_s=30.0)
+    threading.Timer(0.5, os.kill, (os.getpid(), signal.SIGINT)).start()
+    code, lines, interrupted = runner.run_step(step, tmp_path / "step.log")
+    assert interrupted
+    assert code != 0
+    assert any(line.startswith("INTERRUPTED") for line in lines)
 
 
 def test_hangup_and_terminate_stop_the_runner_like_ctrl_c():
