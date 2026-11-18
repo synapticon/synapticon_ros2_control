@@ -391,7 +391,7 @@ Which robot runs:
 | Argument | Default | Meaning |
 |---|---|---|
 | `robot` | `1dof` | picks `config/example_<robot>.yaml` and its `_controllers.yaml` |
-| `robot_config`, `controllers_file` | from `robot` | a robot definition and controller configuration of your own |
+| `robot_config`, `controllers_file` | from `robot` | a robot definition and controller configuration of your own, always both |
 | `disable_transmissions` | `''` | `true` runs the robot without its transmissions, see [Transmissions](#10-transmissions) |
 
 How the drives are reached, and how they are controlled:

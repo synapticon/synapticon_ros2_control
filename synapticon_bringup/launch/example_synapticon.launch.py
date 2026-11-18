@@ -83,7 +83,7 @@ def _declarations():
             "robot_config",
             _example_config(".yaml"),
             None,
-            "Robot definition. Taken from robot when not given.",
+            "Robot definition. Taken from robot when not given. Needs controllers_file too.",
         ),
         (
             "controllers_file",
@@ -140,8 +140,23 @@ def _declarations():
     ]
 
 
+def _own_robot_without_controllers(context):
+    """True when robot_config names another robot than `robot`, while controllers_file is still that of `robot`."""
+    return Arg("robot_config").perform(context) != _example_config(".yaml").perform(
+        context
+    ) and Arg("controllers_file").perform(context) == _example_config(
+        "_controllers.yaml"
+    ).perform(
+        context
+    )
+
+
 def _robot_to_launch(context, *args, **kwargs):
     """Prepare the robot definition to launch and the joint lists that depend on it."""
+    if _own_robot_without_controllers(context):
+        raise RuntimeError(
+            "robot_config is given without controllers_file: give the controller configuration of that robot too."
+        )
     # xacro resolves a relative path from its own directory, so the path is made absolute here.
     robot_config, param_file, disabled = prepare_launch_files(
         os.path.abspath(Arg("robot_config").perform(context)),

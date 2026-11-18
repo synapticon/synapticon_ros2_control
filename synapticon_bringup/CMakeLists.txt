@@ -42,6 +42,8 @@ if(BUILD_TESTING)
   ament_add_pytest_test(test_hil_test_gains test/test_hil_test_gains.py TIMEOUT 60)
   ament_add_pytest_test(test_hil_robots test/test_hil_robots.py TIMEOUT 60)
   ament_add_pytest_test(test_run_hil_tests test/test_run_hil_tests.py TIMEOUT 60)
+  ament_add_pytest_test(test_example_launch_arguments test/test_example_launch_arguments.py TIMEOUT 60)
+  isolate_launch_test(test_example_launch_arguments)
 
   # The geared example on the mock HAL, with and without its transmission.
   add_launch_test(test/test_transmission_mock.py TARGET test_transmission_mock TIMEOUT 120)
