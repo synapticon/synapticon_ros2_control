@@ -73,10 +73,15 @@ def suite_binary(hal):
 
 
 def hal_environment(args):
-    """The environment that selects the HAL and the robot definition in every step."""
+    """
+    The environment that selects the HAL and the robot definition in every step.
+
+    Discovery stays on this machine, so that the steps' requests never reach a ROS stack elsewhere on the network.
+    """
     env = {
         "SYNAPTICON_HIL_HAL": args.hal,
         "SYNAPTICON_HIL_ROBOT": robot_files(args.robot)[0],
+        "ROS_AUTOMATIC_DISCOVERY_RANGE": "LOCALHOST",
     }
     if args.network_interface:
         env["SYNAPTICON_HIL_NETWORK_INTERFACE"] = args.network_interface

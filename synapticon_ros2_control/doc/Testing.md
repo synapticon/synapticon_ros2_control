@@ -53,6 +53,9 @@ So a change to the suite or to the drive logic shows up before you go to the ben
 2. Expect a summary with `0 errors, 0 failures`.
    When a test fails, `colcon test-result --verbose` lists it with its output.
 
+Each launch test runs in its own ROS domain, with discovery on this machine only.
+So a ROS stack elsewhere on the network never gets its requests, and cannot disturb it.
+
 ## 2. Before any hardware test
 
 All hardware tests run on the SOEM HAL, `ethercat_soem`.
@@ -408,6 +411,7 @@ a similar count means the machine, not the number of drives.
 
 `run_hil_tests.py` runs the automated hardware tests that fit the robot, waits between the runs, prints a summary,
 and exits with 0 only when every run passed.
+Its runs keep ROS discovery on this machine, so they never reach a stack on another bench.
 
 With one joint (the default `--robot 1dof`), it runs:
 
@@ -696,7 +700,7 @@ Problems show up at one of four moments. Find the moment first, then your sympto
 
 **Before the bus starts**
 
-- A launch test brings up another robot, or its controllers fail.
+- A hardware test started by hand with `launch_test` brings up another robot, or its controllers fail.
   Another program runs on the same `ROS_DOMAIN_ID`, often a leftover `robot_state_publisher`.
   Find it with `ros2 node list` and stop it, or use another ID.
 - The network interface cannot be opened.
