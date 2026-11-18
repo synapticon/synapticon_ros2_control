@@ -411,6 +411,7 @@ a similar count means the machine, not the number of drives.
 
 `run_hil_tests.py` runs the automated hardware tests that fit the robot, waits between the runs, prints a summary,
 and exits with 0 only when every run passed.
+It is installed in every build, together with the tests it runs.
 Its runs keep ROS discovery on this machine, so they never reach a stack on another bench.
 
 With one joint (the default `--robot 1dof`), it runs:

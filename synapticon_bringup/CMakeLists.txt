@@ -14,8 +14,13 @@ install(
   DESTINATION share/${PROJECT_NAME}
 )
 
-# The Python module the example launch uses.
+# The Python module of the example launch and the hardware tests.
 ament_python_install_package(${PROJECT_NAME})
+
+# The hardware tests and their runner, for real drives. colcon test runs them on simulated drives below.
+install(FILES test/hil_ros2_control_test.py test/hil_bringup_test.py test/hil_multi_joint_test.py
+  DESTINATION share/${PROJECT_NAME}/test)
+install(PROGRAMS scripts/run_hil_tests.py DESTINATION lib/${PROJECT_NAME})
 
 if(BUILD_TESTING)
   find_package(ament_cmake_pytest REQUIRED)
@@ -59,12 +64,6 @@ if(BUILD_TESTING)
   add_launch_test(test/hil_multi_joint_test.py TARGET test_multi_joint_mock_cia402 TIMEOUT 180)
   isolate_launch_test(test_multi_joint_mock_cia402 SYNAPTICON_HIL_HAL=mock_cia402 SYNAPTICON_HIL_ROBOT=2dof
     SYNAPTICON_HIL_SOAK_S=5 SYNAPTICON_HIL_MAX_OVERRUNS=100000)
-
-  # For real drives, the same tests and their runner are installed but not run by colcon test: they need drives on
-  # the bus, and one of them moves a joint.
-  install(FILES test/hil_ros2_control_test.py test/hil_bringup_test.py test/hil_multi_joint_test.py
-    DESTINATION share/${PROJECT_NAME}/test)
-  install(PROGRAMS scripts/run_hil_tests.py DESTINATION lib/${PROJECT_NAME})
 endif()
 
 ament_package()
