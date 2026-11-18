@@ -371,13 +371,19 @@ void DriveController::dispatch_actions()
     }
     const DriveAction reaction = reaction_wants_[j];
 
-    // An enable that waits for its retry is dropped once the joint is latched or the reaction stops it, so that it
-    // is never written after the decision to stop.
-    if (unwritten_actions_[j] == DriveAction::ENABLE &&
-        ((reaction_enabled_ && reaction_->latched(j)) || precedence(reaction) > precedence(DriveAction::ENABLE)))
+    // An enable that waits for its retry is dropped once the joint is latched, or the reaction or a request stops it,
+    // so that it is never written after the decision to stop.
+    if (unwritten_actions_[j] == DriveAction::ENABLE)
     {
-      unwritten_actions_[j] = DriveAction::NONE;
-      ++refusals.latched_enables;
+      if ((reaction_enabled_ && reaction_->latched(j)) || precedence(reaction) > precedence(DriveAction::ENABLE))
+      {
+        unwritten_actions_[j] = DriveAction::NONE;
+        ++refusals.latched_enables;
+      }
+      else if (precedence(strongest(requested)) > precedence(DriveAction::ENABLE))
+      {
+        unwritten_actions_[j] = DriveAction::NONE;  // its request still takes part below, and counts as overruled
+      }
     }
 
     // An unwritten action holds the slot until it is written, so a newer request cannot replace it.

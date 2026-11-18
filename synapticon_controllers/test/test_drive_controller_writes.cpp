@@ -374,6 +374,25 @@ TEST_F(OneDrive, RefusalsAddUpWhileTheInterfaceStaysLocked)
   EXPECT_EQ(written(), DriveAction::ENABLE);
 }
 
+/// A held enable is not written after a stronger request for its joint: the stop goes out instead.
+TEST_F(OneDrive, AHeldEnableIsDroppedForAStop)
+{
+  dc_->enable();
+  {
+    const auto held = lock_action();
+    cycle();  // refused, the enable waits for its retry
+    EXPECT_TRUE(dc_->disable());
+  }
+  cycle();
+  EXPECT_EQ(written(), DriveAction::DISABLE);
+  EXPECT_EQ(dc_->overruled(), 1u);
+  for (int k = 0; k < 3; ++k)
+  {
+    cycle();
+    EXPECT_EQ(written(), DriveAction::NONE) << "the dropped enable must not come back";
+  }
+}
+
 TEST_F(OneDrive, ANewRequestWaitsBehindARefusedOne)
 {
   dc_->enable();
