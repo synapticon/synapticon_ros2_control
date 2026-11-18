@@ -120,8 +120,10 @@ When something goes wrong, the calls say so:
 ## Configuration and transmissions
 
 The URDF describes the robot. The settings of the drives belong to the HAL.
-The `<hardware>` carries four parameters: `hal`, `robot_config`, `default_slave_config` and `mode_of_operation`.
-`SynapticonSystemInterface` reads only `hal` and passes everything else on unread, in a `HalConfig`.
+The `<hardware>` of the example carries `hal`, `robot_config`, `network_interface`, `default_slave_config` and
+`mode_of_operation`.
+`SynapticonSystemInterface` reads `hal`, and from the robot definition named by `robot_config` the command defaults.
+It passes everything on to the HAL, in a `HalConfig`.
 
 `robot_config` names the robot definition YAML.
 The EtherCAT HALs read its `bus` settings, and per joint, by name, the bus address, slave_config, limits, `invert` and
