@@ -105,10 +105,31 @@ rclcpp_lifecycle::State lifecycle_state(uint8_t id, const std::string& label)
 }
 
 /// A mock HAL that keeps the last command batch it was handed, so a test can check what crossed
-/// the HAL boundary rather than inferring it from echoed state.
+/// the HAL boundary rather than inferring it from echoed state. A test can also set what it measures: the drive's
+/// position and statusword, per drive, where `positions` or `status_words` has an entry.
 class RecordingMockHal : public MockHal
 {
 public:
+  bool read(std::vector<synapticon_hardware::DriveState>& states) override
+  {
+    if (!MockHal::read(states))
+    {
+      return false;
+    }
+    for (std::size_t drive = 0; drive < states.size(); ++drive)
+    {
+      if (drive < positions.size())
+      {
+        states[drive].position = positions[drive];
+      }
+      if (drive < status_words.size())
+      {
+        states[drive].status_word = status_words[drive];
+      }
+    }
+    return true;
+  }
+
   bool write(const std::vector<DriveCommand>& commands) override
   {
     last_commands = commands;
@@ -116,7 +137,13 @@ public:
   }
 
   std::vector<DriveCommand> last_commands;
+  std::vector<double> positions;
+  std::vector<uint16_t> status_words;
 };
+
+/// Statuswords of a drive with and without power.
+constexpr uint16_t OPERATION_ENABLED = 0x27;
+constexpr uint16_t SWITCH_ON_DISABLED = 0x40;
 
 /// The component with the recording HAL injected through make_hal().
 class RecordingSystem : public SynapticonSystemInterface
@@ -650,7 +677,7 @@ TEST(SynapticonSystemInterfaceLifecycle, AnInterfaceOfTheWrongTypeFailsTheConfig
   EXPECT_EQ(system.on_configure(UNCONFIGURED), CallbackReturn::ERROR);
 }
 
-/// The hold seeds written at activation are best effort: a locked command handle does not stop the activation.
+/// The command seeds written at activation are best effort: a locked command handle does not stop the activation.
 TEST(SynapticonSystemInterfaceLifecycle, ALockedCommandHandleDoesNotStopTheActivation)
 {
   SynapticonSystemInterface system;
@@ -664,6 +691,62 @@ TEST(SynapticonSystemInterfaceLifecycle, ALockedCommandHandleDoesNotStopTheActiv
     EXPECT_EQ(system.on_activate(INACTIVE), CallbackReturn::SUCCESS);
   }
   system.on_deactivate(lifecycle_state(lifecycle_msgs::msg::State::PRIMARY_STATE_ACTIVE, "active"));
+}
+
+// ---------------------------------------------------------------------------
+// Hold, released interfaces and shutdown
+// ---------------------------------------------------------------------------
+
+/// Without a position command, a joint holds where it was when its drive got power, however far it sags. Before
+/// that, the hold follows the measurement, so a joint moved by hand does not jump back.
+TEST_F(SynapticonSystemInterfaceTest, AJointWithoutACommandHoldsWhereItGotPower)
+{
+  system_.client->status_words = { SWITCH_ON_DISABLED, SWITCH_ON_DISABLED };
+  system_.client->positions = { 1.0, 0.0 };
+  cycle();
+  EXPECT_DOUBLE_EQ(system_.client->last_commands.at(0).position, 1.0);
+  system_.client->positions[0] = 1.2;  // moved by hand
+  cycle();
+  EXPECT_DOUBLE_EQ(system_.client->last_commands.at(0).position, 1.2) << "no jump back when the power comes";
+  system_.client->status_words[0] = OPERATION_ENABLED;
+  for (int i = 0; i < 50; ++i)
+  {
+    system_.client->positions[0] -= 0.01;  // sags under load
+    cycle();
+    EXPECT_DOUBLE_EQ(system_.client->last_commands.at(0).position, 1.2) << "cycle " << i;
+  }
+}
+
+/// A position command sets where a powered joint holds once the commands stop.
+TEST_F(SynapticonSystemInterfaceTest, APoweredJointHoldsItsLastTarget)
+{
+  system_.client->status_words = { OPERATION_ENABLED, OPERATION_ENABLED };
+  system_.client->positions = { 1.0, 0.0 };
+  const auto position = system_.get_command_interface_handle("joint_1/position");
+  ASSERT_TRUE(position->set_value(0.6));
+  cycle();
+  ASSERT_TRUE(position->set_value(std::numeric_limits<double>::quiet_NaN()));
+  system_.client->positions[0] = 0.4;
+  cycle();
+  EXPECT_DOUBLE_EQ(system_.client->last_commands.at(0).position, 0.6);
+}
+
+/// A joint behind a transmission holds through its motor: the motor's command stays while the motor sags.
+TEST_F(SynapticonSystemInterfaceTransmissionTest, AJointBehindATransmissionHoldsWithItsMotorsPower)
+{
+  system_.client->status_words = { SWITCH_ON_DISABLED };
+  system_.client->positions = { 2.0 };
+  cycle();
+  system_.client->status_words[0] = OPERATION_ENABLED;
+  cycle();
+  const double held = system_.client->last_commands.at(0).position;
+  EXPECT_NEAR(held, 2.0, 1e-9) << "the hold of the measured position from before the power came";
+  for (int i = 0; i < 20; ++i)
+  {
+    system_.client->positions[0] -= 0.05;
+    cycle();
+    EXPECT_NEAR(system_.client->last_commands.at(0).position, held, 1e-9) << "cycle " << i;
+  }
 }
 
 }  // namespace

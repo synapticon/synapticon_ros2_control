@@ -22,6 +22,7 @@
 #include <rclcpp_lifecycle/state.hpp>
 
 #include "synapticon_hardware/command_fallback.hpp"
+#include "synapticon_hardware/command_shaping.hpp"
 #include "synapticon_hardware/drive_data.hpp"
 #include "synapticon_hardware/drive_joint_map.hpp"
 #include "synapticon_hardware/ethercat_health.hpp"
@@ -113,6 +114,11 @@ private:
   DriveJointMap drives_;
   std::vector<DriveState> drive_states_;
   std::vector<DriveCommand> drive_commands_;
+
+  // Whether a drive may have power, per drive and per joint. A joint without a drive takes its motors' flag.
+  std::vector<uint8_t> drive_powered_;
+  std::vector<uint8_t> joint_powered_;
+  HoldReference hold_;
 
   InterfaceBinding binding_;
   HandleAccessReport access_report_;

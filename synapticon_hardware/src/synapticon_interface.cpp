@@ -63,6 +63,8 @@ CallbackReturn SynapticonSystemInterface::on_init(const hardware_interface::Hard
   clean_commands_.assign(joints, DriveCommand{});
   drive_states_.assign(drives_.drive_count(), DriveState{});
   drive_commands_.assign(drives_.drive_count(), DriveCommand{});
+  drive_powered_.assign(drives_.drive_count(), 0u);
+  joint_powered_.assign(joints, 0u);
   if (!transmissions_.load(info_, drives_))
   {
     return CallbackReturn::ERROR;
@@ -167,9 +169,10 @@ CallbackReturn SynapticonSystemInterface::on_activate(const rclcpp_lifecycle::St
   refresh_link_health();
   access_report_.state_writes(binding_.push_states());
 
-  // Every joint is commanded to stay where it is, so a drive that gets power later holds its position instead of
-  // following an old command.
-  seed_hold_commands(joint_states_, joint_commands_);
+  // No joint has a command yet, so each one holds where it is, and a drive that gets power later holds there too
+  // instead of following an old command.
+  seed_not_given(joint_commands_);
+  hold_.reset(joint_states_);
   access_report_.command_seeds(binding_.push_command_seeds());
 
   // Activation never powers a drive. That takes an explicit request to the drive controller.
@@ -222,17 +225,24 @@ void SynapticonSystemInterface::states_from_drives()
 {
   for (std::size_t drive = 0; drive < drive_states_.size(); ++drive)
   {
-    DriveState& joint = joint_states_[drives_.drive_to_joint[drive]];
+    const std::size_t j = drives_.drive_to_joint[drive];
+    DriveState& joint = joint_states_[j];
     joint = drive_states_[drive];
-    joint.device_state = static_cast<std::uint8_t>(cia402::device_state(joint.status_word));
+    const cia402::DeviceState state = cia402::device_state(joint.status_word);
+    joint.device_state = static_cast<std::uint8_t>(state);
+    drive_powered_[drive] = cia402::may_be_energised(state) ? 1u : 0u;
+    joint_powered_[j] = drive_powered_[drive];
   }
   transmissions_.propagate_states(drive_states_, joint_states_);
+  transmissions_.spread_to_joints_without_drive(drive_powered_, joint_powered_);
 }
 
 void SynapticonSystemInterface::commands_to_drives()
 {
   // A missing position becomes "hold", a missing velocity or effort becomes 0.
-  sanitise_commands(joint_commands_, joint_states_, clean_commands_);
+  // The rule for missing and invalid values may change with issue #88.
+  hold_.update(joint_commands_, joint_states_, joint_powered_);
+  sanitise_commands(joint_commands_, hold_.positions(), clean_commands_);
   command_fill_.fill_joints(clean_commands_);
   for (std::size_t drive = 0; drive < drive_commands_.size(); ++drive)
   {

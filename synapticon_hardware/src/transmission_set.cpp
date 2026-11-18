@@ -9,6 +9,7 @@
 #include "synapticon_hardware/transmission_set.hpp"
 
 #include <algorithm>
+#include <algorithm>
 #include <cmath>
 #include <exception>
 #include <optional>
@@ -286,6 +287,23 @@ void TransmissionSet::apply_commands(const std::vector<DriveCommand>& commands,
     if (!entry.outputs.empty())
     {
       joints_to_motors(entry, commands, drive_commands);
+    }
+  }
+}
+
+void TransmissionSet::spread_to_joints_without_drive(const std::vector<uint8_t>& drive_flags,
+                                                     std::vector<uint8_t>& joint_flags) const
+{
+  for (const Entry& entry : entries_)
+  {
+    const bool any = std::any_of(entry.drive_index.begin(), entry.drive_index.end(),
+                                 [&drive_flags](std::size_t drive) { return drive_flags[drive] != 0u; });
+    for (std::size_t slot = 0; slot < entry.joint_index.size(); ++slot)
+    {
+      if (entry.without_drive[slot])
+      {
+        joint_flags[entry.joint_index[slot]] = any ? 1u : 0u;
+      }
     }
   }
 }

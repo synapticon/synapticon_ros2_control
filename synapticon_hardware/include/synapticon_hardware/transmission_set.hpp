@@ -9,6 +9,7 @@
 /// @brief The URDF transmissions between the joints and the drives.
 
 #include <cstddef>
+#include <cstdint>
 #include <limits>
 #include <memory>
 #include <string>
@@ -50,6 +51,10 @@ public:
 
   /// Turn the commands of the joints without a drive into commands for their motors.
   void apply_commands(const std::vector<DriveCommand>& commands, std::vector<DriveCommand>& drive_commands);
+
+  /// Give each joint without a drive the flag of its motors, set when any of them has it. `drive_flags` has one entry
+  /// per drive, `joint_flags` one per joint. Allocates nothing.
+  void spread_to_joints_without_drive(const std::vector<uint8_t>& drive_flags, std::vector<uint8_t>& joint_flags) const;
 
   std::size_t size() const
   {

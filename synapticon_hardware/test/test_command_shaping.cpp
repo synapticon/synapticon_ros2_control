@@ -4,9 +4,10 @@
 // Copyright (c) 2026 b-robotized GmbH
 
 /// @file
-/// @brief The hold seed at activation and the NaN sanitising of commands.
+/// @brief The command seed at activation, the hold reference and the NaN sanitising of commands.
 
 #include <cmath>
+#include <cstdint>
 #include <limits>
 #include <vector>
 
@@ -19,8 +20,10 @@ namespace
 using synapticon_hardware::DriveAction;
 using synapticon_hardware::DriveCommand;
 using synapticon_hardware::DriveState;
+using synapticon_hardware::HoldReference;
+using synapticon_hardware::not_given_command;
 using synapticon_hardware::sanitise_commands;
-using synapticon_hardware::seed_hold_commands;
+using synapticon_hardware::seed_not_given;
 
 constexpr double QUIET_NAN = std::numeric_limits<double>::quiet_NaN();
 
@@ -33,18 +36,25 @@ std::vector<DriveState> two_states()
   return states;
 }
 
-/// The seed commands the measured position with zero motion, NaN gains and limit, and no action.
-TEST(CommandShaping, TheSeedHoldsTheMeasuredPositionAndChangesNoGain)
+/// The hold positions of two joints whose hold reference starts from two_states().
+std::vector<double> two_holds()
 {
-  std::vector<DriveCommand> commands;
-  seed_hold_commands(two_states(), commands);
+  return { 1.5, -0.25 };
+}
+
+/// The seed gives nothing: every value NaN and no action, whatever the commands held before.
+TEST(CommandShaping, TheSeedGivesNothing)
+{
+  std::vector<DriveCommand> commands(2);
+  commands[0].position = 0.7;
+  commands[1].drive_action = DriveAction::ENABLE;
+  seed_not_given(commands);
   ASSERT_EQ(commands.size(), 2u);
-  EXPECT_DOUBLE_EQ(commands[0].position, 1.5);
-  EXPECT_DOUBLE_EQ(commands[1].position, -0.25);
   for (const auto& c : commands)
   {
-    EXPECT_DOUBLE_EQ(c.velocity, 0.0);
-    EXPECT_DOUBLE_EQ(c.effort, 0.0);
+    EXPECT_TRUE(std::isnan(c.position));
+    EXPECT_TRUE(std::isnan(c.velocity));
+    EXPECT_TRUE(std::isnan(c.effort));
     EXPECT_TRUE(std::isnan(c.stiffness));
     EXPECT_TRUE(std::isnan(c.damping));
     EXPECT_TRUE(std::isnan(c.max_joint_torque));
@@ -52,7 +62,7 @@ TEST(CommandShaping, TheSeedHoldsTheMeasuredPositionAndChangesNoGain)
   }
 }
 
-/// NaN setpoints become the measured position and zero motion, NaN gains and limit pass through unchanged.
+/// NaN setpoints become the hold position and zero motion, NaN gains and limit pass through unchanged.
 TEST(CommandShaping, NanSetpointsAreReplacedAndGainsPassThrough)
 {
   std::vector<DriveCommand> commands(2);
@@ -68,9 +78,9 @@ TEST(CommandShaping, NanSetpointsAreReplacedAndGainsPassThrough)
   commands[1].drive_action = DriveAction::ENABLE;
 
   std::vector<DriveCommand> sanitised;
-  sanitise_commands(commands, two_states(), sanitised);
+  sanitise_commands(commands, two_holds(), sanitised);
   ASSERT_EQ(sanitised.size(), 2u);
-  EXPECT_DOUBLE_EQ(sanitised[0].position, 1.5) << "a NaN position holds the measured one";
+  EXPECT_DOUBLE_EQ(sanitised[0].position, 1.5) << "a NaN position holds at the hold position";
   EXPECT_DOUBLE_EQ(sanitised[0].velocity, 0.0);
   EXPECT_DOUBLE_EQ(sanitised[0].effort, 0.0);
   EXPECT_TRUE(std::isnan(sanitised[0].stiffness)) << "NaN gains mean no change and pass through";
@@ -92,7 +102,7 @@ TEST(CommandShaping, InfiniteSetpointsPassThroughForTheHalToRefuse)
   commands[1].effort = INF;
 
   std::vector<DriveCommand> sanitised;
-  sanitise_commands(commands, two_states(), sanitised);
+  sanitise_commands(commands, two_holds(), sanitised);
   ASSERT_EQ(sanitised.size(), 2u);
   EXPECT_EQ(sanitised[0].position, INF) << "an infinite position must not turn into a hold";
   EXPECT_EQ(sanitised[0].velocity, -INF);
@@ -105,8 +115,58 @@ TEST(CommandShaping, TheInputCommandsAreNotTouched)
   std::vector<DriveCommand> commands(1);
   commands[0].position = QUIET_NAN;
   std::vector<DriveCommand> sanitised;
-  sanitise_commands(commands, two_states(), sanitised);
+  sanitise_commands(commands, two_holds(), sanitised);
   EXPECT_TRUE(std::isnan(commands[0].position));
+}
+
+/// With power, a joint without a position command holds the last valid target, however far it sags.
+TEST(HoldReference, APoweredJointHoldsTheLastTargetWhileTheMeasurementMoves)
+{
+  HoldReference hold;
+  std::vector<DriveState> states = two_states();
+  hold.reset(states);
+  const std::vector<uint8_t> powered{ 1u, 1u };
+  std::vector<DriveCommand> commands(2, not_given_command());
+  commands[0].position = 0.8;
+  hold.update(commands, states, powered);
+  commands[0].position = QUIET_NAN;
+  for (int cycle = 0; cycle < 100; ++cycle)
+  {
+    states[0].position -= 0.01;
+    states[1].position -= 0.01;
+    hold.update(commands, states, powered);
+  }
+  EXPECT_DOUBLE_EQ(hold.positions()[0], 0.8) << "the last valid target";
+  EXPECT_DOUBLE_EQ(hold.positions()[1], -0.25) << "the position at the start, never the sagging measurement";
+}
+
+/// Without power the hold position follows the measurement, so a joint moved by hand does not jump back when its
+/// drive gets power. From that cycle on it stays.
+TEST(HoldReference, AnUnpoweredJointFollowsTheMeasurementUntilItGetsPower)
+{
+  HoldReference hold;
+  std::vector<DriveState> states = two_states();
+  hold.reset(states);
+  const std::vector<DriveCommand> commands(2, not_given_command());
+  states[0].position = 0.3;  // moved by hand
+  hold.update(commands, states, { 0u, 0u });
+  EXPECT_DOUBLE_EQ(hold.positions()[0], 0.3);
+  hold.update(commands, states, { 1u, 0u });  // gets power here
+  states[0].position = 0.1;                   // and sags
+  hold.update(commands, states, { 1u, 0u });
+  EXPECT_DOUBLE_EQ(hold.positions()[0], 0.3);
+}
+
+/// A NaN or infinite position never becomes the hold position.
+TEST(HoldReference, OnlyAFinitePositionMovesTheHold)
+{
+  HoldReference hold;
+  const std::vector<DriveState> states = two_states();
+  hold.reset(states);
+  std::vector<DriveCommand> commands(2, not_given_command());
+  commands[0].position = std::numeric_limits<double>::infinity();
+  hold.update(commands, states, { 1u, 1u });
+  EXPECT_DOUBLE_EQ(hold.positions()[0], 1.5);
 }
 
 }  // namespace
