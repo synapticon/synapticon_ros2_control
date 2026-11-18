@@ -745,4 +745,29 @@ TEST(Cia402HalFailures, AQuickStopDuringAnEnableTakesTheDriveDown)
   EXPECT_EQ(drives.active_drive_action(0), DriveAction::NONE);
 }
 
+/// A quick stop does not replace a disable that is on its way down, so the drive still ends without power.
+TEST(Cia402HalFailures, AQuickStopDoesNotReplaceARunningDisable)
+{
+  ScriptedDrives drives({ true });
+  ASSERT_TRUE(drives.start());
+  drives.report(OPERATION_ENABLED);
+  ASSERT_TRUE(drives.enable());
+  drives.move_at(1.0);  // still braking, so the disable waits in Quick Stop Active
+  ASSERT_TRUE(drives.cycle(DriveAction::DISABLE));
+  drives.report(QUICK_STOP_ACTIVE);
+  ASSERT_TRUE(drives.cycle(DriveAction::NONE));
+  ASSERT_EQ(drives.active_drive_action(0), DriveAction::DISABLE);
+  ASSERT_TRUE(drives.cycle(DriveAction::QUICK_STOP));
+  EXPECT_EQ(drives.active_drive_action(0), DriveAction::DISABLE);
+  drives.move_at(0.0);
+  drives.follow_controlword(0);
+  const auto start = Clock::now();
+  while (drives.active_drive_action(0) == DriveAction::DISABLE && Clock::now() - start < WALK_TIMEOUT)
+  {
+    ASSERT_TRUE(drives.cycle(DriveAction::NONE));
+    std::this_thread::sleep_for(std::chrono::milliseconds(10));
+  }
+  EXPECT_EQ(drives.reported(0), SWITCH_ON_DISABLED);
+}
+
 }  // namespace

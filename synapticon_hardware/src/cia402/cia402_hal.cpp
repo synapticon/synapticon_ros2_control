@@ -297,9 +297,9 @@ cia402::DeviceState Cia402Hal::current_state(std::size_t joint) const
 
 /// Checks in order: reset_fault needs a drive in Fault or Fault Reaction Active, NONE starts nothing (a running action
 /// goes on to its end), the HAL must support the action, enable needs a drive without fault, actions that power the
-/// drive need energize, and quick_stop falls back to disable when the drive has no quick stop. Asking again for the
-/// running action keeps its deadline. A reset_fault taken in Fault Reaction Active sends the reset once the drive is in
-/// Fault.
+/// drive need energize, a quick_stop does not replace a running disable, and quick_stop falls back to disable when the
+/// drive has no quick stop. Asking again for the running action keeps its deadline. A reset_fault taken in Fault
+/// Reaction Active sends the reset once the drive is in Fault.
 DriveAction Cia402Hal::accept_request(std::size_t j, DriveAction action)
 {
   const char* name = drives_[j].settings.name.c_str();
@@ -331,6 +331,14 @@ DriveAction Cia402Hal::accept_request(std::size_t j, DriveAction action)
     RCLCPP_WARN(log(), "Joint '%s' has energize set to false, drive_action '%s' ignored.", name,
                 action_to_string(action));
     return DriveAction::NONE;
+  }
+  // A quick stop would stop a disable on its way down in Quick Stop Active, with the power still on.
+  const DriveAction running = drives_[j].walking;
+  if (action == DriveAction::QUICK_STOP && (running == DriveAction::DISABLE || running == DriveAction::DISABLE_VOLTAGE))
+  {
+    RCLCPP_INFO(log(), "Joint '%s': drive_action 'quick_stop' ignored, '%s' is already taking the power off.", name,
+                action_to_string(running));
+    return running;
   }
   if (action == DriveAction::QUICK_STOP && !quick_stop_available(j))
   {
