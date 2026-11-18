@@ -38,6 +38,7 @@ ros2 topic echo /diagnostics --field status
 The entry `ethercat_bus_monitor_controller: ethercat_bus` reads `EtherCAT link up, process data COMPLETE` when every
 drive answers each cycle.
 Anything else names the problem: `No EtherCAT link`, or process data that only some drives answer (a drive dropped out).
+A drive outside the OP state raises a warning, and a change in the number of drives that answer is reported at once.
 
 ## The drives
 

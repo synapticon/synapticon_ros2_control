@@ -476,8 +476,11 @@ ros2 service call /drive_controller/set_drive_action synapticon_control_msgs/srv
 ```
 
 The answer is `success=True, message="Posted 'reset_fault' for all drives"`.
+`success` means that the request was posted, not that a drive carried it out.
+`~/drive_status` and the log show what each drive did.
 The faulted drives go to Switch On Disabled and stay de-energised until the next `enable`.
 The hardware ignores an `enable` while a drive is in Fault, and the log says so, so a reset always comes first.
+The service also lists `switch_on` and `shutdown`, but refuses them.
 
 From a stop or a fault until the next `enable`, the hardware ignores the motion controller's setpoints for that drive.
 The motion controller may keep streaming. Re-command it, then enable.
@@ -488,6 +491,22 @@ The motion controller may keep streaming. Re-command it, then enable.
 With `fault_reaction.enabled: true`, `drive_controller` also reacts on its own when a drive faults, leaves the bus or
 reports a following error.
 The built-in policy quick stops every joint and latches them until `~/clear_fault_reaction`.
+
+A drive gets power only through `drive_controller`, and keeps it only while `drive_controller` is active.
+When it is deactivated, the hardware disables every drive that still has power.
+To stop everything at once, deactivate the hardware component, which disables all drives:
+
+```bash
+ros2 control set_hardware_component_state synapticon inactive
+```
+
+When a controller stops, the joints it commanded hold where they are, with velocity and effort 0 and the gains of
+`command_defaults`.
+
+`drive_controller` sends each action for one cycle.
+So the hardware must run in the controller manager's loop, not asynchronously, and write at least as often as
+`drive_controller` updates.
+A lower `update_rate` of `drive_controller` is fine. [issue #89](https://github.com/synapticon/synapticon_ros2_control/issues/89) is about lifting this limit.
 
 | Read more | |
 |---|---|

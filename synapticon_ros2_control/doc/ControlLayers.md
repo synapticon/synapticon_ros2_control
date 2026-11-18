@@ -68,8 +68,8 @@ drive and requests drive actions on its own when a drive fails, and it publishes
 How it decides when to act is the subject of the next section. It never writes a setpoint, so there is
 nothing to reconcile between it and the motion controller.
 
-**The bus monitor** watches the EtherCAT segment as a whole, link state and responding slaves, and
-publishes that for diagnostics. Per-joint connectivity is part of each joint's state and is reported by
+**The bus monitor** watches the EtherCAT segment as a whole, link state, responding slaves and their
+EtherCAT states, and publishes that for diagnostics. Per-joint connectivity is part of each joint's state and is reported by
 the drive controller instead.
 
 ## Fault handling
