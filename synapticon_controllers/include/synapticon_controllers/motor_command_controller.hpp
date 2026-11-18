@@ -37,7 +37,8 @@ namespace synapticon_controllers
 ///
 /// A message needs one position, velocity and torque_feedforward per name. stiffness and damping have one value per
 /// name, or none. None writes NaN, for which the hardware puts in the joint's configured default gains. A joint that
-/// a message does not name holds where it is. A message with other sizes is ignored, and every joint holds.
+/// a message does not name holds where it is. A message with other sizes, an infinite value or a negative stiffness
+/// or damping is ignored, and every joint holds.
 class MotorCommandController : public controller_interface::ControllerInterface
 {
 public:
@@ -62,7 +63,7 @@ protected:
     double damping;
   };
 
-  /// Hold every setpoint and give no gains, so the defaults apply.
+  /// Hold every setpoint and give no gains, so the defaults apply. This rule may change with issue #88.
   static constexpr Setpoint HOLD{ std::numeric_limits<double>::quiet_NaN(), std::numeric_limits<double>::quiet_NaN(),
                                   std::numeric_limits<double>::quiet_NaN(), std::numeric_limits<double>::quiet_NaN(),
                                   std::numeric_limits<double>::quiet_NaN() };
@@ -71,7 +72,7 @@ protected:
   struct Targets
   {
     std::vector<Setpoint> per_joint;  ///< In the order of the joints parameter.
-    bool usable = false;              ///< False when the message's array sizes do not fit its names.
+    bool usable = false;              ///< False when the message's sizes or values are refused.
   };
 
   /// Work out the setpoints of a received message, for the next update(). Called by the subscription.

@@ -10,6 +10,7 @@
 /// where the hardware is to hold what it has.
 
 #include <cmath>
+#include <limits>
 #include <memory>
 #include <string>
 #include <utility>
@@ -194,6 +195,50 @@ TEST_F(MotorCommandControllerTest, InconsistentArraySizesHoldEverything)
   update();
   expect_held(0);
   expect_held(1);
+}
+
+/// An infinite value anywhere, or a negative gain, makes the whole message refused, like wrong sizes.
+TEST_F(MotorCommandControllerTest, InvalidValuesHoldEverything)
+{
+  constexpr double INF = std::numeric_limits<double>::infinity();
+  const std::vector<std::pair<const char*, void (*)(MotorCommand&)>> breakers = {
+    { "infinite position", [](MotorCommand& m) { m.position[1] = INF; } },
+    { "infinite velocity", [](MotorCommand& m) { m.velocity[0] = -INF; } },
+    { "infinite torque_feedforward", [](MotorCommand& m) { m.torque_feedforward[0] = INF; } },
+    { "infinite stiffness", [](MotorCommand& m) { m.stiffness[1] = INF; } },
+    { "negative stiffness", [](MotorCommand& m) { m.stiffness[0] = -1.0; } },
+    { "negative damping", [](MotorCommand& m) { m.damping[1] = -0.5; } },
+  };
+  for (const auto& [what, breaker] : breakers)
+  {
+    controller_->inject(command(JOINTS));
+    update();
+    expect_commanded(0, 0);
+
+    MotorCommand bad = command(JOINTS);
+    breaker(bad);
+    controller_->inject(bad);
+    update();
+    SCOPED_TRACE(what);
+    expect_held(0);
+    expect_held(1);
+  }
+}
+
+/// NaN stays allowed: it means "not given", and the gains then take the defaults.
+TEST_F(MotorCommandControllerTest, NanValuesAreNotRefused)
+{
+  MotorCommand msg = command(JOINTS);
+  msg.position[0] = std::numeric_limits<double>::quiet_NaN();
+  msg.stiffness[1] = std::numeric_limits<double>::quiet_NaN();
+  controller_->inject(msg);
+  update();
+  EXPECT_TRUE(std::isnan(value(0, POSITION)));
+  EXPECT_DOUBLE_EQ(value(0, VELOCITY), 12.0);
+  EXPECT_DOUBLE_EQ(value(0, STIFFNESS), 14.0);
+  EXPECT_DOUBLE_EQ(value(1, POSITION), 21.0);
+  EXPECT_TRUE(std::isnan(value(1, STIFFNESS)));
+  EXPECT_DOUBLE_EQ(value(1, DAMPING), 25.0);
 }
 
 TEST_F(MotorCommandControllerTest, AJointMissingFromTheCommandIsHeld)

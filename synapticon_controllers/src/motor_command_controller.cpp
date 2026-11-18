@@ -9,6 +9,7 @@
 #include "synapticon_controllers/motor_command_controller.hpp"
 
 #include <algorithm>
+#include <cmath>
 #include <limits>
 
 #include <pluginlib/class_list_macros.hpp>
@@ -23,6 +24,20 @@ namespace
 constexpr std::array<const char*, 5> INTERFACES = { "position", "velocity", "effort", "stiffness", "damping" };
 
 constexpr double NaN = std::numeric_limits<double>::quiet_NaN();
+
+/// True when a value of the message is infinite, or a stiffness or damping is negative. NaN does not count.
+bool has_invalid_value(const synapticon_control_msgs::msg::MotorCommand& msg)
+{
+  const auto any_infinite = [](const std::vector<double>& values) {
+    return std::any_of(values.begin(), values.end(), [](double v) { return std::isinf(v); });
+  };
+  const auto any_negative = [](const std::vector<double>& values) {
+    return std::any_of(values.begin(), values.end(), [](double v) { return v < 0.0; });
+  };
+  return any_infinite(msg.position) || any_infinite(msg.velocity) || any_infinite(msg.torque_feedforward) ||
+         any_infinite(msg.stiffness) || any_infinite(msg.damping) || any_negative(msg.stiffness) ||
+         any_negative(msg.damping);
+}
 }  // namespace
 
 CallbackReturn MotorCommandController::on_init()
@@ -108,14 +123,22 @@ void MotorCommandController::on_command(const std::shared_ptr<MotorCommand>& msg
   const std::size_t names = msg->name.size();
   const auto one_each = [names](const auto& values) { return values.size() == names; };
   const auto one_each_or_none = [names](const auto& values) { return values.size() == names || values.empty(); };
-  targets->usable = one_each(msg->position) && one_each(msg->velocity) && one_each(msg->torque_feedforward) &&
-                    one_each_or_none(msg->stiffness) && one_each_or_none(msg->damping);
-  if (!targets->usable)
+  const bool sizes_fit = one_each(msg->position) && one_each(msg->velocity) && one_each(msg->torque_feedforward) &&
+                         one_each_or_none(msg->stiffness) && one_each_or_none(msg->damping);
+  // A refused message makes every joint hold. The rule for missing and invalid values may change with issue #88.
+  targets->usable = sizes_fit && !has_invalid_value(*msg);
+  if (!sizes_fit)
   {
     RCLCPP_ERROR_THROTTLE(get_node()->get_logger(), *get_node()->get_clock(), 1000,
                           "Ignoring a MotorCommand with %zu name(s): position, velocity and torque_feedforward need "
                           "one value each, stiffness and damping one each or none. The joints hold.",
                           names);
+  }
+  else if (!targets->usable)
+  {
+    RCLCPP_ERROR_THROTTLE(get_node()->get_logger(), *get_node()->get_clock(), 1000,
+                          "Ignoring a MotorCommand with an infinite value or a negative stiffness or damping. "
+                          "The joints hold.");
   }
   else
   {
@@ -151,6 +174,7 @@ controller_interface::return_type MotorCommandController::update(const rclcpp::T
 {
   const auto* latest = targets_.readFromRT();
   const Targets* targets = latest && *latest ? latest->get() : nullptr;
+  // Hold where there is no usable command. The rule for missing and invalid values may change with issue #88.
   const bool hold = !targets || !targets->usable;
   for (std::size_t joint = 0; joint < joints_.size(); ++joint)
   {
