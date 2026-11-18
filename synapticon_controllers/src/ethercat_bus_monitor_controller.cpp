@@ -9,7 +9,7 @@
 #include <algorithm>
 #include <cstdio>
 #include <string>
-#include <utility>
+#include <tuple>
 
 #include "diagnostic_msgs/msg/diagnostic_status.hpp"
 #include "rclcpp/logging.hpp"
@@ -41,6 +41,7 @@ constexpr uint8_t WC_COMPLETE = 2;
 
 /// The EtherCAT states (AL states) of the slaves, by bit.
 constexpr std::array<const char*, 4> AL_STATE_NAMES = { "INIT", "PREOP", "SAFEOP", "OP" };
+constexpr uint8_t AL_STATES_ALL_OP = 0x08;
 
 std::string wc_state_name(uint8_t wc_state)
 {
@@ -171,9 +172,10 @@ BusReading EthercatBusMonitorController::read_bus() const
 controller_interface::return_type EthercatBusMonitorController::update(const rclcpp::Time& time,
                                                                        const rclcpp::Duration& /*period*/)
 {
-  // Report when the link or the domain changes, and at least once a second.
+  // Report when the link, the slaves, their states or the domain change, and at least once a second.
   const BusReading bus = read_bus();
-  const std::pair<bool, uint8_t> now{ bus.link_up, bus.wc_state };
+  const std::tuple<bool, uint32_t, uint8_t, uint8_t> now{ bus.link_up, bus.slaves_responding, bus.al_states,
+                                                          bus.wc_state };
   diagnostics_.update_latest([&bus](auto& latest) { latest[0] = bus; });
   if (now != last_reported_)
   {
@@ -186,7 +188,7 @@ controller_interface::return_type EthercatBusMonitorController::update(const rcl
 void EthercatBusMonitorController::describe(const std::optional<BusReading>& bus,
                                             RealtimeDiagnostics<BusReading>::Status& status)
 {
-  // An error without link, a warning while not every slave answers, OK otherwise.
+  // An error without link, a warning while not every slave answers or is in OP, OK otherwise.
   if (!bus)
   {
     status.summary(Level::STALE, "No reading of the bus yet");
@@ -198,8 +200,10 @@ void EthercatBusMonitorController::describe(const std::optional<BusReading>& bus
   }
   else
   {
-    status.summary(bus->wc_state == WC_COMPLETE ? Level::OK : Level::WARN,
-                   "EtherCAT link up, process data " + wc_state_name(bus->wc_state));
+    const bool all_op = bus->al_states == AL_STATES_ALL_OP;
+    status.summary(bus->wc_state == WC_COMPLETE && all_op ? Level::OK : Level::WARN,
+                   "EtherCAT link up, process data " + wc_state_name(bus->wc_state) +
+                       (all_op ? "" : ", not every slave in OP"));
   }
   status.add(FIELD_NAMES[SLAVES_RESPONDING], std::to_string(bus->slaves_responding));
   status.add(FIELD_NAMES[AL_STATES], al_state_names(bus->al_states));

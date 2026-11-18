@@ -126,10 +126,10 @@ protected:
     test::shut_down(monitor_);
   }
 
-  void set_bus(bool link_up, uint8_t al_states, uint8_t wc_state)
+  void set_bus(bool link_up, uint8_t al_states, uint8_t wc_state, uint32_t slaves_responding = 1)
   {
     ASSERT_TRUE(handles_.states[0]->set_value<bool>(link_up));
-    ASSERT_TRUE(handles_.states[1]->set_value<uint32_t>(1));
+    ASSERT_TRUE(handles_.states[1]->set_value<uint32_t>(slaves_responding));
     ASSERT_TRUE(handles_.states[2]->set_value<uint8_t>(al_states));
     ASSERT_TRUE(handles_.states[3]->set_value<uint32_t>(3));
     ASSERT_TRUE(handles_.states[4]->set_value<uint8_t>(wc_state));
@@ -163,15 +163,34 @@ TEST_F(BusMonitor, AHealthyBusIsOk)
   EXPECT_EQ(monitor_.report().hardware_id, BUS);
 }
 
-TEST_F(BusMonitor, OnlyChangesOfLinkOrDomainAreQueued)
+TEST_F(BusMonitor, ChangesOfLinkSlavesStatesOrDomainAreQueued)
 {
   update();  // the first reading
   update();
   set_bus(true, 0x08, WC_INCOMPLETE);
   update();
-  set_bus(true, 0x0A, WC_INCOMPLETE);  // the AL states alone are no change
+  set_bus(true, 0x0A, WC_INCOMPLETE);  // a slave left OP
   update();
-  EXPECT_EQ(monitor_.publish_changes(), 2u);
+  set_bus(true, 0x0A, WC_INCOMPLETE, 2);  // one more slave answers
+  update();
+  update();
+  EXPECT_EQ(monitor_.publish_changes(), 4u);
+}
+
+TEST_F(BusMonitor, TheWorkingCounterAloneIsNoChange)
+{
+  update();
+  ASSERT_TRUE(handles_.states[3]->set_value<uint32_t>(4));
+  update();
+  EXPECT_EQ(monitor_.publish_changes(), 1u);
+}
+
+TEST_F(BusMonitor, ASlaveOutsideOpIsAWarning)
+{
+  set_bus(true, 0x0A, WC_COMPLETE);
+  update();
+  EXPECT_EQ(monitor_.report().level, DiagnosticStatus::WARN);
+  EXPECT_EQ(monitor_.report().message, "EtherCAT link up, process data COMPLETE, not every slave in OP");
 }
 
 TEST_F(BusMonitor, AnIncompleteDomainIsAWarning)

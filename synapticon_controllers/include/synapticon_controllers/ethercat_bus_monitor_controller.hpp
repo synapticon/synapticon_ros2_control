@@ -13,7 +13,7 @@
 #include <memory>
 #include <optional>
 #include <string>
-#include <utility>
+#include <tuple>
 
 #include "controller_interface/controller_interface.hpp"
 #include "rclcpp/time.hpp"
@@ -37,8 +37,9 @@ struct BusReading
 ///
 /// It reads the bus health from the <gpio> that the parameter `bus_name` names ("ethercat_bus" by default): the
 /// link, the slaves that answer, their EtherCAT states and how completely they answer the process data. The report,
-/// named after the <gpio>, goes out when the link or the process data changes, and at least once a second. The
-/// drives' own health is the drive controller's report.
+/// named after the <gpio>, goes out when any of these but the working counter changes, and at least once a second. It
+/// is an error without link, and a warning while not every slave answers the process data or is in OP. The drives'
+/// own health is the drive controller's report.
 class EthercatBusMonitorController : public controller_interface::ControllerInterface
 {
 public:
@@ -58,8 +59,8 @@ protected:
   std::string bus_name_;
   /// The place of each bus field in state_interfaces_, found at activation.
   std::array<std::size_t, 5> slots_{};
-  /// The link and process data state of the last report.
-  std::optional<std::pair<bool, uint8_t>> last_reported_;
+  /// The link, the slaves that answer, their states and the process data state of the last report.
+  std::optional<std::tuple<bool, uint32_t, uint8_t, uint8_t>> last_reported_;
   RealtimeDiagnostics<BusReading> diagnostics_;
 };
 
