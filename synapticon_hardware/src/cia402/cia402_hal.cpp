@@ -151,6 +151,7 @@ bool Cia402Hal::write(const std::vector<DriveCommand>& commands)
   bool valid = true;
   for (std::size_t j = 0; j < drives_.size(); ++j)
   {
+    // The rule for missing and invalid values may change with issue #88.
     if (has_invalid_setpoint(commands[j]))
     {
       if (valid && !invalid_reported_)

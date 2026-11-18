@@ -9,7 +9,6 @@
 #include "synapticon_hardware/transmission_set.hpp"
 
 #include <algorithm>
-#include <algorithm>
 #include <cmath>
 #include <exception>
 #include <optional>
@@ -244,6 +243,7 @@ void TransmissionSet::joints_to_motors(Entry& entry, const std::vector<DriveComm
     motor.effort = mapped.effort;
     // A NaN leaves the motor's own gain in place, and if the joint had a gain, that loss is reported below. An infinite
     // gain goes on, so that the HAL refuses it.
+    // The rule for missing and invalid values may change with issue #88.
     const std::tuple<double*, double, bool> gains[] = { { &motor.stiffness, mapped.stiffness, stiffness_given },
                                                         { &motor.damping, mapped.damping, damping_given } };
     for (const auto& [target, value, given] : gains)

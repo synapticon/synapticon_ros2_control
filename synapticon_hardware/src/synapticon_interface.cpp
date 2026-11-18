@@ -344,6 +344,8 @@ return_type SynapticonSystemInterface::write(const rclcpp::Time& /*time*/, const
   const auto refused = binding_.pull_commands();
   access_report_.command_reads(refused.setpoints, refused.actions);
   commands_to_drives();
+  // An invalid setpoint fails the write like a failing bus does, and ros2_control then takes the drives down.
+  // The rule for missing and invalid values may change with issue #88.
   return hal_->write(drive_commands_) ? return_type::OK : return_type::ERROR;
 }
 
