@@ -59,7 +59,8 @@ public:
   hardware_interface::CallbackReturn on_error(const rclcpp_lifecycle::State& previous_state) override;
 
   /// Sets the command interfaces a controller releases to "not given", so its last commands stop counting. A joint
-  /// holds, see HoldReference.
+  /// holds, see HoldReference. A released drive_action of a drive that may have power becomes a disable, so that
+  /// no drive keeps power without a controller that can stop it.
   hardware_interface::return_type perform_command_mode_switch(const std::vector<std::string>& start_interfaces,
                                                               const std::vector<std::string>& stop_interfaces) override;
 

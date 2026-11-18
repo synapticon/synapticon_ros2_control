@@ -748,6 +748,18 @@ TEST_F(SynapticonSystemInterfaceTest, ReleasedCommandInterfacesStopCounting)
   EXPECT_DOUBLE_EQ(system_.client->last_commands.at(0).position, 0.6) << "the hold of the last target";
 }
 
+/// When no controller holds the drive action of a powered drive any more, the drive is disabled.
+TEST_F(SynapticonSystemInterfaceTest, ReleasingTheDriveActionOfAPoweredDriveDisablesIt)
+{
+  system_.client->status_words = { OPERATION_ENABLED, SWITCH_ON_DISABLED };
+  cycle();
+  ASSERT_EQ(system_.perform_command_mode_switch({}, { "joint_1/drive_action", "joint_2/drive_action" }),
+            hardware_interface::return_type::OK);
+  cycle();
+  EXPECT_EQ(commanded_action(0), DriveAction::DISABLE);
+  EXPECT_EQ(commanded_action(1), DriveAction::NONE) << "a drive without power needs no disable";
+}
+
 /// A joint behind a transmission holds through its motor: the motor's command stays while the motor sags.
 TEST_F(SynapticonSystemInterfaceTransmissionTest, AJointBehindATransmissionHoldsWithItsMotorsPower)
 {

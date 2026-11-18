@@ -342,6 +342,18 @@ return_type SynapticonSystemInterface::perform_command_mode_switch(const std::ve
   {
     return return_type::OK;
   }
+  for (std::size_t j = 0; j < release_commands_.size(); ++j)
+  {
+    const auto state = static_cast<cia402::DeviceState>(joint_states_[j].device_state);
+    const bool powered = exchanging_ && drives_.has_drive(j) && cia402::may_be_energised(state);
+    release_commands_[j].drive_action = powered ? DriveAction::DISABLE : DriveAction::NONE;
+    const std::string action = info_.joints[j].name + "/drive_action";
+    if (powered && std::find(stop_interfaces.begin(), stop_interfaces.end(), action) != stop_interfaces.end())
+    {
+      RCLCPP_WARN(logger(), "No controller holds '%s' any more while its drive may have power. Disabling the drive.",
+                  action.c_str());
+    }
+  }
   if (const std::size_t refused = binding_.reset_released(stop_interfaces, release_commands_); refused != 0)
   {
     RCLCPP_ERROR(logger(), "%zu released command interface(s) could not be reset.", refused);
