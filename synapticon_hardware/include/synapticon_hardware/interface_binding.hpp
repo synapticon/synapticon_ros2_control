@@ -68,6 +68,10 @@ struct CommandSource
   T* destination{ nullptr };
 };
 
+/// The interfaces `joint` declares that only a joint with a drive can carry: the drive's own states, the drive
+/// action and the torque limit. Each as `<joint>/<interface>`.
+std::vector<std::string> drive_only_interfaces(const hardware_interface::ComponentInfo& joint);
+
 /// @brief Links the handles of a component to the drive data, once at configure, and copies between them every
 /// cycle.
 ///

@@ -46,11 +46,16 @@ FallbackConfig read_command_fallbacks(const hardware_interface::HardwareInfo& in
   {
     all.joints.push_back(JointSpec{ joint.name, joint.parameters });
   }
-  if (std::string error; !ethercat::apply_robot_config(all, error))
+  if (std::string error; !ethercat::merge_robot_config(all, error))
   {
     throw std::invalid_argument(error);
   }
   FallbackConfig config;
+  for (const auto& joint : all.joints)
+  {
+    config.own_torque_limit.push_back(!param_or(joint.parameters, "max_joint_torque").empty());
+  }
+  ethercat::apply_joint_defaults(all);
   try
   {
     config.keep_last_given = read_flag(param_or(all.hardware_parameters, ethercat::KEEP_LAST_GIVEN_PARAM, "false"));

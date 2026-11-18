@@ -90,6 +90,10 @@ private:
   /// Copy the HAL's link health to the health interfaces. Joints without a drive keep "healthy".
   void refresh_link_health();
 
+  /// False, after logging, when a joint without a drive declares an interface or a torque limit that only a drive
+  /// has. `own_torque_limit` says per joint whether it sets max_joint_torque itself.
+  bool check_joints_without_drive(const std::vector<bool>& own_torque_limit) const;
+
   std::string hal_plugin_{ "ethercat_soem" };
   HalConfig hal_config_{};
 

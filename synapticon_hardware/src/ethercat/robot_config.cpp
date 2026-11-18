@@ -89,7 +89,8 @@ bool merge_file(const YAML::Node& root, HalConfig& config, std::string& error)
   return true;
 }
 
-/// Give every joint without its own value of a joint parameter the hardware-wide default of it.
+}  // namespace
+
 void apply_joint_defaults(HalConfig& config)
 {
   std::vector<std::pair<std::string, std::string>> defaults{ { "slave_config", DEFAULT_SLAVE_CONFIG_PARAM },
@@ -111,26 +112,34 @@ void apply_joint_defaults(HalConfig& config)
   }
 }
 
-}  // namespace
+bool merge_robot_config(HalConfig& config, std::string& error)
+{
+  const std::string path = param_or(config.hardware_parameters, ROBOT_CONFIG_PARAM);
+  if (path.empty())
+  {
+    return true;
+  }
+  try
+  {
+    if (!merge_file(YAML::LoadFile(path), config, error))
+    {
+      error = "robot_config '" + path + "': " + error;
+      return false;
+    }
+  }
+  catch (const std::exception& e)
+  {
+    error = "robot_config '" + path + "' could not be read: " + e.what();
+    return false;
+  }
+  return true;
+}
 
 bool apply_robot_config(HalConfig& config, std::string& error)
 {
-  const std::string path = param_or(config.hardware_parameters, ROBOT_CONFIG_PARAM);
-  if (!path.empty())
+  if (!merge_robot_config(config, error))
   {
-    try
-    {
-      if (!merge_file(YAML::LoadFile(path), config, error))
-      {
-        error = "robot_config '" + path + "': " + error;
-        return false;
-      }
-    }
-    catch (const std::exception& e)
-    {
-      error = "robot_config '" + path + "' could not be read: " + e.what();
-      return false;
-    }
+    return false;
   }
   apply_joint_defaults(config);
   return true;

@@ -67,7 +67,7 @@ hardware_interface::HardwareInfo description(const std::string& robot_config)
 /// One joint with stiffness 0.4, damping 0.1 and torque limit 50, another with 1, 2 and 3.
 FallbackConfig two_joints(bool keep_last_given = false)
 {
-  return FallbackConfig{ { CommandFallback{ 0.4, 0.1, 50.0 }, CommandFallback{ 1.0, 2.0, 3.0 } }, keep_last_given };
+  return FallbackConfig{ { CommandFallback{ 0.4, 0.1, 50.0 }, CommandFallback{ 1.0, 2.0, 3.0 } }, keep_last_given, {} };
 }
 
 /// A command that gives no stiffness, damping or torque limit.

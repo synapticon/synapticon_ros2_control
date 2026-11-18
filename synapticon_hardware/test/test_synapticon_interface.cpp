@@ -17,6 +17,7 @@
 #include <mutex>
 #include <shared_mutex>
 #include <string>
+#include <tuple>
 #include <vector>
 
 #include <gmock/gmock.h>
@@ -748,6 +749,47 @@ TEST_F(SynapticonSystemInterfaceTransmissionTest, AJointBehindATransmissionHolds
     cycle();
     EXPECT_NEAR(system_.client->last_commands.at(0).position, held, 1e-9) << "cycle " << i;
   }
+}
+
+// ---------------------------------------------------------------------------
+// Joints without a drive
+// ---------------------------------------------------------------------------
+
+/// What on_init() returns for `info`.
+CallbackReturn init_result(const hardware_interface::HardwareInfo& info)
+{
+  SynapticonSystemInterface system;
+  hardware_interface::HardwareComponentInterfaceParams params;
+  params.hardware_info = info;
+  return system.on_init(params);
+}
+
+/// A joint without a drive cannot carry what only a drive has: its states, its drive action or its torque limit.
+TEST(SynapticonSystemInterfaceJointsWithoutDrive, DriveInterfacesOnAJointWithoutDriveAreRefused)
+{
+  ASSERT_EQ(init_result(make_transmission_hardware_info()), CallbackReturn::SUCCESS);
+  for (const auto& [kind, name, type] :
+       { std::tuple{ "state", "device_state", "uint8" }, std::tuple{ "state", "status_word", "uint16" },
+         std::tuple{ "command", "drive_action", "uint8" }, std::tuple{ "command", "max_joint_torque", "double" } })
+  {
+    auto info = make_transmission_hardware_info();
+    auto& interfaces =
+        std::string(kind) == "state" ? info.joints[0].state_interfaces : info.joints[0].command_interfaces;
+    interfaces.push_back(interface_info(name, type));
+    EXPECT_EQ(init_result(info), CallbackReturn::ERROR) << name;
+  }
+}
+
+/// The torque limit is a setting of the drive: a joint without a drive may not set its own, while command defaults
+/// for all joints stay allowed.
+TEST(SynapticonSystemInterfaceJointsWithoutDrive, OnlyTheDefaultTorqueLimitReachesAJointWithoutDrive)
+{
+  auto own = make_transmission_hardware_info();
+  own.joints[0].parameters["max_joint_torque"] = "5.0";
+  EXPECT_EQ(init_result(own), CallbackReturn::ERROR);
+  auto defaults = make_transmission_hardware_info();
+  defaults.hardware_parameters["default_max_joint_torque"] = "5.0";
+  EXPECT_EQ(init_result(defaults), CallbackReturn::SUCCESS);
 }
 
 }  // namespace

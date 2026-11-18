@@ -14,6 +14,7 @@
 #include <memory>
 #include <stdexcept>
 #include <string>
+#include <utility>
 
 #include <pluginlib/class_list_macros.hpp>
 #include <rclcpp/rclcpp.hpp>
@@ -34,7 +35,7 @@ rclcpp::Logger logger()
   return rclcpp::get_logger("SynapticonSystemInterface");
 }
 
-/// The names of the HAL plugins that are installed, for an error message.
+/// The names in `names`, comma separated, or "none".
 std::string list_of(const std::vector<std::string>& names)
 {
   std::string text;
@@ -69,15 +70,21 @@ CallbackReturn SynapticonSystemInterface::on_init(const hardware_interface::Hard
   {
     return CallbackReturn::ERROR;
   }
+  FallbackConfig fallbacks;
   try
   {
-    command_fill_.configure(read_command_fallbacks(info_));
+    fallbacks = read_command_fallbacks(info_);
   }
   catch (const std::invalid_argument& error)
   {
     RCLCPP_ERROR(logger(), "Command defaults: %s", error.what());
     return CallbackReturn::ERROR;
   }
+  if (!check_joints_without_drive(fallbacks.own_torque_limit))
+  {
+    return CallbackReturn::ERROR;
+  }
+  command_fill_.configure(std::move(fallbacks));
   if (command_fill_.any_configured())
   {
     RCLCPP_INFO(logger(), "A command that leaves out stiffness, damping or max_joint_torque gets %s.",
@@ -90,6 +97,36 @@ CallbackReturn SynapticonSystemInterface::on_init(const hardware_interface::Hard
   RCLCPP_INFO(logger(), "%zu joint(s) through %zu transmission(s) on %zu drive(s), HAL '%s'.", joints,
               transmissions_.size(), drives_.drive_count(), hal_plugin_.c_str());
   return CallbackReturn::SUCCESS;
+}
+
+bool SynapticonSystemInterface::check_joints_without_drive(const std::vector<bool>& own_torque_limit) const
+{
+  bool ok = true;
+  for (std::size_t j = 0; j < info_.joints.size(); ++j)
+  {
+    if (drives_.has_drive(j))
+    {
+      continue;
+    }
+    const std::string& name = info_.joints[j].name;
+    if (const auto names = drive_only_interfaces(info_.joints[j]); !names.empty())
+    {
+      RCLCPP_ERROR(logger(),
+                   "Joint '%s' has no drive, but declares %s. Only a joint with a drive has these. Remove them, or "
+                   "declare them on the joint of its drive.",
+                   name.c_str(), list_of(names).c_str());
+      ok = false;
+    }
+    if (j < own_torque_limit.size() && own_torque_limit[j])
+    {
+      RCLCPP_ERROR(logger(),
+                   "Joint '%s' has no drive, but sets its own max_joint_torque. The torque limit is a setting of the "
+                   "drive: set it on the joint of the drive, in the drive's units.",
+                   name.c_str());
+      ok = false;
+    }
+  }
+  return ok;
 }
 
 std::shared_ptr<SynapticonHalI> SynapticonSystemInterface::make_hal()

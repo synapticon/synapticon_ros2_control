@@ -31,6 +31,9 @@ struct FallbackConfig
 {
   std::vector<CommandFallback> joints;  ///< One per URDF joint, in URDF order.
   bool keep_last_given{ false };        ///< See UnspecifiedCommandFill.
+  /// One per URDF joint: whether the joint sets max_joint_torque itself, in the URDF or in the robot definition,
+  /// rather than taking it from command_defaults.
+  std::vector<bool> own_torque_limit;
 };
 
 /// @brief The FallbackConfig of the joints in `info`.

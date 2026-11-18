@@ -176,6 +176,13 @@ bool bind_command_field(const NamedField<FieldT, OwnerT, Extra> (&table)[N], con
   return true;
 }
 
+/// Whether `table` has an entry named `name`.
+template <typename FieldT, typename OwnerT, typename Extra, std::size_t N>
+bool has_name(const NamedField<FieldT, OwnerT, Extra> (&table)[N], const std::string& name)
+{
+  return find_field(table, name) != nullptr;
+}
+
 /// Publish each value of `sinks` on its handle. Returns the number of handles that refused.
 template <typename T>
 std::size_t push_sinks(const std::vector<StateSink<T>>& sinks)
@@ -191,6 +198,35 @@ std::size_t push_sinks(const std::vector<StateSink<T>>& sinks)
   return refused;
 }
 }  // namespace
+
+std::vector<std::string> drive_only_interfaces(const hardware_interface::ComponentInfo& joint)
+{
+  // The motion of a joint without a drive comes from its transmission. Everything else a drive reports does not.
+  const auto motion = [](const std::string& name) {
+    return name == hardware_interface::HW_IF_POSITION || name == hardware_interface::HW_IF_VELOCITY ||
+           name == hardware_interface::HW_IF_EFFORT;
+  };
+  std::vector<std::string> names;
+  for (const auto& si : joint.state_interfaces)
+  {
+    const bool drive_state = (has_name(JOINT_STATE_REAL, si.name) && !motion(si.name)) ||
+                             has_name(JOINT_STATE_WORD, si.name) || has_name(JOINT_STATE_UINT8, si.name) ||
+                             has_name(JOINT_STATE_INT8, si.name) || has_name(DRIVE_LINK_FLAG, si.name) ||
+                             has_name(DRIVE_LINK_UINT8, si.name);
+    if (drive_state)
+    {
+      names.push_back(joint.name + "/" + si.name);
+    }
+  }
+  for (const auto& ci : joint.command_interfaces)
+  {
+    if (has_name(JOINT_COMMAND_ACTION, ci.name) || ci.name == "max_joint_torque")
+    {
+      names.push_back(joint.name + "/" + ci.name);
+    }
+  }
+  return names;
+}
 
 bool InterfaceBinding::bind(const hardware_interface::HardwareInfo& info,
                             hardware_interface::HardwareComponentInterface& component, std::vector<DriveState>& states,
