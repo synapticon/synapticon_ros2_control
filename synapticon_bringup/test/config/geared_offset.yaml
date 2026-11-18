@@ -1,0 +1,24 @@
+# Test robot for test_transmission_impedance_mock.py: joint_1 behind a SimpleTransmission with a negative reduction
+# and an offset, on one simulated drive. Its controllers are in geared_offset_controllers.yaml.
+
+bus:
+  control_frequency: 500  # Hz, equal to the update_rate of the controller manager
+  readiness_timeout_s: 20.0  # the time start() gives every drive to send valid data
+
+# SimpleTransmission maps no gains, so motor_1 takes these. Stiff enough for the simulated drive's friction.
+command_defaults:
+  stiffness: 15.0  # Nm/rad
+  damping: 0.5  # Nm s/rad
+  max_joint_torque: 50.0  # Nm
+
+joints:
+  - {name: joint_1, drive: false}
+  - {name: motor_1, position: 0, commanded: false}
+
+transmissions:
+  - name: gearbox_1
+    plugin: transmission_interface/SimpleTransmission
+    actuators:
+      - {name: motor_1, role: actuator1}
+    joints:
+      - {name: joint_1, role: joint1, mechanical_reduction: -4.0, offset: 0.1}

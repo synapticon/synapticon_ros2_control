@@ -48,6 +48,9 @@ if(BUILD_TESTING)
   isolate_launch_test(test_transmission_mock)
   add_launch_test(test/test_disable_transmissions_mock.py TARGET test_disable_transmissions_mock TIMEOUT 120)
   isolate_launch_test(test_disable_transmissions_mock)
+  # Impedance mode through a transmission with an offset and a negative reduction, on a simulated drive.
+  add_launch_test(test/test_transmission_impedance_mock.py TARGET test_transmission_impedance_mock TIMEOUT 120)
+  isolate_launch_test(test_transmission_impedance_mock)
 
   # The hardware tests of the example launch, on simulated drives, in CSP and in impedance mode.
   foreach(mode csp impedance)
