@@ -13,6 +13,7 @@ from the transmission or from the rest of the setup.
 The example launch uses this module to prepare its files.
 """
 
+import atexit
 from dataclasses import dataclass, field
 import copy
 import os
@@ -217,9 +218,17 @@ def _read_yaml(path):
         return yaml.safe_load(stream) or {}
 
 
-def _write_temporary_yaml(prefix, content, sort_keys=True):
-    """Write `content` to a new temporary YAML file and return its path."""
+def _remove_if_there(path):
+    try:
+        os.remove(path)
+    except FileNotFoundError:
+        pass
+
+
+def write_temporary_yaml(prefix, content, sort_keys=True):
+    """Write `content` to a new temporary YAML file and return its path. The file goes when the process exits."""
     fd, path = tempfile.mkstemp(prefix=prefix, suffix=".yaml")
+    atexit.register(_remove_if_there, path)
     with os.fdopen(fd, "w", encoding="utf-8") as stream:
         yaml.safe_dump(content, stream, sort_keys=sort_keys)
     return path
@@ -243,7 +252,7 @@ def robot_config_to_launch(path, override=""):
     if not (disabled and config.get("transmissions")):
         return path, disabled
     return (
-        _write_temporary_yaml(
+        write_temporary_yaml(
             "robot_1to1_", without_transmissions(config), sort_keys=False
         ),
         True,
@@ -259,7 +268,7 @@ def prepare_launch_files(path, override=""):
     """
     robot_config, disabled = robot_config_to_launch(path, override)
     joints = joints_with_drive(_read_yaml(robot_config))
-    param_file = _write_temporary_yaml(
+    param_file = write_temporary_yaml(
         "drive_controller_joints_",
         {"drive_controller": {"ros__parameters": {"joints": joints}}},
     )

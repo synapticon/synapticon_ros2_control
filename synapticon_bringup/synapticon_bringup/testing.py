@@ -12,7 +12,6 @@ of the test cases that use it.
 """
 
 import os
-import tempfile
 import time
 import unittest
 
@@ -25,7 +24,7 @@ import launch.launch_description_sources
 import launch_testing.actions
 import rclpy
 from sensor_msgs.msg import JointState
-from synapticon_bringup.transmissions import joints_with_drive
+from synapticon_bringup.transmissions import joints_with_drive, write_temporary_yaml
 from synapticon_control_msgs.msg import DriveStatusArray
 import yaml
 
@@ -100,11 +99,8 @@ def example_test_description(arguments):
 
 
 def write_yaml(prefix, content):
-    """Write `content` as YAML into a new temporary file, and return the file name."""
-    fd, path = tempfile.mkstemp(prefix=prefix, suffix=".yaml")
-    with os.fdopen(fd, "w", encoding="utf-8") as stream:
-        yaml.safe_dump(content, stream, sort_keys=False)
-    return path
+    """Write `content` as YAML into a new temporary file, and return the file name. The file goes when the test ends."""
+    return write_temporary_yaml(prefix, content, sort_keys=False)
 
 
 def _read_yaml(path):
