@@ -724,4 +724,25 @@ TEST(Cia402HalFailures, DisableCancelsAnEnableActionInProgress)
   EXPECT_EQ(drives.active_drive_action(0), DriveAction::NONE);
 }
 
+/// A quick stop that arrives while an enable is still on its way up sends Quick Stop, so the drive goes to Switch On
+/// Disabled instead of finishing the enable on the Enable Operation sent last.
+TEST(Cia402HalFailures, AQuickStopDuringAnEnableTakesTheDriveDown)
+{
+  ScriptedDrives drives({ true });
+  ASSERT_TRUE(drives.start());
+  drives.report(SWITCHED_ON);
+  ASSERT_TRUE(drives.cycle(DriveAction::ENABLE));
+  ASSERT_EQ(drives.controlword(0) & COMMAND_BITS, ENABLE_OPERATION);
+  drives.settle_on_quick_stop();
+  ASSERT_TRUE(drives.cycle(DriveAction::QUICK_STOP));
+  EXPECT_EQ(drives.controlword(0) & COMMAND_BITS, QUICK_STOP);
+  for (int i = 0; i < 5; ++i)
+  {
+    ASSERT_TRUE(drives.cycle(DriveAction::NONE));
+  }
+  EXPECT_EQ(drives.reported(0), SWITCH_ON_DISABLED);
+  EXPECT_EQ(drives.controlword(0) & COMMAND_BITS, QUICK_STOP) << "the held word must not enable the drive again";
+  EXPECT_EQ(drives.active_drive_action(0), DriveAction::NONE);
+}
+
 }  // namespace
