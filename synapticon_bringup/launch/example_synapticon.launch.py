@@ -23,6 +23,8 @@
 #
 # `ros2 launch synapticon_bringup example_synapticon.launch.py --show-args` lists every argument.
 
+import os
+
 from launch import LaunchDescription
 from launch.actions import (
     DeclareLaunchArgument,
@@ -140,8 +142,9 @@ def _declarations():
 
 def _robot_to_launch(context, *args, **kwargs):
     """Prepare the robot definition to launch and the joint lists that depend on it."""
+    # xacro resolves a relative path from its own directory, so the path is made absolute here.
     robot_config, param_file, disabled = prepare_launch_files(
-        Arg("robot_config").perform(context),
+        os.path.abspath(Arg("robot_config").perform(context)),
         Arg("disable_transmissions").perform(context),
     )
     actions = [
