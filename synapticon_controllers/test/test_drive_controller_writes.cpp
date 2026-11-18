@@ -157,7 +157,8 @@ private:
 class Bench : public ::testing::Test
 {
 protected:
-  explicit Bench(Names joints, bool reaction = false) : joints_(std::move(joints)), reaction_(reaction)
+  explicit Bench(Names joints, bool reaction = false, unsigned int update_rate = 0)
+    : joints_(std::move(joints)), reaction_(reaction), update_rate_(update_rate)
   {
   }
 
@@ -173,7 +174,7 @@ protected:
     }
     test::bring_up(*dc_, "test_drive_controller",
                    { rclcpp::Parameter("joints", joints_), rclcpp::Parameter("fault_reaction.enabled", reaction_) },
-                   handles_);
+                   handles_, update_rate_);
   }
 
   void TearDown() override
@@ -263,6 +264,7 @@ protected:
 
   Names joints_;
   bool reaction_;
+  unsigned int update_rate_;
   std::unique_ptr<ProbedDriveController> dc_ = std::make_unique<ProbedDriveController>();
   test::InterfaceHandles handles_;
 };
@@ -287,7 +289,7 @@ protected:
 class Reacting : public Bench
 {
 protected:
-  Reacting() : Bench({ LEFT, RIGHT }, true)
+  explicit Reacting(unsigned int update_rate = 0) : Bench({ LEFT, RIGHT }, true, update_rate)
   {
   }
 
@@ -970,6 +972,43 @@ TEST_F(Reacting, AJointThatFaultedWhileInactiveTriggersTheReactionOnActivation)
   reactivate([&] { fault(LEFT); });
   cycle();
   expect_written(DriveAction::QUICK_STOP, DriveAction::QUICK_STOP);
+}
+
+/// At 5 Hz the service waits three periods (600 ms) for update(), not the 100 ms floor.
+class SlowReacting : public Reacting
+{
+protected:
+  SlowReacting() : Reacting(5)
+  {
+  }
+};
+
+TEST_F(SlowReacting, AQueryWaitsSeveralControlPeriods)
+{
+  fault();
+  cycle();
+  std::atomic<bool> finished{ false };
+  bool cleared = false;
+  std::string answer;
+  std::thread caller([&] {
+    cleared = dc_->clear({}, &answer);
+    finished = true;
+  });
+  std::this_thread::sleep_for(std::chrono::milliseconds(300));  // longer than the floor, shorter than three periods
+  while (!finished)
+  {
+    cycle();
+    std::this_thread::sleep_for(std::chrono::milliseconds(1));
+  }
+  caller.join();
+  EXPECT_TRUE(cleared) << answer;
+}
+
+TEST_F(SlowReacting, ATimeoutNamesTheWait)
+{
+  std::string answer;
+  EXPECT_FALSE(dc_->clear({}, &answer));
+  EXPECT_EQ(answer, "Refused: no decision within 600 ms: is the controller active?");
 }
 
 TEST_F(Reacting, AQueryTimesOutWhenUpdateDoesNotRun)

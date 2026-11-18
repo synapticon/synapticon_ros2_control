@@ -30,9 +30,19 @@ using cia402::DeviceState;
 constexpr std::array<const char*, 4> DIAGNOSTICS_FIELDS = { "dc_link_voltage", "temperature_inverter",
                                                             "temperature_core", "motor_current" };
 
-/// How long a service callback waits for update() to answer a fault reaction query. update() runs at the control
-/// rate, so the answer normally comes within one cycle.
-constexpr int ANSWER_TIMEOUT_MS = 100;
+/// One control period at `rate_hz`, rounded up to whole milliseconds. Zero when the rate is not known (0).
+inline std::chrono::milliseconds control_period(unsigned int rate_hz)
+{
+  return rate_hz == 0 ? std::chrono::milliseconds(0) : std::chrono::milliseconds((1000 + rate_hz - 1) / rate_hz);
+}
+
+/// How long a service callback waits for update() to answer a fault reaction query: a few control periods, since
+/// the answer normally comes within one, and never less than 100 ms.
+inline std::chrono::milliseconds answer_timeout(unsigned int rate_hz)
+{
+  constexpr int PERIODS = 3;
+  return std::max(std::chrono::milliseconds(100), PERIODS * control_period(rate_hz));
+}
 
 /// How often ~/drive_status repeats every drive's state.
 constexpr std::chrono::seconds DRIVE_STATUS_PERIOD{ 1 };

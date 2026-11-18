@@ -56,13 +56,14 @@ struct InterfaceHandles
   }
 };
 
-/// Initialise `controller` as `name` with `parameters`.
+/// Initialise `controller` as `name` with `parameters`, at `update_rate` Hz (0: not given).
 template <typename Controller>
 controller_interface::return_type init(Controller& controller, const std::string& name,
-                                       const std::vector<rclcpp::Parameter>& parameters)
+                                       const std::vector<rclcpp::Parameter>& parameters, unsigned int update_rate = 0)
 {
   controller_interface::ControllerInterfaceParams params;
   params.controller_name = name;
+  params.update_rate = update_rate;
   params.node_options = rclcpp::NodeOptions().parameter_overrides(parameters);
   return controller.init(params);
 }
@@ -85,13 +86,13 @@ controller_interface::CallbackReturn activate(Controller& controller, const Inte
   return controller.on_activate(rclcpp_lifecycle::State());
 }
 
-/// Initialise `controller` as `name` with `parameters`, configure it, hand it loans of `handles`
+/// Initialise `controller` as `name` with `parameters` at `update_rate` Hz, configure it, hand it loans of `handles`
 /// and activate it.
 template <typename Controller>
 void bring_up(Controller& controller, const std::string& name, const std::vector<rclcpp::Parameter>& parameters,
-              const InterfaceHandles& handles)
+              const InterfaceHandles& handles, unsigned int update_rate = 0)
 {
-  ASSERT_EQ(init(controller, name, parameters), controller_interface::return_type::OK);
+  ASSERT_EQ(init(controller, name, parameters, update_rate), controller_interface::return_type::OK);
   ASSERT_EQ(controller.on_configure(rclcpp_lifecycle::State()), controller_interface::CallbackReturn::SUCCESS);
   ASSERT_EQ(activate(controller, handles), controller_interface::CallbackReturn::SUCCESS);
 }

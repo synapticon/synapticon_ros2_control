@@ -116,18 +116,32 @@ bool DriveController::ask_update_loop(ReactionQuery query, std::string& reason)
   const uint64_t id = ++last_query_id_;
   query.id = id;
   reaction_inbox_.writeFromNonRT(std::make_shared<ReactionQuery>(std::move(query)));
-  const auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(ANSWER_TIMEOUT_MS);
+  const auto answered = [this, id, &reason] {
+    if (answered_query_id_.load() != id)
+    {
+      return false;
+    }
+    reason = answer_reason_.load();
+    return true;
+  };
+  const auto timeout = answer_timeout(get_update_rate());
+  const auto deadline = std::chrono::steady_clock::now() + timeout;
   while (std::chrono::steady_clock::now() < deadline)
   {
-    if (answered_query_id_.load() == id)
+    if (answered())
     {
-      reason = answer_reason_.load();
       return answer_accepted_.load();
     }
     std::this_thread::sleep_for(std::chrono::milliseconds(1));
   }
   reaction_inbox_.writeFromNonRT(nullptr);  // update() must not act on it any more
-  reason = "no decision within " + std::to_string(ANSWER_TIMEOUT_MS) + " ms: is the controller active?";
+  // A cycle that took the query just before may still answer it. It ends within one control period.
+  std::this_thread::sleep_for(control_period(get_update_rate()) + std::chrono::milliseconds(1));
+  if (answered())
+  {
+    return answer_accepted_.load();
+  }
+  reason = "no decision within " + std::to_string(timeout.count()) + " ms: is the controller active?";
   return false;
 }
 
