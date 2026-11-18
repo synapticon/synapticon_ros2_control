@@ -2,7 +2,7 @@
 # Copyright (c) 2025-2026 Synapticon GmbH
 # Copyright (c) 2026 b-robotized GmbH
 
-"""Tests of run_hil_tests.py: a step never outlives the runner."""
+"""Tests of run_hil_tests.py: a step never outlives the runner, and a cut short run never passes."""
 
 import importlib.util
 import os
@@ -59,3 +59,23 @@ def test_hangup_and_terminate_stop_the_runner_like_ctrl_c():
     runner.route_stop_signals()
     assert signal.getsignal(signal.SIGHUP) is signal.default_int_handler
     assert signal.getsignal(signal.SIGTERM) is signal.default_int_handler
+
+
+@pytest.mark.parametrize(
+    "passed, interrupted, code",
+    [
+        ([True, True], False, 0),
+        ([True, False], False, 1),
+        ([True], True, 1),
+        ([], True, 1),
+    ],
+    ids=[
+        "all passed",
+        "one failed",
+        "interrupted after passing steps",
+        "interrupted before any step",
+    ],
+)
+def test_the_exit_code(passed, interrupted, code):
+    results = [(f"step {i}", ok, "", "") for i, ok in enumerate(passed)]
+    assert runner.exit_code(results, interrupted) == code

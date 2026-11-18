@@ -251,6 +251,11 @@ def summarize(lines):
     return ", ".join(parts)
 
 
+def exit_code(results, interrupted):
+    """0 when the run was not interrupted and every step passed, else 1."""
+    return 0 if not interrupted and all(passed for _, passed, _, _ in results) else 1
+
+
 def parse_args():
     """Command line options."""
     parser = argparse.ArgumentParser(description=__doc__.strip().splitlines()[0])
@@ -323,11 +328,13 @@ def main():
 
     route_stop_signals()
     results = []
+    interrupted = False
     for index, step in enumerate(steps):
         if index > 0:
             try:
                 time.sleep(BUS_RELEASE_S)
             except KeyboardInterrupt:
+                interrupted = True
                 break
         print(f"\n===== {step.name}", flush=True)
         log_path = (
@@ -342,7 +349,9 @@ def main():
     print("\n===== Summary")
     for name, passed, summary, log_path in results:
         print(f"{'PASS' if passed else 'FAIL'}  {name}: {summary or '-'}  ({log_path})")
-    sys.exit(0 if all(passed for _, passed, _, _ in results) else 1)
+    if interrupted and len(results) < len(steps):
+        print(f"INTERRUPTED: {len(steps) - len(results)} step(s) did not run")
+    sys.exit(exit_code(results, interrupted))
 
 
 if __name__ == "__main__":

@@ -416,6 +416,7 @@ Its runs keep ROS discovery on this machine, so they never reach a stack on anot
 
 Ctrl-C, a closed terminal or a lost SSH session stop the running test the way its own Ctrl-C would.
 A test that runs out of time is stopped the same way and fails.
+An interrupted run exits with 1 and says how many tests did not run.
 
 With one joint (the default `--robot 1dof`), it runs:
 
