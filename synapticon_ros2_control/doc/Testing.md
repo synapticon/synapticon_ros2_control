@@ -414,6 +414,8 @@ and exits with 0 only when every run passed.
 It is installed in every build, together with the tests it runs.
 Its runs keep ROS discovery on this machine, so they never reach a stack on another bench.
 
+Ctrl-C, a closed terminal or a lost SSH session stop the running test the way its own Ctrl-C would.
+
 With one joint (the default `--robot 1dof`), it runs:
 
 - the suite, in strict mode

@@ -160,9 +160,19 @@ def stop(process):
         process.wait()
 
 
+# The signals that stop the runner like Ctrl-C. SIGHUP comes when the operator's terminal or SSH session goes away.
+STOP_SIGNALS = (signal.SIGINT, signal.SIGTERM, signal.SIGHUP)
+
+
+def route_stop_signals():
+    """Make SIGTERM and SIGHUP stop the runner like Ctrl-C."""
+    for number in STOP_SIGNALS[1:]:
+        signal.signal(number, signal.default_int_handler)
+
+
 def ignore_stop_signals():
-    """Ignore further SIGINT and SIGTERM, so that a repeated Ctrl-C cannot cut short a step's stop."""
-    for number in (signal.SIGINT, signal.SIGTERM):
+    """Ignore further stop signals, so that a repeated Ctrl-C cannot cut short a step's stop."""
+    for number in STOP_SIGNALS:
         signal.signal(number, signal.SIG_IGN)
 
 
@@ -170,7 +180,7 @@ def run_step(step, log_path):
     """
     Run one step, copying its output to the console and the log.
 
-    SIGINT or SIGTERM stops the step as its own Ctrl-C would. Returns its exit code, its output and whether it was
+    A stop signal stops the step as its own Ctrl-C would. Returns its exit code, its output and whether it was
     interrupted.
     """
     lines = []
@@ -201,7 +211,7 @@ def run_step(step, log_path):
             stop(process)
         except KeyboardInterrupt:
             ignore_stop_signals()
-            lines.append("INTERRUPTED by SIGINT or SIGTERM\n")
+            lines.append("INTERRUPTED by a stop signal\n")
             stop(process)
             interrupted = True
         reader.join()
@@ -293,8 +303,7 @@ def main():
     log_dir = args.log_dir / datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
     log_dir.mkdir(parents=True)
 
-    # SIGTERM stops the runner like Ctrl-C.
-    signal.signal(signal.SIGTERM, signal.default_int_handler)
+    route_stop_signals()
     results = []
     for index, step in enumerate(steps):
         if index > 0:
