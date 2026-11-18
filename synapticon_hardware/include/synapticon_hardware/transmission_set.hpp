@@ -49,7 +49,8 @@ public:
   /// Fill in the state of every joint without a drive, from the states of its motors.
   void propagate_states(const std::vector<DriveState>& drive_states, std::vector<DriveState>& states);
 
-  /// Turn the commands of the joints without a drive into commands for their motors.
+  /// Turn the commands of the joints without a drive into commands for their motors. The torque limit is no part of
+  /// it: every motor keeps the limit of its own joint.
   void apply_commands(const std::vector<DriveCommand>& commands, std::vector<DriveCommand>& drive_commands);
 
   /// Give each joint without a drive the flag of its motors, set when any of them has it. `drive_flags` has one entry

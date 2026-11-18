@@ -233,8 +233,7 @@ void TransmissionSet::joints_to_motors(Entry& entry, const std::vector<DriveComm
   }
   entry.transmission->joint_to_actuator();
 
-  // The torque limit is not transformed: all motors get the value of the first output joint.
-  const double torque_limit = commands[entry.joint_index[entry.outputs.front()]].max_joint_torque;
+  // The torque limit stays a setting of each drive: every motor keeps the limit of its own joint.
   bool gains_dropped = false;
   for (std::size_t slot = 0; slot < entry.at_motors.size(); ++slot)
   {
@@ -243,7 +242,6 @@ void TransmissionSet::joints_to_motors(Entry& entry, const std::vector<DriveComm
     motor.position = mapped.position;
     motor.velocity = mapped.velocity;
     motor.effort = mapped.effort;
-    motor.max_joint_torque = torque_limit;
     // A NaN leaves the motor's own gain in place, and if the joint had a gain, that loss is reported below. An infinite
     // gain goes on, so that the HAL refuses it.
     const std::tuple<double*, double, bool> gains[] = { { &motor.stiffness, mapped.stiffness, stiffness_given },

@@ -423,11 +423,12 @@ TEST_F(SynapticonSystemInterfaceTransmissionTest, TheJointCommandIsMappedToTheAc
   EXPECT_NEAR(system_.client->last_commands[0].position, (0.5 - OFFSET) * REDUCTION, 1e-9);
 }
 
-/// A transmission that maps no gains leaves the drive with the values of its own joint.
+/// A transmission that maps no gains leaves the drive with the values of its own joint, and the torque limit is
+/// always the drive's own.
 TEST(SynapticonSystemInterfaceCommandDefaults, ADriveBehindATransmissionGetsItsOwnJointsValues)
 {
   auto info = make_transmission_hardware_info();
-  info.joints[0].parameters = { { "stiffness", "0.4" }, { "damping", "0.1" }, { "max_joint_torque", "5.0" } };
+  info.joints[0].parameters = { { "stiffness", "0.4" }, { "damping", "0.1" } };
   info.joints[1].parameters = { { "stiffness", "1.5" }, { "damping", "0.3" }, { "max_joint_torque", "2.0" } };
   RecordingSystem system;
   hardware_interface::HardwareComponentInterfaceParams params;
@@ -444,7 +445,7 @@ TEST(SynapticonSystemInterfaceCommandDefaults, ADriveBehindATransmissionGetsItsO
   const DriveCommand& motor = system.client->last_commands.at(0);
   EXPECT_DOUBLE_EQ(motor.stiffness, 1.5);
   EXPECT_DOUBLE_EQ(motor.damping, 0.3);
-  EXPECT_DOUBLE_EQ(motor.max_joint_torque, 5.0) << "the torque limit comes from the output joint";
+  EXPECT_DOUBLE_EQ(motor.max_joint_torque, 2.0) << "the torque limit of the drive's own joint";
   system.on_deactivate(lifecycle_state(lifecycle_msgs::msg::State::PRIMARY_STATE_ACTIVE, "active"));
 }
 

@@ -180,7 +180,7 @@ TEST(TransmissionSet, ActuatorStatesMapToTheJoint)
   EXPECT_DOUBLE_EQ(states[1].position, 0.0) << "the drive-backed joint keeps its own state";
 }
 
-/// Joint setpoints map to the actuator, unprojected gains keep the drive's own, and the torque limit forwards 1:1.
+/// Joint setpoints map to the actuator, unprojected gains keep the drive's own, and so does the torque limit.
 TEST(TransmissionSet, JointCommandsMapToTheActuatorAndGainsFallBack)
 {
   const auto info = robot();
@@ -195,12 +195,13 @@ TEST(TransmissionSet, JointCommandsMapToTheActuatorAndGainsFallBack)
   commands[0].max_joint_torque = 3.0;
   std::vector<DriveCommand> drive_commands(1);
   drive_commands[0].stiffness = 7.0;
+  drive_commands[0].max_joint_torque = 4.0;
   set.apply_commands(commands, drive_commands);
   EXPECT_NEAR(drive_commands[0].position, (0.5 - OFFSET) * REDUCTION, 1e-12);
   EXPECT_NEAR(drive_commands[0].velocity, 1.0 * REDUCTION, 1e-12);
   EXPECT_NEAR(drive_commands[0].effort, 2.0 / REDUCTION, 1e-12);
   EXPECT_DOUBLE_EQ(drive_commands[0].stiffness, 7.0) << "an unprojected gain leaves the drive's own";
-  EXPECT_DOUBLE_EQ(drive_commands[0].max_joint_torque, 3.0) << "the limit forwards 1:1";
+  EXPECT_DOUBLE_EQ(drive_commands[0].max_joint_torque, 4.0) << "the limit is the drive's own, never the joint's";
 }
 
 /// An output joint with state interfaces only commands nothing: the motor drive keeps the command of its own joint
@@ -284,13 +285,13 @@ TEST(TransmissionSet, TransmissionsInOneSetActAsIfAlone)
   alone.apply_commands({ commands[3], commands[4], DriveCommand{}, DriveCommand{} }, alone_commands);
   EXPECT_DOUBLE_EQ(drive_commands[0].max_joint_torque, -1.0) << "the lift's drive is outside the transmissions";
   EXPECT_NEAR(drive_commands[1].position, (0.5 - OFFSET) * REDUCTION, 1e-12);
-  EXPECT_DOUBLE_EQ(drive_commands[1].max_joint_torque, 1.0);
+  EXPECT_DOUBLE_EQ(drive_commands[1].max_joint_torque, -1.0) << "every motor keeps its own limit";
   for (std::size_t drive = 2; drive < 4; ++drive)
   {
     EXPECT_DOUBLE_EQ(drive_commands[drive].position, alone_commands[drive - 2].position);
     EXPECT_DOUBLE_EQ(drive_commands[drive].effort, alone_commands[drive - 2].effort);
     EXPECT_DOUBLE_EQ(drive_commands[drive].stiffness, 7.0) << "an unprojected gain leaves the drive's own";
-    EXPECT_DOUBLE_EQ(drive_commands[drive].max_joint_torque, 3.0) << "the limit of the first output joint";
+    EXPECT_DOUBLE_EQ(drive_commands[drive].max_joint_torque, -1.0) << "every motor keeps its own limit";
   }
 }
 
