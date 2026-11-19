@@ -39,10 +39,6 @@ struct SoemConfig : synapticon_hardware::ethercat::BusConfig
   /// Max time [s] of each wait for every drive to reach a state: PRE-OP in connect() and stop(), SAFE-OP and then OP
   /// in start().
   double state_timeout_s{ 5.0 };
-  /// Cycles in a row without a complete exchange (no frame back, or a short working counter) after which read()
-  /// fails, until a complete exchange comes back. Fewer are bridged with the last data received. Only a cycle whose
-  /// frame was sent counts.
-  int max_bad_cycles{ 10 };
 };
 
 /// @brief SynapticonHalI over a direct EtherCAT bus, with the SOEM master library and no kernel module.

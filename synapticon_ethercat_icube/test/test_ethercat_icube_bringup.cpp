@@ -20,6 +20,7 @@
 
 #include <gtest/gtest.h>
 
+#include "ethercat_driver/ethercat_bus_manager.hpp"
 #include "ethercat_icube_common.hpp"
 #include "synapticon_hardware/ethercat/coe_objects.hpp"
 #include "synapticon_hardware/ethercat/pdo_channels.hpp"
@@ -150,6 +151,11 @@ public:
   {
     operational_ = operational;
   }
+  /// Process data comes back incomplete from now on, or complete again.
+  void lose_process_data(bool lost)
+  {
+    complete_ = !lost;
+  }
   int activations() const
   {
     return activations_;
@@ -217,14 +223,19 @@ protected:
     return 0;
   }
 
-  bool exchange_read() override
+  ethercat_driver::EthercatCycleResult bus_read() override
   {
-    return exchanges_;
+    return exchanges_ ? ethercat_driver::EthercatCycleResult::kCompleted : ethercat_driver::EthercatCycleResult::kError;
   }
 
-  bool exchange_write() override
+  ethercat_driver::EthercatCycleResult bus_write() override
   {
-    return exchanges_;
+    return bus_read();
+  }
+
+  bool process_data_complete() const override
+  {
+    return complete_;
   }
 
 private:
@@ -233,6 +244,7 @@ private:
   bool activates_{ true };
   bool exchanges_{ true };
   bool operational_{ true };
+  bool complete_{ true };
   int activations_{ 0 };
   int deactivations_{ 0 };
 };
@@ -413,6 +425,51 @@ TEST(StartAgain, FailsWhenADriveDoesNotReturnToOp)
   EXPECT_FALSE(hal.start());
   EXPECT_FALSE(hal.is_streaming());
   hal.report_operational(true);
+  EXPECT_TRUE(hal.start());
+}
+
+/// Incomplete process data is bridged for fewer than max_bad_cycles cycles in a row. Then read() fails, so the
+/// hardware interface stops, until the process data is complete again.
+TEST(LostProcessData, FailsReadAfterMaxBadCyclesAndRecovers)
+{
+  ScriptedDriveHal hal;
+  hal.healthy_drive();
+  EthercatConfig bus;
+  bus.max_bad_cycles = 3;
+  ASSERT_TRUE(hal.setup(bus, { joint() }));
+  ASSERT_TRUE(hal.connect());
+  hal.input(0)[ec::slot::STATUS_WORD] = 0x40;
+  hal.input(0)[ec::slot::MODE_DISPLAY] = CSP;
+  ASSERT_TRUE(hal.start());
+  std::vector<DriveState> states;
+  const synapticon_hardware::DriveCommand hold{};
+  const auto cycle = [&]() {
+    hal.write({ hold });
+    return hal.read(states);
+  };
+  hal.lose_process_data(true);
+  EXPECT_TRUE(cycle()) << "bad cycle 1 is bridged";
+  EXPECT_TRUE(cycle()) << "bad cycle 2 is bridged";
+  EXPECT_FALSE(cycle()) << "bad cycle 3 reaches the limit";
+  EXPECT_FALSE(cycle()) << "read() keeps failing while the data stays incomplete";
+  hal.lose_process_data(false);
+  EXPECT_TRUE(cycle()) << "a complete cycle makes the data usable again";
+  hal.lose_process_data(true);
+  EXPECT_TRUE(cycle()) << "the count starts over";
+}
+
+/// Before streaming, incomplete process data is expected on the way to OP and does not count.
+TEST(LostProcessData, IsNotCountedBeforeStreaming)
+{
+  ScriptedDriveHal hal;
+  hal.healthy_drive();
+  EthercatConfig bus;
+  bus.max_bad_cycles = 1;
+  ASSERT_TRUE(hal.setup(bus, { joint() }));
+  ASSERT_TRUE(hal.connect());
+  hal.input(0)[ec::slot::STATUS_WORD] = 0x40;
+  hal.input(0)[ec::slot::MODE_DISPLAY] = CSP;
+  hal.lose_process_data(true);
   EXPECT_TRUE(hal.start());
 }
 

@@ -22,6 +22,7 @@
 #include "synapticon_hardware/ethercat_health.hpp"
 #include "synapticon_hardware/drive_data.hpp"
 #include "synapticon_hardware/cia402/state_machine.hpp"
+#include "synapticon_hardware/ethercat/bad_cycle_count.hpp"
 #include "synapticon_hardware/ethercat/bus_config.hpp"
 #include "synapticon_hardware/ethercat/ethercat_pdo_hal.hpp"
 #include "synapticon_hardware/ethercat/joint_config.hpp"
@@ -29,6 +30,7 @@
 namespace ethercat_driver
 {
 class EthercatBusManager;
+enum class EthercatCycleResult;
 }  // namespace ethercat_driver
 
 namespace synapticon_ethercat_icube
@@ -107,6 +109,12 @@ protected:
   /// Whether the master reports a complete working counter and every joint's drive online and in OP. Virtual so a test
   /// can stand in for the master.
   virtual bool drives_operational() const;
+  /// Receive the process data through the driver, and send it. Virtual so a test can stand in for the master.
+  virtual ethercat_driver::EthercatCycleResult bus_read();
+  virtual ethercat_driver::EthercatCycleResult bus_write();
+  /// Whether the last received process data was complete, by the domain's working counter. Virtual for the same reason.
+  virtual bool process_data_complete() const;
+  /// One receive. While streaming, false once max_bad_cycles cycles in a row came back incomplete or not at all.
   bool exchange_read() override;
   bool exchange_write() override;
   /// Stop the cyclic exchange. Virtual for the same reason as activate_bus().
@@ -123,6 +131,9 @@ private:
   /// Exchange process data until drives_operational() holds for a run of cycles, at most readiness_timeout_s. False,
   /// logged, otherwise.
   bool wait_for_op();
+  /// Count the cycle just received while streaming, `complete` or not. False once max_bad_cycles incomplete ones came
+  /// in a row.
+  bool count_bad_cycles(bool complete);
 
   // Fixed by setup().
   EthercatConfig config_{};
@@ -131,7 +142,8 @@ private:
 
   std::unique_ptr<ethercat_driver::EthercatBusManager> bus_;
   bool bus_configured_{ false };
-  bool bus_active_{ false };  ///< the master was activated on this connection
+  bool bus_active_{ false };                                 ///< the master was activated on this connection
+  synapticon_hardware::ethercat::BadCycleCount bad_cycles_;  ///< the frame in flight, and incomplete cycles in a row
 };
 
 }  // namespace synapticon_ethercat_icube

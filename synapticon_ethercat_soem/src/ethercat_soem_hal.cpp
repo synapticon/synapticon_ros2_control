@@ -35,12 +35,12 @@ extern "C" {
 #include "ethercat.h"
 }
 
-#include "bad_cycle_count.hpp"
 #include "coe_encoding.hpp"
 #include "error_list.hpp"
 #include "process_data_mapping.hpp"
 #include "process_image.hpp"
 #include "slave_config.hpp"
+#include "synapticon_hardware/ethercat/bad_cycle_count.hpp"
 #include "synapticon_hardware/ethercat/robot_config.hpp"
 #include "synapticon_hardware/hal_config.hpp"
 
@@ -50,6 +50,7 @@ namespace synapticon_ethercat_soem
 namespace
 {
 namespace ec = synapticon_hardware::ethercat;
+using ec::BadCycleCount;
 
 constexpr const char* LOGGER_NAME = "EthercatSoemHal";
 constexpr uint16_t SM_RXPDO_ASSIGN = 0x1C12;
@@ -369,18 +370,6 @@ bool EthercatSoemHal::setup(SoemConfig config, std::vector<JointConfig> joints)
 
 namespace
 {
-/// The whole number in `text`, when it is at least 1. Throws std::invalid_argument otherwise.
-int positive_count(const std::string& text)
-{
-  std::size_t used = 0;
-  const int number = std::stoi(text, &used);
-  if (used != text.size() || number < 1)
-  {
-    throw std::invalid_argument(text + " is not a whole number of at least 1");
-  }
-  return number;
-}
-
 /// The bus settings of the SOEM HAL from the hardware parameters. Logs and returns nothing for a rejected value.
 std::optional<SoemConfig> soem_bus_from(const synapticon_hardware::ParameterMap& hardware)
 {
@@ -392,10 +381,6 @@ std::optional<SoemConfig> soem_bus_from(const synapticon_hardware::ParameterMap&
     if (const auto timeout = hardware.find("state_timeout_s"); timeout != hardware.end())
     {
       bus.state_timeout_s = ec::positive(timeout->second);
-    }
-    if (const auto bad_cycles = hardware.find("max_bad_cycles"); bad_cycles != hardware.end())
-    {
-      bus.max_bad_cycles = positive_count(bad_cycles->second);
     }
     return bus;
   }

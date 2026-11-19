@@ -65,6 +65,10 @@ BusConfig bus_from(const ParameterMap& hardware)
   {
     bus.sdo_retry_wait_s = positive(it->second);
   }
+  if (const auto it = hardware.find("max_bad_cycles"); it != hardware.end())
+  {
+    bus.max_bad_cycles = at_least_one(it->second);
+  }
   return bus;
 }
 

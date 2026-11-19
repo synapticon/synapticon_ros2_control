@@ -27,6 +27,7 @@ TEST(BusConfig, EverySettingHasADefault)
   EXPECT_TRUE(bus.quick_stop_hold);
   EXPECT_EQ(bus.sdo_read_attempts, 5);
   EXPECT_DOUBLE_EQ(bus.sdo_retry_wait_s, 1.0);
+  EXPECT_EQ(bus.max_bad_cycles, 10);
 }
 
 TEST(BusConfig, ReadsEverySetting)
@@ -35,12 +36,14 @@ TEST(BusConfig, ReadsEverySetting)
                               { "readiness_timeout_s", "2.5" },
                               { "quick_stop_hold", "false" },
                               { "sdo_read_attempts", "3" },
-                              { "sdo_retry_wait_s", "0.2" } });
+                              { "sdo_retry_wait_s", "0.2" },
+                              { "max_bad_cycles", "3" } });
   EXPECT_DOUBLE_EQ(bus.control_frequency, 250.0);
   EXPECT_DOUBLE_EQ(bus.readiness_timeout_s, 2.5);
   EXPECT_FALSE(bus.quick_stop_hold);
   EXPECT_EQ(bus.sdo_read_attempts, 3);
   EXPECT_DOUBLE_EQ(bus.sdo_retry_wait_s, 0.2);
+  EXPECT_EQ(bus.max_bad_cycles, 3);
 }
 
 class InvalidBus : public ::testing::TestWithParam<Parameters>
@@ -58,6 +61,7 @@ INSTANTIATE_TEST_SUITE_P(
                       Parameters{ { "control_frequency", "1000Hz" } }, Parameters{ { "readiness_timeout_s", "-1" } },
                       Parameters{ { "readiness_timeout_s", "nan" } }, Parameters{ { "quick_stop_hold", "sometimes" } },
                       Parameters{ { "sdo_read_attempts", "0" } }, Parameters{ { "sdo_read_attempts", "2.5" } },
-                      Parameters{ { "sdo_read_attempts", "often" } }, Parameters{ { "sdo_retry_wait_s", "0" } }));
+                      Parameters{ { "sdo_read_attempts", "often" } }, Parameters{ { "sdo_retry_wait_s", "0" } },
+                      Parameters{ { "max_bad_cycles", "0" } }, Parameters{ { "max_bad_cycles", "1.5" } }));
 
 }  // namespace

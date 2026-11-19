@@ -5,9 +5,9 @@
 /// @file
 /// @brief Counting the process data cycles in a row that came back incomplete.
 
-#include "bad_cycle_count.hpp"
+#include "synapticon_hardware/ethercat/bad_cycle_count.hpp"
 
-namespace synapticon_ethercat_soem
+namespace synapticon_hardware::ethercat
 {
 
 void BadCycleCount::start(int limit)
@@ -63,4 +63,4 @@ int BadCycleCount::limit() const
   return limit_;
 }
 
-}  // namespace synapticon_ethercat_soem
+}  // namespace synapticon_hardware::ethercat

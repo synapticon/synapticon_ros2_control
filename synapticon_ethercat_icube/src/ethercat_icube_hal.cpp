@@ -139,6 +139,8 @@ bool EthercatIcubeHal::start()
     end_exchange();  // no drive has power yet
     return false;
   }
+  // Not counted before: on the way to OP the working counter is short by design.
+  bad_cycles_.start(config_.max_bad_cycles);
   RCLCPP_INFO(logger(), "Bus in OP: %zu drive(s) exchange valid data, all unpowered.", joints_.size());
   return true;
 }
@@ -283,14 +285,64 @@ bool EthercatIcubeHal::drives_operational() const
          std::all_of(health.drives.begin(), health.drives.end(), synapticon_hardware::is_operational);
 }
 
+ethercat_driver::EthercatCycleResult EthercatIcubeHal::bus_read()
+{
+  return bus_->read();
+}
+
+ethercat_driver::EthercatCycleResult EthercatIcubeHal::bus_write()
+{
+  return bus_->write();
+}
+
+bool EthercatIcubeHal::process_data_complete() const
+{
+  return bus_->domainState().wc_state == EC_WC_COMPLETE;
+}
+
 bool EthercatIcubeHal::exchange_read()
 {
-  return bus_->read() != ethercat_driver::EthercatCycleResult::kError;
+  const bool sent = bad_cycles_.frame_in_flight();
+  const auto result = bus_read();
+  if (result == ethercat_driver::EthercatCycleResult::kError)
+  {
+    return false;
+  }
+  if (!sent)
+  {
+    return bad_cycles_.usable();  // nothing was sent, so there is nothing to count
+  }
+  // A skipped receive brings no data back, so it counts as incomplete.
+  return count_bad_cycles(result == ethercat_driver::EthercatCycleResult::kCompleted && process_data_complete());
 }
 
 bool EthercatIcubeHal::exchange_write()
 {
-  return bus_->write() != ethercat_driver::EthercatCycleResult::kError;
+  const auto result = bus_write();
+  if (result == ethercat_driver::EthercatCycleResult::kCompleted)
+  {
+    bad_cycles_.sent();
+  }
+  return result != ethercat_driver::EthercatCycleResult::kError;
+}
+
+bool EthercatIcubeHal::count_bad_cycles(bool complete)
+{
+  using Change = synapticon_hardware::ethercat::BadCycleCount::Change;
+  switch (bad_cycles_.received(complete))
+  {
+    case Change::LIMIT_REACHED:
+      RCLCPP_ERROR(logger(),
+                   "No complete process data for %d cycles in a row. read() fails until it is complete again.",
+                   bad_cycles_.limit());
+      break;
+    case Change::COMPLETE_AGAIN:
+      RCLCPP_INFO(logger(), "Process data complete again, read() delivers fresh data.");
+      break;
+    case Change::NONE:
+      break;
+  }
+  return bad_cycles_.usable();
 }
 
 void EthercatIcubeHal::deactivate_bus()
@@ -306,6 +358,7 @@ std::vector<JointConfig> EthercatIcubeHal::drives() const
 void EthercatIcubeHal::end_exchange()
 {
   streaming_ = false;
+  bad_cycles_.stop();
   enabled_ = false;  // without process data the drives leave OP, which de-energises them
   RCLCPP_INFO(logger(), "Exchange stopped, the master stays active until disconnect().");
 }
