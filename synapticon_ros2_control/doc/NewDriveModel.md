@@ -67,8 +67,9 @@ A slave_config made for one model is refused by the other.
 
 Integro firmware up to at least 5.6.11 latches fault `0x7500` after every orderly change from OP to PRE-OP.
 The drive's error report `0x203F:1` then reads `CyclicHb`.
-Synapticon has fixed it in a later firmware (their issue #5818, "Integro devices on EtherCAT latching a CyclicHb
-fault on every orderly drop from OP").
+Synapticon has announced a fix, which is not released yet.
+[Issue #90](https://github.com/synapticon/synapticon_ros2_control/issues/90) tracks it and will name the firmware
+version that fixes it.
 
 With the SOEM HAL this hits every stop: the next start finds the drive in Fault, and it refuses to power until a
 `reset_fault`.

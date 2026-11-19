@@ -48,6 +48,6 @@ This file lists pitfalls on real drives that are easy to miss and costly to hit.
   Releasing the master can trigger such a rescan. Bring-up retries these reads (`sdo_read_attempts`,
   `sdo_retry_wait_s`). Do not treat a single failure of this kind as a drive fault.
 - Integro firmware up to at least 5.6.11 latches `0x7500` (`CyclicHb`) after every orderly OP to PRE-OP, which the
-  SOEM HAL does at every stop. Known to Synapticon (#5818), fixed in a later firmware. Do not work around it in code,
-  see [NewDriveModel.md](synapticon_ros2_control/doc/NewDriveModel.md#known-firmware-bug-cyclichb-with-the-soem-hal).
+  SOEM HAL does at every stop. A fix is announced but not released yet, issue #90 tracks it.
+  Do not work around it in code, see [NewDriveModel.md](synapticon_ros2_control/doc/NewDriveModel.md#known-firmware-bug-cyclichb-with-the-soem-hal).
 - Only one program can hold the master. Stop the stack before `ethercat` commands that change the drive.
