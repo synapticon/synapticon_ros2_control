@@ -312,7 +312,8 @@ the master.
 
 `hil_ros2_control_test.py` runs the whole path a user runs: the example launch, `SynapticonSystemInterface` and the
 controllers.
-It brings up the 1 DOF example on the `ethercat_soem` HAL and then:
+It brings up the 1 DOF example on the HAL of `SYNAPTICON_HIL_HAL` (`ethercat_soem` by default, or `ethercat_icube`) and
+then:
 
 1. enables the drive
 2. ramps 0.3 rad away
