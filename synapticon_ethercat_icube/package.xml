@@ -25,6 +25,7 @@
   <depend condition="$SYNAPTICON_HAL_ETHERCAT_ICUBE == 'ON'">pluginlib</depend>
   <depend condition="$SYNAPTICON_HAL_ETHERCAT_ICUBE == 'ON'">rclcpp</depend>
   <depend condition="$SYNAPTICON_HAL_ETHERCAT_ICUBE == 'ON'">synapticon_hardware</depend>
+  <depend condition="$SYNAPTICON_HAL_ETHERCAT_ICUBE == 'ON'">yaml-cpp</depend>
 
   <test_depend>ament_cmake_gmock</test_depend>
   <test_depend>ament_index_cpp</test_depend>

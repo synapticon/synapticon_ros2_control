@@ -46,9 +46,11 @@ find_package(ethercat_interface REQUIRED)
 find_package(pluginlib REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(synapticon_hardware REQUIRED)
+# Reads the drives' slave_config YAML.
+find_package(yaml-cpp REQUIRED)
 
 set(_deps ethercat_driver ethercat_generic_cia402_drive ethercat_generic_slave ethercat_interface pluginlib rclcpp
-  synapticon_hardware)
+  synapticon_hardware yaml-cpp)
 
 add_library(${PROJECT_NAME} SHARED
   src/ethercat_icube_hal.cpp
@@ -66,8 +68,8 @@ target_include_directories(${PROJECT_NAME}
 target_include_directories(${PROJECT_NAME} PUBLIC ${ethercat_driver_INCLUDE_DIRS} ${ethercat_interface_INCLUDE_DIRS})
 target_link_libraries(${PROJECT_NAME} PUBLIC
   ethercat_generic_cia402_drive::ethercat_generic_cia402_drive ethercat_generic_slave::ethercat_generic_slave
-  pluginlib::pluginlib rclcpp::rclcpp synapticon_hardware::synapticon_hardware ${ethercat_driver_LIBRARIES}
-  ${ethercat_interface_LIBRARIES})
+  pluginlib::pluginlib rclcpp::rclcpp synapticon_hardware::synapticon_hardware yaml-cpp::yaml-cpp
+  ${ethercat_driver_LIBRARIES} ${ethercat_interface_LIBRARIES})
 
 # The HAL, loaded by SynapticonSystemInterface as `ethercat_icube`, and the slave plugin the EtherCAT driver loads
 # per drive.

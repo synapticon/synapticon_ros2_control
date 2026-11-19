@@ -19,6 +19,7 @@
 
 #include <pluginlib/class_list_macros.hpp>
 #include <rclcpp/rclcpp.hpp>
+#include <yaml-cpp/yaml.h>
 
 #include "ethercat_driver/ethercat_bus_manager.hpp"
 
@@ -38,6 +39,31 @@ constexpr int OP_CONFIRM_CYCLES = 50;
 rclcpp::Logger logger()
 {
   return rclcpp::get_logger(LOGGER_NAME);
+}
+
+/// True when the slave_config of `joint` sets `auto_state_transitions: false`. The EtherCAT driver otherwise walks the
+/// drive through the CiA 402 states by itself, up to Operation Enabled. Logged when not.
+bool leaves_power_to_hal(const EthercatJointConfig& joint)
+{
+  try
+  {
+    const YAML::Node flag = YAML::LoadFile(joint.slave_config_file)["auto_state_transitions"];
+    if (flag && !flag.as<bool>())
+    {
+      return true;
+    }
+  }
+  catch (const YAML::Exception& e)
+  {
+    RCLCPP_ERROR(logger(), "Joint '%s': slave_config %s: %s", joint.name.c_str(), joint.slave_config_file.c_str(),
+                 e.what());
+    return false;
+  }
+  RCLCPP_ERROR(logger(),
+               "Joint '%s': its slave_config %s needs the line 'auto_state_transitions: false', so that the EtherCAT "
+               "driver never powers the drive by itself.",
+               joint.name.c_str(), joint.slave_config_file.c_str());
+  return false;
 }
 
 /// The EtherCAT driver's description of the drive of `joint`: the slave plugin with its parameters, and the buffers it
@@ -87,6 +113,10 @@ bool EthercatIcubeHal::connect()
   if (!set_up_)
   {
     RCLCPP_ERROR(logger(), "connect() refused: setup() has not run yet.");
+    return false;
+  }
+  if (!std::all_of(joints_.begin(), joints_.end(), leaves_power_to_hal))
+  {
     return false;
   }
   bus_ = std::make_unique<ethercat_driver::EthercatBusManager>();

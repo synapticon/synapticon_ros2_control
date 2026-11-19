@@ -267,6 +267,9 @@ If you pick the wrong ones, bring-up tells you the product code of the drive it 
 With the IgH master, `ethercat slaves -v` shows both ("Product code" and "Revision number").
 
 One file serves CSP and impedance mode, with the impedance gains in the map.
+It routes the controlword to the drive and sets `auto_state_transitions: false`, so that only the HAL switches the
+drive on and off. Both HALs refuse a joint that gets power without that routing, and the EtherCAT ICube HAL refuses
+any slave_config without that line. A file generated before needs the line added once.
 Its `sdo:` block writes a few settings at every bring-up. Check each one for your drive, the comments explain them.
 A setting whose unit depends on the drive goes into the `sdo_si:` block instead, in SI units: bring-up converts it
 with the units it reads from the drive.

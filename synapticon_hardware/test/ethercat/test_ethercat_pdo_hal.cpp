@@ -28,17 +28,23 @@ constexpr uint16_t SWITCH_ON_DISABLED = 0x40;
 constexpr double CONTROL_FREQUENCY = 1000.0;
 constexpr double TIMEOUT_S = 0.05;
 
-/// A slave_config whose only channel is the measured velocity, or without channels when `velocity` is false, written
-/// to a temporary file. Returns its path.
-std::string slave_config(bool velocity)
+/// A slave_config with the measured velocity and the controlword as its only channels, each left out when its flag is
+/// false, written to a temporary file. Returns its path.
+std::string slave_config(bool velocity, bool control_word)
 {
-  const std::string path = ::testing::TempDir() + (velocity ? "ethercat_pdo_hal.yaml" : "ethercat_pdo_hal_bare.yaml");
+  const std::string path =
+      ::testing::TempDir() + "ethercat_pdo_hal_" + std::to_string(velocity) + std::to_string(control_word) + ".yaml";
   std::ofstream file(path);
   file << "vendor_id: 0x22d2\nproduct_id: 0x302\n";
   if (velocity)
   {
     file << "tpdo:\n  - index: 0x1a00\n    channels:\n"
             "      - { index: 0x606c, sub_index: 0, type: int32, state_interface: velocity }\n";
+  }
+  if (control_word)
+  {
+    file << "rpdo:\n  - index: 0x1600\n    channels:\n"
+            "      - { index: 0x6040, sub_index: 0, type: uint16, command_interface: control_word, default: 0 }\n";
   }
   return path;
 }
@@ -47,13 +53,13 @@ std::string slave_config(bool velocity)
 class ScriptedBus : public ec::EthercatPdoHal
 {
 public:
-  /// Drives for `joints`, on slave_configs that map the velocity unless `velocity` is false.
-  explicit ScriptedBus(std::vector<ec::JointConfig> joints, bool velocity = true)
+  /// Drives for `joints`, on slave_configs that map the velocity and the controlword unless a flag is false.
+  explicit ScriptedBus(std::vector<ec::JointConfig> joints, bool velocity = true, bool control_word = true)
     : EthercatPdoHal("test_ethercat_pdo_hal"), joints_(std::move(joints))
   {
     for (auto& joint : joints_)
     {
-      joint.slave_config_file = slave_config(velocity);
+      joint.slave_config_file = slave_config(velocity, control_word);
     }
     set_up_ = set_up_drives(joints_, true, CONTROL_FREQUENCY);
   }
@@ -218,6 +224,14 @@ TEST(SetUpDrives, RefusesAPoweredJointWithoutVelocityState)
   EXPECT_TRUE(ScriptedBus({ joint("a", ec::mode::CSP) }).set_up());
   EXPECT_FALSE(ScriptedBus({ joint("a", ec::mode::CSP) }, false).set_up());
   EXPECT_TRUE(ScriptedBus({ joint("a", ec::mode::CSP, false) }, false).set_up()) << "a joint without power needs none";
+}
+
+/// A joint that gets power needs the controlword routed to its drive, since only the HAL may switch it on.
+TEST(SetUpDrives, RefusesAPoweredJointWithoutControlword)
+{
+  EXPECT_FALSE(ScriptedBus({ joint("a", ec::mode::CSP) }, true, false).set_up());
+  EXPECT_TRUE(ScriptedBus({ joint("a", ec::mode::CSP, false) }, true, false).set_up())
+      << "a joint without power needs none";
 }
 
 /// A negative torque ceiling, stiffness or damping keeps the value sent last, so it cannot wrap in an unsigned field.

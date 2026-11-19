@@ -40,16 +40,22 @@ constexpr int IMPEDANCE = ec::mode::IMPEDANCE;
 constexpr double RAD_PER_RPM = 2.0 * M_PI / 60.0;
 constexpr uint32_t ABORT_NO_OBJECT = 0x06020000;
 
-/// A slave_config with `content` after its identity and the measured velocity, which a joint that gets power needs,
-/// written to a temporary file. Bring-up reads only its unit sections and the velocity channel, since the master that
-/// would read the rest is scripted. Returns its path.
-std::string slave_config(const std::string& content = "")
+/// The part of a slave_config that keeps the driver's hands off the drive's power.
+constexpr const char* HAL_POWERS = "auto_state_transitions: false\n";
+
+/// A slave_config with `content` after its identity, the measured velocity and the controlword, which a joint that
+/// gets power needs, written to a temporary file. `power` comes first, the HAL refuses the file without it. Bring-up
+/// reads only these, since the master that would read the rest is scripted. Returns its path.
+std::string slave_config(const std::string& content = "", const std::string& power = HAL_POWERS)
 {
   static int count = 0;
   const std::string path = ::testing::TempDir() + "icube_bringup_" + std::to_string(count++) + ".yaml";
   std::ofstream(path) << "vendor_id: 0x22d2\nproduct_id: 0x302\n"
+                      << power
                       << "tpdo:\n  - index: 0x1a00\n    channels:\n"
                          "      - { index: 0x606c, sub_index: 0, type: int32, state_interface: velocity }\n"
+                         "rpdo:\n  - index: 0x1600\n    channels:\n"
+                         "      - { index: 0x6040, sub_index: 0, type: uint16, command_interface: control_word }\n"
                       << content;
   return path;
 }
@@ -311,6 +317,19 @@ TEST_F(BringUp, StepsDownFromRungsItIsNotOn)
   EXPECT_FALSE(hal_.is_connected());
   EXPECT_FALSE(hal_.is_streaming());
   EXPECT_FALSE(hal_.is_enabled());
+}
+
+/// The EtherCAT driver walks a drive to Operation Enabled by itself unless the slave_config forbids it.
+TEST_F(BringUp, IsRefusedForASlaveConfigThatLetsTheDriverPowerTheDrive)
+{
+  for (const std::string power : { "", "auto_state_transitions: true\n" })
+  {
+    EthercatJointConfig own_power = joint();
+    own_power.slave_config_file = slave_config("", power);
+    set_up({ own_power });
+    EXPECT_FALSE(hal_.connect()) << "'" << power << "'";
+    EXPECT_FALSE(hal_.is_connected());
+  }
 }
 
 TEST_F(BringUp, StopsWhenTheBusCannotBeConfigured)
