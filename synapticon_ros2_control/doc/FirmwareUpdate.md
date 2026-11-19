@@ -165,12 +165,12 @@ Wait until the command has returned. Do not power off the drive during the trans
 
 ## 6. Start the new firmware
 
-Either power-cycle the drive, or switch it back through the states:
+Either power-cycle the drive, or switch it back through the states.
+PREOP is as far as it goes: without a program that cycles the bus, the drive cannot hold OP.
 
 ```bash
 ethercat states -p0 INIT
 ethercat states -p0 PREOP
-ethercat states -p0 OP
 ```
 
 ## 7. Check the result
