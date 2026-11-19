@@ -112,7 +112,9 @@ The tree has `Synapticon/EtherCAT bus` and `Synapticon/Drives` with one entry pe
 Each branch takes the worst state of its entries, so a single faulted drive turns `Drives` red.
 
 **What does the drive itself report?** (IgH master)
-These reads go straight to the drive over the mailbox, so they also work while the stack runs on the IgH master.
+These reads go straight to the drive over the mailbox.
+On the IgH master they work while the hardware is active, or with the stack stopped.
+After a deactivation the stack still holds the master but sends no frames, and a read then blocks.
 Replace `-p0` with the ring position of the drive.
 
 ```bash
