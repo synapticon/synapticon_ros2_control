@@ -24,6 +24,7 @@
 #include "ethercat_driver/ethercat_bus_manager.hpp"
 
 #include "ethercat_icube_common.hpp"
+#include "slave_health.hpp"
 #include "synapticon_hardware/ethercat/pdo_channels.hpp"
 #include "synapticon_ethercat_icube/ethercat_icube_hal.hpp"
 
@@ -241,21 +242,13 @@ void EthercatIcubeHal::link_health(LinkHealth& health) const
   {
     return;
   }
-  // The master lists its slaves by bus address, each joint finds its own among them.
-  for (const auto& slave : bus_->slaveStates())
-  {
-    for (std::size_t j = 0; j < joints_.size(); ++j)
-    {
-      if (joints_[j].position == slave.position && joints_[j].alias == slave.alias)
-      {
-        health.drives[j] = EthercatSlaveHealth{ slave.al_state, slave.online };
-      }
-    }
-  }
-  const ec_master_state_t master = bus_->masterState();
-  const ec_domain_state_t domain = bus_->domainState();
-  health.bus = EthercatBusHealth{ master.link_up != 0, master.slaves_responding, static_cast<uint8_t>(master.al_states),
-                                  domain.working_counter, static_cast<uint8_t>(domain.wc_state) };
+  // The master lists its slaves by bus address, each joint finds its own among them. The bus-wide AL state covers only
+  // these: the master never configures another slave, which then stays in PRE-OP.
+  const uint8_t al_states = fill_joint_slave_health(bus_->slaveStates(), joints_, health.drives);
+  const ec_master_state_t& master = bus_->masterState();
+  const ec_domain_state_t& domain = bus_->domainState();
+  health.bus = EthercatBusHealth{ master.link_up != 0, master.slaves_responding, al_states, domain.working_counter,
+                                  static_cast<uint8_t>(domain.wc_state) };
 }
 
 bool EthercatIcubeHal::configure_bus()

@@ -22,6 +22,7 @@
 
 #include "ethercat_driver/ethercat_bus_manager.hpp"
 #include "ethercat_icube_common.hpp"
+#include "slave_health.hpp"
 #include "synapticon_hardware/ethercat/coe_objects.hpp"
 #include "synapticon_hardware/ethercat/pdo_channels.hpp"
 #include "synapticon_ethercat_icube/ethercat_icube_hal.hpp"
@@ -531,6 +532,31 @@ TEST_F(BringUp, RefusesSdoAccessOnceTheBusIsActive)
   EXPECT_FALSE(hal_.writes(quick_stop_option));
   ASSERT_TRUE(hal_.stop());
   EXPECT_FALSE(hal_.reads(quick_stop_option)) << "the master stays active until disconnect()";
+}
+
+/// A slave without a joint stays in PRE-OP on the IgH master, so it is left out of the bus-wide AL state. Each joint
+/// finds its own slave by bus address.
+TEST(SlaveHealth, CoversOnlyTheJointsSlaves)
+{
+  constexpr uint8_t PRE_OP = 0x02;
+  constexpr uint8_t OP = 0x08;
+  const std::vector<EthercatJointConfig> joints{ joint(2), joint(0) };
+  std::vector<ethercat_interface::EcSlaveStateInfo> slaves(3);
+  for (uint16_t position = 0; position < 3; ++position)
+  {
+    slaves[position].position = position;
+    slaves[position].online = true;
+    slaves[position].al_state = position == 1 ? PRE_OP : OP;  // no joint on ring position 1
+  }
+  std::vector<synapticon_hardware::EthercatSlaveHealth> drives(joints.size());
+  EXPECT_EQ(synapticon_ethercat_icube::fill_joint_slave_health(slaves, joints, drives), OP);
+  EXPECT_EQ(drives[0].al_state, OP);
+  EXPECT_TRUE(drives[0].online);
+  EXPECT_EQ(drives[1].al_state, OP);
+
+  slaves[2].al_state = PRE_OP;  // a joint's slave leaves OP
+  EXPECT_EQ(synapticon_ethercat_icube::fill_joint_slave_health(slaves, joints, drives), OP | PRE_OP);
+  EXPECT_EQ(drives[0].al_state, PRE_OP);
 }
 
 TEST_F(BringUp, TearDownWhileStreamingStopsTheBus)

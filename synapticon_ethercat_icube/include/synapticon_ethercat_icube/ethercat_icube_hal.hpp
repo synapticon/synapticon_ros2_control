@@ -90,7 +90,8 @@ public:
   /// The joints of the last successful setup(), also before connect().
   std::size_t joint_count() const override;
 
-  /// Each joint's slave and the bus as the master sees them. Without a bus, every entry reads offline.
+  /// Each joint's slave and the bus as the master sees them, the bus-wide AL state over the joints' slaves only.
+  /// Without a bus, every entry reads offline.
   void link_health(LinkHealth& health) const override;
 
 protected:
