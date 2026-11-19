@@ -107,20 +107,29 @@ nothing. Keep the variable set in the shell you build in.
 CMake keeps the value of the first build, and colcon does not reconfigure a package when only the variable changes.
 To switch a workspace that was built before, add `--cmake-clean-cache` to the next `colcon build`.
 
+Without IgH:
+
 ```bash
 source /opt/ros/jazzy/setup.bash
 mkdir -p ~/ws/src && cd ~/ws/src
 git clone git@github.com:synapticon/synapticon_ros2_control.git
 cd ~/ws
-
-# Without IgH:
 vcs import src < src/synapticon_ros2_control/synapticon_ros2_control.repos
+rosdep install --from-paths src --ignore-src -r -y
+colcon build --symlink-install --cmake-args -DCMAKE_BUILD_TYPE=Release
+source install/setup.bash
+```
 
-# Or with IgH, which also imports the EtherCAT driver:
+Or with IgH, which also imports the EtherCAT driver:
+
+```bash
+source /opt/ros/jazzy/setup.bash
 export SYNAPTICON_HAL_ETHERCAT_ICUBE=ON
+mkdir -p ~/ws/src && cd ~/ws/src
+git clone git@github.com:synapticon/synapticon_ros2_control.git
+cd ~/ws
 vcs import src < src/synapticon_ros2_control/synapticon_ros2_control.repos
 vcs import src < src/synapticon_ros2_control/ethercat_icube.repos
-
 rosdep install --from-paths src --ignore-src -r -y
 colcon build --symlink-install --cmake-args -DCMAKE_BUILD_TYPE=Release
 source install/setup.bash
