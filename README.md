@@ -95,9 +95,11 @@ Choose one of two builds:
 
 - **Without IgH.** The mocks and the SOEM HAL, the default for real drives.
   The build needs no EtherCAT master installed: the SOEM library comes with this repository.
-- **With IgH.** Adds the EtherCAT ICube HAL. Needs the IgH EtherCAT master installed and running on the machine.
-  It is a kernel module, not a ROS package, so neither `vcs` nor `rosdep` installs it.
+- **With IgH.** Adds the EtherCAT ICube HAL. The build needs the user-space library of the IgH EtherCAT master
+  (`libethercat`). Running the HAL also needs the master's kernel module on the machine.
+  The master is not a ROS package, so neither `vcs` nor `rosdep` installs it.
   Install it first, for example with [ICube's guide](https://github.com/ICube-Robotics/ethercat_driver_ros2/blob/main/ethercat_driver_ros2/sphinx/quickstart/installation.rst).
+  A build-only machine can configure the master with `--disable-kernel`, as the CI job does.
 
 The environment variable `SYNAPTICON_HAL_ETHERCAT_ICUBE=ON` adds the EtherCAT ICube HAL to the build.
 It switches the dependencies of `synapticon_ethercat_icube` and its CMake option. Without it, that package builds
