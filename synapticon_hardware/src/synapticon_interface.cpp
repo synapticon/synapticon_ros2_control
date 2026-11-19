@@ -1,648 +1,380 @@
+// SPDX-License-Identifier: MIT
 // Copyright (c) 2025 Elevate Robotics Inc
-// Copyright (c) 2025 Synapticon GmbH
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated
-// documentation files (the "Software"), to deal in the Software without restriction, including without limitation
-// the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to
-// permit persons to whom the Software is furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in all copies or substantial portions of the
-// Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE
-// WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS
-// OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
-// OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+// Copyright (c) 2025-2026 Synapticon GmbH
+// Copyright (c) 2026 b-robotized GmbH
+
+/// @file
+/// @brief The ros2_control hardware for Synapticon drives: it hands the URDF joints to a HAL.
 
 #include "synapticon_hardware/synapticon_interface.hpp"
 
 #include <algorithm>
-#include <chrono>
-#include <hardware_interface/types/hardware_interface_type_values.hpp>
-#include <inttypes.h>
+#include <cstddef>
+#include <cstdint>
+#include <memory>
+#include <stdexcept>
+#include <string>
+#include <utility>
+
+#include <pluginlib/class_list_macros.hpp>
 #include <rclcpp/rclcpp.hpp>
 
-using namespace std::chrono_literals;
+#include "synapticon_hardware/cia402/state_machine.hpp"
+#include "synapticon_hardware/command_shaping.hpp"
 
-namespace synapticon_ros2_control
+namespace synapticon_hardware
 {
+
 namespace
 {
-constexpr int EC_TIMEOUTMON = 500;
-constexpr char LOG_NAME[] = "synapticon_ros2_control";
-constexpr double DEG_TO_RAD = 0.0174533;
-constexpr size_t PROFILE_TORQUE_MODE = 4;
-constexpr size_t CYCLIC_VELOCITY_MODE = 9;
-constexpr size_t CYCLIC_POSITION_MODE = 8;
-constexpr double RPM_TO_RAD_PER_S = 0.10472;
-constexpr double RAD_PER_S_TO_RPM = 1 / RPM_TO_RAD_PER_S;
-unsigned int NORMAL_OPERATION_BRAKES_OFF = 0b00001111;
-// Bit 2 (0-indexed) goes to 0 to turn on Quick Stop
-unsigned int NORMAL_OPERATION_BRAKES_ON = 0b00001011;
-constexpr char EXPECTED_SLAVE_NAME[] = "SOMANET";
+using CallbackReturn = hardware_interface::CallbackReturn;
+using hardware_interface::return_type;
 
-// This is related to making a member function appear static
-OSAL_THREAD_FUNC ecatCheckWrapper(void* ptr)
+rclcpp::Logger logger()
 {
-  SynapticonSystemInterface* interface = static_cast<SynapticonSystemInterface*>(ptr);
-  return interface->ecatCheck(ptr);
+  return rclcpp::get_logger("SynapticonSystemInterface");
+}
+
+/// The names in `names`, comma separated, or "none".
+std::string list_of(const std::vector<std::string>& names)
+{
+  std::string text;
+  for (const auto& name : names)
+  {
+    text += (text.empty() ? "" : ", ") + name;
+  }
+  return text.empty() ? "none" : text;
 }
 }  // namespace
 
-hardware_interface::CallbackReturn
-SynapticonSystemInterface::on_init(const hardware_interface::HardwareComponentInterfaceParams& params)
+CallbackReturn SynapticonSystemInterface::on_init(const hardware_interface::HardwareComponentInterfaceParams& params)
 {
-  if (hardware_interface::SystemInterface::on_init(params) != hardware_interface::CallbackReturn::SUCCESS)
+  if (SystemInterface::on_init(params) != CallbackReturn::SUCCESS)
   {
-    return hardware_interface::CallbackReturn::ERROR;
+    return CallbackReturn::ERROR;
   }
-  logger_ = std::make_shared<rclcpp::Logger>(rclcpp::get_logger("synapticon_interface"));
+  // Only 'hal' is read here. Each HAL plugin parses its own parameters, as they differ per transport.
+  hal_plugin_ = param_or(info_.hardware_parameters, "hal", "ethercat_soem");
+  drives_ = build_drive_joint_map(info_);
+  hal_config_ = build_hal_config(info_, drives_);
 
-  num_joints_ = info_.joints.size();
+  const std::size_t joints = info_.joints.size();
+  joint_states_.assign(joints, DriveState{});
+  joint_commands_.assign(joints, DriveCommand{});
+  clean_commands_.assign(joints, DriveCommand{});
+  drive_states_.assign(drives_.drive_count(), DriveState{});
+  drive_commands_.assign(drives_.drive_count(), DriveCommand{});
+  drive_powered_.assign(drives_.drive_count(), 0u);
+  joint_powered_.assign(joints, 0u);
+  release_commands_.assign(joints, not_given_command());
+  if (!transmissions_.load(info_, drives_))
+  {
+    return CallbackReturn::ERROR;
+  }
+  FallbackConfig fallbacks;
+  try
+  {
+    fallbacks = read_command_fallbacks(info_);
+  }
+  catch (const std::invalid_argument& error)
+  {
+    RCLCPP_ERROR(logger(), "Command defaults: %s", error.what());
+    return CallbackReturn::ERROR;
+  }
+  if (!check_joints_without_drive(fallbacks.own_torque_limit))
+  {
+    return CallbackReturn::ERROR;
+  }
+  command_fill_.configure(std::move(fallbacks));
+  if (command_fill_.any_configured())
+  {
+    RCLCPP_INFO(logger(), "A command that leaves out stiffness, damping or max_joint_torque gets %s.",
+                command_fill_.keeps_last_given() ? "the last given value" : "the configured default");
+  }
+  // A joint without a drive reports a healthy link. The others get the HAL's report from configure on.
+  joint_link_health_.assign(joints, EthercatSlaveHealth{ al_state::OP, true });
+  bus_link_health_ = healthy_link(drives_.drive_count()).bus;
 
-  mechanical_reductions_.resize(num_joints_, 1.0);
-  hw_states_positions_.resize(num_joints_, std::numeric_limits<double>::quiet_NaN());
-  hw_states_velocities_.resize(num_joints_, std::numeric_limits<double>::quiet_NaN());
-  hw_states_accelerations_.resize(num_joints_, std::numeric_limits<double>::quiet_NaN());
-  hw_states_efforts_.resize(num_joints_, std::numeric_limits<double>::quiet_NaN());
-  hw_commands_positions_.resize(num_joints_, std::numeric_limits<double>::quiet_NaN());
-  hw_commands_velocities_.resize(num_joints_, 0);
-  hw_commands_efforts_.resize(num_joints_, std::numeric_limits<double>::quiet_NaN());
-  hw_commands_quick_stop_.resize(num_joints_, std::numeric_limits<double>::quiet_NaN());
-  control_level_.resize(num_joints_, control_level_t::UNDEFINED);
-  // Atomic deques are difficult to initialize
-  threadsafe_commands_efforts_.resize(num_joints_);
-  for (auto& effort : threadsafe_commands_efforts_)
-  {
-    effort.store(std::numeric_limits<double>::quiet_NaN());
-  }
-  threadsafe_commands_velocities_.resize(num_joints_);
-  for (auto& velocity : threadsafe_commands_velocities_)
-  {
-    velocity.store(0.0);
-  }
-  threadsafe_commands_positions_.resize(num_joints_);
-  for (auto& position : threadsafe_commands_positions_)
-  {
-    position.store(std::numeric_limits<double>::quiet_NaN());
-  }
+  RCLCPP_INFO(logger(), "%zu joint(s) through %zu transmission(s) on %zu drive(s), HAL '%s'.", joints,
+              transmissions_.size(), drives_.drive_count(), hal_plugin_.c_str());
+  return CallbackReturn::SUCCESS;
+}
 
-  for (const hardware_interface::ComponentInfo& joint : info_.joints)
+bool SynapticonSystemInterface::check_joints_without_drive(const std::vector<bool>& own_torque_limit) const
+{
+  bool ok = true;
+  for (std::size_t j = 0; j < info_.joints.size(); ++j)
   {
-    if (!(joint.command_interfaces[0].name == hardware_interface::HW_IF_POSITION ||
-          joint.command_interfaces[0].name == hardware_interface::HW_IF_VELOCITY ||
-          joint.command_interfaces[0].name == "quick_stop" ||
-          joint.command_interfaces[0].name == hardware_interface::HW_IF_EFFORT))
+    if (drives_.has_drive(j))
     {
-      RCLCPP_FATAL(get_logger(), "Joint '%s' has %s command interface. Expected %s, %s, %s, or %s.", joint.name.c_str(),
-                   joint.command_interfaces[0].name.c_str(), hardware_interface::HW_IF_POSITION,
-                   hardware_interface::HW_IF_VELOCITY, "quick_stop", hardware_interface::HW_IF_EFFORT);
-      return hardware_interface::CallbackReturn::ERROR;
-    }
-
-    if (!(joint.state_interfaces[0].name == hardware_interface::HW_IF_POSITION ||
-          joint.state_interfaces[0].name == hardware_interface::HW_IF_VELOCITY ||
-          joint.state_interfaces[0].name == hardware_interface::HW_IF_ACCELERATION ||
-          joint.state_interfaces[0].name == hardware_interface::HW_IF_EFFORT))
-    {
-      RCLCPP_FATAL(get_logger(), "Joint '%s' has %s state interface. Expected %s, %s, %s, or %s.", joint.name.c_str(),
-                   joint.state_interfaces[0].name.c_str(), hardware_interface::HW_IF_POSITION,
-                   hardware_interface::HW_IF_VELOCITY, hardware_interface::HW_IF_ACCELERATION,
-                   hardware_interface::HW_IF_EFFORT);
-      return hardware_interface::CallbackReturn::ERROR;
-    }
-  }
-
-  for (size_t i = 0; i < num_joints_; ++i)
-  {
-    std::string reduction_param_name = info_.joints.at(i).name + "_mechanical_reduction";
-    if (info_.hardware_parameters.find(reduction_param_name) == info_.hardware_parameters.end())
-    {
-      mechanical_reductions_.at(i) = 1.0;
       continue;
     }
-    mechanical_reductions_.at(i) = stod(info_.hardware_parameters[reduction_param_name]);
-  }
-
-  // A thread to handle ethercat errors
-  osal_thread_create(&ecat_error_thread_, 128000, (void*)&ecatCheckWrapper, this);
-
-  // Ethercat initialization
-  // Define the interface name (e.g. eth0 or eno0) in the ros2_control.xacro
-  std::string eth_device = info_.hardware_parameters["eth_device"];
-  int ec_init_status = ec_init(eth_device.c_str());
-  if (ec_init_status <= 0)
-  {
-    RCLCPP_FATAL_STREAM(get_logger(), "Error during initialization of ethercat interface: "
-                                          << eth_device.c_str() << " with status: " << ec_init_status);
-    return hardware_interface::CallbackReturn::ERROR;
-  }
-
-  if (ec_config_init(false) <= 0)
-  {
-    RCLCPP_FATAL(get_logger(), "No ethercat slaves found!");
-    ec_close();
-    return hardware_interface::CallbackReturn::ERROR;
-  }
-
-  ec_config_map(&io_map_);
-  ec_configdc();
-  ec_statecheck(0, EC_STATE_SAFE_OP, EC_TIMEOUTSTATE * 4);
-  // Request operational state for all slaves
-  expected_wkc_ = (ec_group[0].outputsWKC * 2) + ec_group[0].inputsWKC;
-  for (int slave_id = 0; slave_id < ec_slavecount; ++slave_id)
-  {
-    ec_slave[slave_id].state = EC_STATE_OPERATIONAL;
-  }
-  // send one valid process data to make outputs in slaves happy
-  ec_send_processdata();
-  ec_receive_processdata(EC_TIMEOUTRET);
-  // request OP state for all slaves
-  ec_writestate(0);
-  size_t chk = 200;
-
-  // wait for all slaves to reach OP state
-  do
-  {
-    ec_send_processdata();
-    ec_receive_processdata(EC_TIMEOUTRET);
-    ec_statecheck(0, EC_STATE_OPERATIONAL, 50000);
-  } while (chk-- && (ec_slave[0].state != EC_STATE_OPERATIONAL));
-
-  if (ec_slave[0].state != EC_STATE_OPERATIONAL)
-  {
-    RCLCPP_FATAL(get_logger(), "An ethercat slave failed to reach OPERATIONAL state");
-    return hardware_interface::CallbackReturn::ERROR;
-  }
-
-  // Connect struct pointers to I/O
-  for (size_t joint_idx = 1; joint_idx < (num_joints_ + 1); ++joint_idx)
-  {
-    in_somanet_1_.push_back((InSomanet50t*)ec_slave[joint_idx].inputs);
-    out_somanet_1_.push_back((OutSomanet50t*)ec_slave[joint_idx].outputs);
-  }
-
-  // Read encoder resolution for each joint
-  encoder_resolutions_.resize(num_joints_);
-  for (size_t joint_idx = 1; joint_idx < (num_joints_ + 1); ++joint_idx)
-  {
-    // Verify slave name
-    if (strcmp(ec_slave[joint_idx].name, EXPECTED_SLAVE_NAME) != 0)
+    const std::string& name = info_.joints[j].name;
+    if (const auto names = drive_only_interfaces(info_.joints[j]); !names.empty())
     {
-      RCLCPP_FATAL(get_logger(), "Expected slave %s at position %zu, but got %s instead", EXPECTED_SLAVE_NAME,
-                   joint_idx, ec_slave[joint_idx].name);
-      return hardware_interface::CallbackReturn::ERROR;
+      RCLCPP_ERROR(logger(),
+                   "Joint '%s' has no drive, but declares %s. Only a joint with a drive has these. Remove them, or "
+                   "declare them on the joint of its drive.",
+                   name.c_str(), list_of(names).c_str());
+      ok = false;
     }
-
-    uint8_t encoder_source;
-    int size = sizeof(encoder_source);
-    ec_SDOread(joint_idx, 0x2012, 0x09, false, &size, &encoder_source, EC_TIMEOUTRXM);
-    size = sizeof(encoder_resolutions_[joint_idx - 1]);
-    if (encoder_source == 1)
+    if (j < own_torque_limit.size() && own_torque_limit[j])
     {
-      ec_SDOread(joint_idx, 0x2110, 0x03, false, &size, &encoder_resolutions_[joint_idx - 1], EC_TIMEOUTRXM);
-    }
-    else if (encoder_source == 2)
-    {
-      ec_SDOread(joint_idx, 0x2112, 0x03, false, &size, &encoder_resolutions_[joint_idx - 1], EC_TIMEOUTRXM);
-    }
-    else
-    {
-      RCLCPP_FATAL(get_logger(), "No encoder configured for position control on joint %zu. Terminating the program",
-                   joint_idx);
-      return hardware_interface::CallbackReturn::ERROR;
+      RCLCPP_ERROR(logger(),
+                   "Joint '%s' has no drive, but sets its own max_joint_torque. The torque limit is a setting of the "
+                   "drive: set it on the joint of the drive, in the drive's units.",
+                   name.c_str());
+      ok = false;
     }
   }
-
-  // Start the control loop, wait for it to reach normal operation mode
-  somanet_control_thread_ =
-      std::thread(&SynapticonSystemInterface::somanetCyclicLoop, this, std::ref(in_normal_op_mode_));
-
-  return hardware_interface::CallbackReturn::SUCCESS;
+  return ok;
 }
 
-hardware_interface::return_type
-SynapticonSystemInterface::prepare_command_mode_switch(const std::vector<std::string>& start_interfaces,
-                                                       const std::vector<std::string>& stop_interfaces)
+std::shared_ptr<SynapticonHalI> SynapticonSystemInterface::make_hal()
 {
-  // Prepare for new command modes
-  std::vector<control_level_t> new_modes = {};
-  for (const std::string& key : start_interfaces)
+  if (!hal_loader_)
   {
-    for (std::size_t i = 0; i < info_.joints.size(); i++)
-    {
-      if (key == info_.joints[i].name + "/" + hardware_interface::HW_IF_EFFORT)
-      {
-        new_modes.push_back(control_level_t::EFFORT);
-      }
-      else if (key == info_.joints[i].name + "/" + hardware_interface::HW_IF_VELOCITY)
-      {
-        new_modes.push_back(control_level_t::VELOCITY);
-      }
-      else if (key == info_.joints[i].name + "/" + hardware_interface::HW_IF_POSITION)
-      {
-        new_modes.push_back(control_level_t::POSITION);
-      }
-      else if (key == info_.joints[i].name + "/quick_stop")
-      {
-        new_modes.push_back(control_level_t::QUICK_STOP);
-      }
-    }
+    hal_loader_ = std::make_unique<pluginlib::ClassLoader<SynapticonHalI>>("synapticon_hardware",
+                                                                           "synapticon_hardware::SynapticonHalI");
   }
-  // All joints must be given new command mode at the same time
-  if (!start_interfaces.empty() && (new_modes.size() != num_joints_))
+  try
   {
-    RCLCPP_FATAL(get_logger(), "All joints must be given a new mode at the same time.");
-    return hardware_interface::return_type::ERROR;
+    return hal_loader_->createSharedInstance(hal_plugin_);
   }
-  // All joints must have the same command mode
-  if (!std::all_of(new_modes.begin() + 1, new_modes.end(), [&](control_level_t mode) { return mode == new_modes[0]; }))
+  catch (const pluginlib::PluginlibException& error)
   {
-    RCLCPP_FATAL(get_logger(), "All joints must have the same command mode.");
-    return hardware_interface::return_type::ERROR;
+    RCLCPP_ERROR(logger(), "No HAL plugin '%s'. Installed: %s. %s", hal_plugin_.c_str(),
+                 list_of(hal_loader_->getDeclaredClasses()).c_str(), error.what());
+    return nullptr;
   }
-
-  // Stop motion on all relevant joints
-  for (const std::string& key : stop_interfaces)
-  {
-    for (std::size_t i = 0; i < num_joints_; i++)
-    {
-      if (key.find(info_.joints[i].name) != std::string::npos)
-      {
-        hw_commands_positions_[i] = std::numeric_limits<double>::quiet_NaN();
-        hw_commands_velocities_[i] = 0;
-        hw_commands_efforts_[i] = 0;
-        threadsafe_commands_efforts_[i] = std::numeric_limits<double>::quiet_NaN();
-        threadsafe_commands_velocities_[i] = 0;
-        threadsafe_commands_positions_[i] = std::numeric_limits<double>::quiet_NaN();
-        control_level_[i] = control_level_t::UNDEFINED;
-      }
-    }
-  }
-
-  for (const std::string& key : start_interfaces)
-  {
-    for (std::size_t i = 0; i < num_joints_; i++)
-    {
-      if (key.find(info_.joints[i].name) != std::string::npos)
-      {
-        if (control_level_[i] != control_level_t::UNDEFINED)
-        {
-          // Something else is using the joint! Abort!
-          RCLCPP_FATAL(get_logger(), "Something else is using the joint. Abort!");
-          return hardware_interface::return_type::ERROR;
-        }
-        control_level_[i] = new_modes[i];
-      }
-    }
-  }
-
-  return hardware_interface::return_type::OK;
 }
 
-hardware_interface::CallbackReturn
-SynapticonSystemInterface::on_activate(const rclcpp_lifecycle::State& /*previous_state*/)
+CallbackReturn SynapticonSystemInterface::drop_hal(const char* reason)
 {
-  // Set some default values
-  for (std::size_t i = 0; i < num_joints_; i++)
+  RCLCPP_ERROR(logger(), "Configure failed: %s", reason);
+  hal_.reset();
+  return CallbackReturn::ERROR;
+}
+
+CallbackReturn SynapticonSystemInterface::on_configure(const rclcpp_lifecycle::State& /*previous_state*/)
+{
+  // The HAL is made here, not in on_init(), so that deactivating and activating again keeps the bus.
+  hal_ = make_hal();
+  if (!hal_)
   {
-    if (std::isnan(hw_states_velocities_[i]))
+    return CallbackReturn::ERROR;
+  }
+  if (!hal_->setup(hal_config_))
+  {
+    return drop_hal("the HAL refused its configuration.");
+  }
+  if (!hal_->connect())
+  {
+    return drop_hal("the HAL could not connect to the drives.");
+  }
+  if (!binding_.bind(info_, *this, joint_states_, joint_commands_, joint_link_health_, bus_link_health_))
+  {
+    return drop_hal("the declared interfaces cannot be bound.");
+  }
+  command_fill_.reset();
+  // The health and the default states are visible before the first cycle.
+  refresh_link_health();
+  access_report_.state_writes(binding_.push_states());
+  return CallbackReturn::SUCCESS;
+}
+
+CallbackReturn SynapticonSystemInterface::on_activate(const rclcpp_lifecycle::State& /*previous_state*/)
+{
+  if (!hal_)
+  {
+    RCLCPP_ERROR(logger(), "Cannot activate: configure has not succeeded.");
+    return CallbackReturn::ERROR;
+  }
+  access_report_.reset();
+  command_fill_.reset();
+  if (!hal_->start())
+  {
+    RCLCPP_ERROR(logger(), "Activate failed: the HAL did not start the data exchange.");
+    return CallbackReturn::ERROR;
+  }
+  // The data exchange runs now, so one read gives the measured position.
+  if (!hal_->read(drive_states_))
+  {
+    RCLCPP_ERROR(logger(), "Activate failed: the first read after the start failed.");
+    return CallbackReturn::ERROR;
+  }
+  states_from_drives();
+  refresh_link_health();
+  access_report_.state_writes(binding_.push_states());
+
+  // No joint has a command yet, so each one holds where it is, and a drive that gets power later holds there too
+  // instead of following an old command.
+  seed_not_given(joint_commands_);
+  hold_.reset(joint_states_);
+  access_report_.command_seeds(binding_.push_command_seeds());
+
+  // Activation never powers a drive. That takes an explicit request to the drive controller.
+  RCLCPP_INFO(logger(), "Exchanging data with %zu drive(s). None has power.", drives_.drive_count());
+  exchanging_ = true;
+  return CallbackReturn::SUCCESS;
+}
+
+CallbackReturn SynapticonSystemInterface::on_deactivate(const rclcpp_lifecycle::State& /*previous_state*/)
+{
+  // First stop read() and write(), then wind the HAL down.
+  exchanging_ = false;
+  access_report_.summarise();
+  if (!hal_)
+  {
+    return CallbackReturn::SUCCESS;
+  }
+  const bool powered_off = hal_->disable();
+  hal_->stop();
+  if (!powered_off)
+  {
+    RCLCPP_ERROR(logger(), "Deactivate failed: not every drive confirmed it is off. Without process data, the drive's "
+                           "own watchdog takes it down.");
+    return CallbackReturn::ERROR;
+  }
+  return CallbackReturn::SUCCESS;
+}
+
+CallbackReturn SynapticonSystemInterface::on_error(const rclcpp_lifecycle::State& previous_state)
+{
+  // After an error ros2_control goes back to unconfigured without calling on_cleanup(). Letting go of the HAL here
+  // frees the bus for the next configure.
+  return on_cleanup(previous_state);
+}
+
+CallbackReturn SynapticonSystemInterface::on_shutdown(const rclcpp_lifecycle::State& previous_state)
+{
+  exchanging_ = false;
+  if (hal_)
+  {
+    // Both succeed without doing anything when no drive has power or the data exchange does not run.
+    hal_->disable();
+    hal_->stop();
+  }
+  return on_cleanup(previous_state);
+}
+
+CallbackReturn SynapticonSystemInterface::on_cleanup(const rclcpp_lifecycle::State& /*previous_state*/)
+{
+  exchanging_ = false;
+  // The bindings point into the buffers, so they go first.
+  binding_.clear();
+  if (hal_)
+  {
+    hal_->disconnect();
+    hal_.reset();
+  }
+  return CallbackReturn::SUCCESS;
+}
+
+void SynapticonSystemInterface::states_from_drives()
+{
+  for (std::size_t drive = 0; drive < drive_states_.size(); ++drive)
+  {
+    const std::size_t j = drives_.drive_to_joint[drive];
+    DriveState& joint = joint_states_[j];
+    joint = drive_states_[drive];
+    const cia402::DeviceState state = cia402::device_state(joint.status_word);
+    joint.device_state = static_cast<std::uint8_t>(state);
+    drive_powered_[drive] = cia402::may_be_energised(state) ? 1u : 0u;
+    joint_powered_[j] = drive_powered_[drive];
+  }
+  transmissions_.propagate_states(drive_states_, joint_states_);
+  transmissions_.spread_to_joints_without_drive(drive_powered_, joint_powered_);
+}
+
+void SynapticonSystemInterface::commands_to_drives()
+{
+  // A missing position becomes "hold", a missing velocity or effort becomes 0.
+  // The rule for missing and invalid values may change with issue #88.
+  hold_.update(joint_commands_, joint_states_, joint_powered_);
+  sanitise_commands(joint_commands_, hold_.positions(), clean_commands_);
+  command_fill_.fill_joints(clean_commands_);
+  for (std::size_t drive = 0; drive < drive_commands_.size(); ++drive)
+  {
+    drive_commands_[drive] = clean_commands_[drives_.drive_to_joint[drive]];
+  }
+  // A drive behind a transmission takes the transmission's output instead. What it does not map gets the values of
+  // the drive's own joint.
+  transmissions_.apply_commands(clean_commands_, drive_commands_);
+  command_fill_.fill_drives(drive_commands_, drives_.drive_to_joint);
+}
+
+void SynapticonSystemInterface::refresh_link_health()
+{
+  hal_->link_health(hal_link_health_);
+  const std::size_t reported = std::min(drives_.drive_count(), hal_link_health_.drives.size());
+  for (std::size_t drive = 0; drive < reported; ++drive)
+  {
+    joint_link_health_[drives_.drive_to_joint[drive]] = hal_link_health_.drives[drive];
+  }
+  bus_link_health_ = hal_link_health_.bus;
+}
+
+return_type SynapticonSystemInterface::read(const rclcpp::Time& /*time*/, const rclcpp::Duration& /*period*/)
+{
+  if (!exchanging_)
+  {
+    return return_type::OK;
+  }
+  if (!hal_ || !hal_->read(drive_states_))
+  {
+    return return_type::ERROR;
+  }
+  states_from_drives();
+  refresh_link_health();
+  access_report_.state_writes(binding_.push_states());
+  return return_type::OK;
+}
+
+return_type SynapticonSystemInterface::write(const rclcpp::Time& /*time*/, const rclcpp::Duration& /*period*/)
+{
+  if (!exchanging_)
+  {
+    return return_type::OK;
+  }
+  if (!hal_)
+  {
+    return return_type::ERROR;
+  }
+  const auto refused = binding_.pull_commands();
+  access_report_.command_reads(refused.setpoints, refused.actions);
+  commands_to_drives();
+  // An invalid setpoint fails the write like a failing bus does, and ros2_control then takes the drives down.
+  // The rule for missing and invalid values may change with issue #88.
+  return hal_->write(drive_commands_) ? return_type::OK : return_type::ERROR;
+}
+
+return_type SynapticonSystemInterface::perform_command_mode_switch(const std::vector<std::string>& /*start_interfaces*/,
+                                                                   const std::vector<std::string>& stop_interfaces)
+{
+  if (stop_interfaces.empty())
+  {
+    return return_type::OK;
+  }
+  for (std::size_t j = 0; j < release_commands_.size(); ++j)
+  {
+    const auto state = static_cast<cia402::DeviceState>(joint_states_[j].device_state);
+    const bool powered = exchanging_ && drives_.has_drive(j) && cia402::may_be_energised(state);
+    release_commands_[j].drive_action = powered ? DriveAction::DISABLE : DriveAction::NONE;
+    const std::string action = info_.joints[j].name + "/drive_action";
+    if (powered && std::find(stop_interfaces.begin(), stop_interfaces.end(), action) != stop_interfaces.end())
     {
-      hw_states_velocities_[i] = 0;
+      RCLCPP_WARN(logger(), "No controller holds '%s' any more while its drive may have power. Disabling the drive.",
+                  action.c_str());
     }
-    if (std::isnan(hw_states_accelerations_[i]))
-    {
-      hw_states_accelerations_[i] = 0;
-    }
-    if (std::isnan(hw_states_efforts_[i]))
-    {
-      hw_states_efforts_[i] = 0;
-    }
-
-    hw_commands_positions_[i] = std::numeric_limits<double>::quiet_NaN();
-    hw_commands_velocities_[i] = 0;
-    hw_commands_efforts_[i] = 0;
-    threadsafe_commands_efforts_[i] = std::numeric_limits<double>::quiet_NaN();
-    threadsafe_commands_velocities_[i] = 0;
-    threadsafe_commands_positions_[i] = std::numeric_limits<double>::quiet_NaN();
   }
-
-  RCLCPP_INFO(get_logger(), "System successfully activated! Control level: %u", control_level_[0]);
-
-  return hardware_interface::CallbackReturn::SUCCESS;
-}
-
-hardware_interface::CallbackReturn
-SynapticonSystemInterface::on_deactivate(const rclcpp_lifecycle::State& /*previous_state*/)
-{
-  for (std::size_t i = 0; i < num_joints_; i++)
+  if (const std::size_t refused = binding_.reset_released(stop_interfaces, release_commands_); refused != 0)
   {
-    control_level_[i] = control_level_t::UNDEFINED;
-
-    hw_commands_velocities_[i] = 0;
-    hw_commands_efforts_[i] = 0;
-    threadsafe_commands_efforts_[i] = std::numeric_limits<double>::quiet_NaN();
-    threadsafe_commands_velocities_[i] = 0;
-    threadsafe_commands_positions_[i] = std::numeric_limits<double>::quiet_NaN();
+    RCLCPP_ERROR(logger(), "%zu released command interface(s) could not be reset.", refused);
   }
-
-  return hardware_interface::CallbackReturn::SUCCESS;
+  return return_type::OK;
 }
 
-hardware_interface::return_type SynapticonSystemInterface::read(const rclcpp::Time& /*time*/,
-                                                                const rclcpp::Duration& /*period*/)
-{
-  std::lock_guard<std::mutex> lock(in_somanet_mtx_);
-  for (std::size_t i = 0; i < num_joints_; i++)
-  {
-    // InSomanet50t doesn't include acceleration
-    hw_states_accelerations_[i] = 0;
-    hw_states_velocities_[i] = (1 / mechanical_reductions_.at(i)) * in_somanet_1_[i]->VelocityValue * RPM_TO_RAD_PER_S;
-    hw_states_positions_[i] =
-        (1 / mechanical_reductions_.at(i)) * in_somanet_1_[i]->PositionValue * 2 * 3.14159 / encoder_resolutions_[i];
-    hw_states_efforts_[i] = mechanical_reductions_.at(i) * in_somanet_1_[i]->TorqueValue;
-  }
+}  // namespace synapticon_hardware
 
-  return hardware_interface::return_type::OK;
-}
-
-hardware_interface::return_type SynapticonSystemInterface::write(const rclcpp::Time& /*time*/,
-                                                                 const rclcpp::Duration& /*period*/)
-{
-  // This function doesn't do much.
-  // It's taken care of in separate thread, somanet_control_thread_
-
-  // Share the commands with somanet control loop in a threadsafe way
-  for (std::size_t i = 0; i < num_joints_; i++)
-  {
-    // Torque commands are "per thousand of rated torque"
-    if (!std::isnan(hw_commands_efforts_[i]))
-    {
-      hw_commands_efforts_[i] = std::clamp(hw_commands_efforts_[i], -1000.0, 1000.0);
-      threadsafe_commands_efforts_[i] = hw_commands_efforts_[i];
-    }
-    if (!std::isnan(hw_commands_velocities_[i]))
-    {
-      threadsafe_commands_velocities_[i] = mechanical_reductions_.at(i) * hw_commands_velocities_[i] * RAD_PER_S_TO_RPM;
-    }
-    if (!std::isnan(hw_commands_positions_[i]))
-    {
-      threadsafe_commands_positions_[i] =
-          mechanical_reductions_.at(i) * hw_commands_positions_[i] * encoder_resolutions_[i] / (2 * 3.14159);
-    }
-  }
-
-  return hardware_interface::return_type::OK;
-}
-
-std::vector<hardware_interface::StateInterface> SynapticonSystemInterface::export_state_interfaces()
-{
-  std::vector<hardware_interface::StateInterface> state_interfaces;
-  for (std::size_t i = 0; i < num_joints_; i++)
-  {
-    state_interfaces.emplace_back(hardware_interface::StateInterface(
-        info_.joints[i].name, hardware_interface::HW_IF_POSITION, &hw_states_positions_[i]));
-    state_interfaces.emplace_back(hardware_interface::StateInterface(
-        info_.joints[i].name, hardware_interface::HW_IF_VELOCITY, &hw_states_velocities_[i]));
-    state_interfaces.emplace_back(hardware_interface::StateInterface(
-        info_.joints[i].name, hardware_interface::HW_IF_ACCELERATION, &hw_states_accelerations_[i]));
-    state_interfaces.emplace_back(hardware_interface::StateInterface(
-        info_.joints[i].name, hardware_interface::HW_IF_EFFORT, &hw_states_efforts_[i]));
-  }
-  return state_interfaces;
-}
-
-std::vector<hardware_interface::CommandInterface> SynapticonSystemInterface::export_command_interfaces()
-{
-  std::vector<hardware_interface::CommandInterface> command_interfaces;
-  for (std::size_t i = 0; i < num_joints_; i++)
-  {
-    command_interfaces.emplace_back(hardware_interface::CommandInterface(
-        info_.joints[i].name, hardware_interface::HW_IF_POSITION, &hw_commands_positions_[i]));
-    command_interfaces.emplace_back(hardware_interface::CommandInterface(
-        info_.joints[i].name, hardware_interface::HW_IF_VELOCITY, &hw_commands_velocities_[i]));
-    command_interfaces.emplace_back(hardware_interface::CommandInterface(
-        info_.joints[i].name, hardware_interface::HW_IF_EFFORT, &hw_commands_efforts_[i]));
-    command_interfaces.emplace_back(
-        hardware_interface::CommandInterface(info_.joints[i].name, "quick_stop", &hw_commands_quick_stop_[i]));
-  }
-  return command_interfaces;
-}
-
-SynapticonSystemInterface::~SynapticonSystemInterface()
-{
-  // A flag to ecat_error_check_ thread
-  in_normal_op_mode_ = false;
-
-  if (somanet_control_thread_ && somanet_control_thread_->joinable())
-  {
-    somanet_control_thread_->join();
-  }
-
-  // Close the ethercat connection
-  ec_close();
-}
-
-OSAL_THREAD_FUNC SynapticonSystemInterface::ecatCheck(void* /*ptr*/)
-{
-  int slave;
-  uint8 currentgroup = 0;
-
-  while (1)
-  {
-    if (in_normal_op_mode_ && ((wkc_ < expected_wkc_) || ec_group[currentgroup].docheckstate))
-    {
-      if (needlf_)
-      {
-        needlf_ = false;
-        printf("\n");
-      }
-      // one or more slaves are not responding
-      ec_group[currentgroup].docheckstate = false;
-      ec_readstate();
-      for (slave = 1; slave <= ec_slavecount; slave++)
-      {
-        if (ec_slave[slave].name != EXPECTED_SLAVE_NAME)
-        {
-          continue;
-        }
-        if ((ec_slave[slave].group == currentgroup) && (ec_slave[slave].state != EC_STATE_OPERATIONAL))
-        {
-          ec_group[currentgroup].docheckstate = true;
-          if (ec_slave[slave].state == (EC_STATE_SAFE_OP + EC_STATE_ERROR))
-          {
-            printf("ERROR : slave %d is in SAFE_OP + ERROR, attempting ack.\n", slave);
-            ec_slave[slave].state = (EC_STATE_SAFE_OP + EC_STATE_ACK);
-            ec_writestate(slave);
-          }
-          else if (ec_slave[slave].state == EC_STATE_SAFE_OP)
-          {
-            printf("WARNING : slave %d is in SAFE_OP, change to OPERATIONAL.\n", slave);
-            ec_slave[slave].state = EC_STATE_OPERATIONAL;
-            ec_writestate(slave);
-          }
-          else if (ec_slave[slave].state > EC_STATE_NONE)
-          {
-            if (ec_reconfig_slave(slave, EC_TIMEOUTMON))
-            {
-              ec_slave[slave].islost = false;
-              printf("MESSAGE : slave %d reconfigured\n", slave);
-            }
-          }
-          else if (!ec_slave[slave].islost)
-          {
-            // re-check state
-            ec_statecheck(slave, EC_STATE_OPERATIONAL, EC_TIMEOUTRET);
-            if (ec_slave[slave].state == EC_STATE_NONE)
-            {
-              ec_slave[slave].islost = true;
-              printf("ERROR : slave %d lost\n", slave);
-            }
-          }
-        }
-        if (ec_slave[slave].islost)
-        {
-          if (ec_slave[slave].state == EC_STATE_NONE)
-          {
-            if (ec_recover_slave(slave, EC_TIMEOUTMON))
-            {
-              ec_slave[slave].islost = false;
-              printf("MESSAGE : slave %d recovered\n", slave);
-            }
-          }
-          else
-          {
-            ec_slave[slave].islost = false;
-            printf("MESSAGE : slave %d found\n", slave);
-          }
-        }
-      }
-      if (!ec_group[currentgroup].docheckstate)
-        printf("OK : all slaves resumed OPERATIONAL.\n");
-    }
-    osal_usleep(10000);
-  }
-}
-
-void SynapticonSystemInterface::somanetCyclicLoop(std::atomic<bool>& in_normal_op_mode)
-{
-  std::vector<bool> first_iteration(num_joints_, true);
-
-  while (rclcpp::ok())
-  {
-    {
-      std::lock_guard<std::mutex> lock(in_somanet_mtx_);
-      ec_send_processdata();
-      wkc_ = ec_receive_processdata(EC_TIMEOUTRET);
-
-      if (wkc_ >= expected_wkc_)
-      {
-        for (size_t joint_idx = 0; joint_idx < num_joints_; ++joint_idx)
-        {
-          if (first_iteration.at(joint_idx))
-          {
-            // Default to PROFILE_TORQUE_MODE
-            out_somanet_1_[joint_idx]->OpMode = PROFILE_TORQUE_MODE;
-            out_somanet_1_[joint_idx]->TorqueOffset = 0;
-            out_somanet_1_[joint_idx]->TargetTorque = 0;
-            first_iteration.at(joint_idx) = false;
-          }
-
-          // Fault reset: Fault -> Switch on disabled, if the drive is in fault
-          // state
-          if ((in_somanet_1_[joint_idx]->Statusword & 0b0000000001001111) == 0b0000000000001000)
-            out_somanet_1_[joint_idx]->Controlword = 0b10000000;
-
-          // Shutdown: Switch on disabled -> Ready to switch on
-          else if ((in_somanet_1_[joint_idx]->Statusword & 0b0000000001001111) == 0b0000000001000000)
-          {
-            // If the QUICK_STOP controller is on, don't leave this state
-            if ((control_level_[joint_idx] != control_level_t::QUICK_STOP) &&
-                (control_level_[joint_idx] != control_level_t::UNDEFINED))
-            {
-              out_somanet_1_[joint_idx]->Controlword = 0b00000110;
-            }
-          }
-          // Switch on: Ready to switch on -> Switched on
-          else if ((in_somanet_1_[joint_idx]->Statusword & 0b0000000001101111) == 0b0000000000100001)
-            out_somanet_1_[joint_idx]->Controlword = 0b00000111;
-
-          // Enable operation: Switched on -> Operation enabled
-          else if ((in_somanet_1_[joint_idx]->Statusword & 0b0000000001101111) == 0b0000000000100011)
-            out_somanet_1_[joint_idx]->Controlword = NORMAL_OPERATION_BRAKES_OFF;
-
-          // Normal operation
-          else if ((in_somanet_1_[joint_idx]->Statusword & 0b0000000001101111) == 0b0000000000100111)
-          {
-            in_normal_op_mode = true;
-            if (control_level_[joint_idx] == control_level_t::EFFORT)
-            {
-              if (!std::isnan(threadsafe_commands_efforts_[joint_idx]))
-              {
-                out_somanet_1_[joint_idx]->TargetTorque = threadsafe_commands_efforts_[joint_idx];
-                out_somanet_1_[joint_idx]->OpMode = PROFILE_TORQUE_MODE;
-                out_somanet_1_[joint_idx]->TorqueOffset = 0;
-                out_somanet_1_[joint_idx]->Controlword = NORMAL_OPERATION_BRAKES_OFF;
-              }
-            }
-            else if (control_level_[joint_idx] == control_level_t::VELOCITY)
-            {
-              if (!std::isnan(threadsafe_commands_velocities_[joint_idx]))
-              {
-                out_somanet_1_[joint_idx]->TargetVelocity = threadsafe_commands_velocities_[joint_idx];
-                out_somanet_1_[joint_idx]->OpMode = CYCLIC_VELOCITY_MODE;
-                out_somanet_1_[joint_idx]->VelocityOffset = 0;
-                out_somanet_1_[joint_idx]->Controlword = NORMAL_OPERATION_BRAKES_OFF;
-              }
-            }
-            else if (control_level_[joint_idx] == control_level_t::POSITION)
-            {
-              if (!std::isnan(threadsafe_commands_positions_[joint_idx]))
-              {
-                out_somanet_1_[joint_idx]->TargetPosition = threadsafe_commands_positions_[joint_idx];
-                out_somanet_1_[joint_idx]->OpMode = CYCLIC_POSITION_MODE;
-                out_somanet_1_[joint_idx]->VelocityOffset = 0;
-                out_somanet_1_[joint_idx]->Controlword = NORMAL_OPERATION_BRAKES_OFF;
-              }
-            }
-            else if (control_level_[joint_idx] == control_level_t::QUICK_STOP)
-            {
-              // Turn the brake on
-              out_somanet_1_[joint_idx]->OpMode = PROFILE_TORQUE_MODE;
-              out_somanet_1_[joint_idx]->TorqueOffset = 0;
-              out_somanet_1_[joint_idx]->Controlword = NORMAL_OPERATION_BRAKES_ON;
-            }
-            else if (control_level_[joint_idx] == control_level_t::UNDEFINED)
-            {
-              out_somanet_1_[joint_idx]->OpMode = PROFILE_TORQUE_MODE;
-              out_somanet_1_[joint_idx]->TorqueOffset = 0;
-              out_somanet_1_[joint_idx]->Controlword = NORMAL_OPERATION_BRAKES_OFF;
-            }
-          }
-        }
-
-        // printf("Processdata cycle %4d , WKC %d ,", i, wkc);
-        // printf(" Statusword: %X ,", in_somanet_1->Statusword);
-        // printf(" Op Mode Display: %d ,", in_somanet_1->OpModeDisplay);
-        // printf(" ActualPos: %" PRId32 " ,\n", in_somanet_1_[0]->PositionValue);
-        // printf(" DemandPos: %" PRId32 " ,",
-        // in_somanet_1_[0]->PositionDemandInternalValue); printf(" ActualVel:
-        // %" PRId32 " ,", in_somanet_1_[0]->VelocityValue);
-        // printf(" DemandVel: %" PRId32 " ,", in_somanet_1_[0]->VelocityDemandValue);
-        // printf("ActualTorque: %" PRId32 " ,", in_somanet_1_[0]->TorqueValue);
-        // printf(" DemandTorque: %" PRId32 " ,", in_somanet_1_[0]->TorqueDemand);
-        // printf("\n");
-
-        // printf(" T:%" PRId64 "\r", ec_DCtime);
-        needlf_ = true;
-      }
-    }  // scope of in_somanet_ mutex lock
-    osal_usleep(5000);
-  }
-}
-
-}  // namespace synapticon_ros2_control
-
-#include "pluginlib/class_list_macros.hpp"
-
-PLUGINLIB_EXPORT_CLASS(synapticon_ros2_control::SynapticonSystemInterface, hardware_interface::SystemInterface)
+PLUGINLIB_EXPORT_CLASS(synapticon_hardware::SynapticonSystemInterface, hardware_interface::SystemInterface)

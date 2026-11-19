@@ -8,6 +8,6 @@ project(synapticon_description NONE)
 
 find_package(ament_cmake REQUIRED)
 
-install(DIRECTORY meshes ros2_control urdf DESTINATION share/${PROJECT_NAME})
+install(DIRECTORY meshes urdf DESTINATION share/${PROJECT_NAME})
 
 ament_package()

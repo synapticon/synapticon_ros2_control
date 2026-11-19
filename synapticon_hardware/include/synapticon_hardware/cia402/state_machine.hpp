@@ -173,8 +173,9 @@ constexpr Command RSET = Command::FAULT_RESET;
 ///  - The way down to Switch On Disabled leads through Quick Stop from every powered state, so the drive ramps down
 ///    first: Disable Voltage straight from power leaves a loaded joint without brake free to drop. Quick Stop also
 ///    serves the unpowered states (transitions 7 and 10).
-///  - Quick Stop Active can only be entered from Operation Enabled (transition 11), so its row keeps everywhere else
-///    instead of climbing there.
+///  - Quick Stop Active can only be entered from Operation Enabled (transition 11), so its row does not climb there.
+///    From Ready to Switch On and Switched On it sends Quick Stop, which leads to Switch On Disabled (transitions 7
+///    and 10), so a drive on its way up does not finish an earlier Enable Operation.
 ///  - Start, Not Ready to Switch On, Fault Reaction Active and Fault are entered by the drive itself and never
 ///    commanded, so their rows keep throughout.
 ///  - The Fault column keeps too. Only a Fault Reset leaves Fault, and only on request (FaultExit::RESET).
@@ -191,7 +192,7 @@ constexpr Command WALK[NUM_DEVICE_STATES][NUM_DEVICE_STATES] = {
   /* RS */ { SHUT, SHUT, SHUT, SHUT, SHUT, SHUT, CUTV, SHUT, KEEP, KEEP },
   /* SO */ { SHUT, SHUT, SHUT, SWON, SWON, SWON, CUTV, SHUT, KEEP, KEEP },
   /* OE */ { SHUT, SHUT, SHUT, SWON, OPER, OPER, OPER, SHUT, KEEP, KEEP },
-  /* QS */ { KEEP, KEEP, KEEP, KEEP, KEEP, QSTP, QSTP, KEEP, KEEP, KEEP },
+  /* QS */ { KEEP, KEEP, KEEP, QSTP, QSTP, QSTP, QSTP, KEEP, KEEP, KEEP },
   /* FR */ { KEEP, KEEP, KEEP, KEEP, KEEP, KEEP, KEEP, KEEP, KEEP, KEEP },
   /* FA */ { KEEP, KEEP, KEEP, KEEP, KEEP, KEEP, KEEP, KEEP, KEEP, KEEP },
   /* UN */ { KEEP, KEEP, KEEP, KEEP, KEEP, KEEP, KEEP, KEEP, KEEP, KEEP },
@@ -281,10 +282,11 @@ inline bool awaits_ramp(DeviceState current, DeviceState target, WalkPath path)
 /// @brief Whether the walk toward `target` is done.
 ///
 /// Exact arrival, plus two cases where the walk cannot arrive and does not need to:
-///  - A Quick Stop asked of a drive whose power stage is already off. Such a drive no longer
-///    drives the joint, though a joint without brake may still move under load, and Quick Stop Active is
+///  - A Quick Stop asked of a drive whose power stage is already off and that is not on its way up. Such a drive no
+///    longer drives the joint, though a joint without brake may still move under load, and Quick Stop Active is
 ///    reachable only from Operation Enabled (transition 11). Without this the walk would hold until
-///    its deadline and report a timeout.
+///    its deadline and report a timeout. Ready to Switch On and Switched On do not count: an earlier Enable Operation
+///    could still power the drive, so the walk sends Quick Stop until the drive is in Switch On Disabled.
 ///  - A descent to Switch-on-Disabled from Fault without a reset: the power stage is off already,
 ///    and leaving Fault is for an explicit reset (FaultExit).
 ///
@@ -299,7 +301,8 @@ inline bool reached(DeviceState current, DeviceState target, FaultExit fault_exi
   {
     return fault_exit == FaultExit::HOLD;
   }
-  return target == DeviceState::QUICK_STOP_ACTIVE && !may_be_energised(current);
+  const bool on_the_way_up = current == DeviceState::READY_TO_SWITCH_ON || current == DeviceState::SWITCHED_ON;
+  return target == DeviceState::QUICK_STOP_ACTIVE && !may_be_energised(current) && !on_the_way_up;
 }
 
 /// @brief A manufacturer-specific action: a raw controlword bit operation with its own

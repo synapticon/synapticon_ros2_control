@@ -17,6 +17,7 @@
 
   <exec_depend>soem_source</exec_depend>
   <exec_depend>synapticon_bringup</exec_depend>
+  <exec_depend>synapticon_controllers</exec_depend>
   <exec_depend>synapticon_description</exec_depend>
   <exec_depend>synapticon_ethercat_soem</exec_depend>
   <exec_depend>synapticon_hardware</exec_depend>

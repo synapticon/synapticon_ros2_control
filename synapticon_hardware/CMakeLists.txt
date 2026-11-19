@@ -26,14 +26,15 @@ find_package(hardware_interface REQUIRED)
 find_package(pluginlib REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(rclcpp_lifecycle REQUIRED)
-find_package(soem_source REQUIRED)
+find_package(transmission_interface REQUIRED)
 # For the robot definition YAML that the EtherCAT HALs read.
 find_package(yaml-cpp REQUIRED)
 
-set(_sources src/cia402/cia402_hal.cpp src/ethercat/bus_config.cpp src/ethercat/drive_checks.cpp src/ethercat/drive_units.cpp
-  src/ethercat/ethercat_pdo_hal.cpp src/ethercat/joint_config.cpp src/ethercat/robot_config.cpp
-  src/interface_binding.cpp src/mock/mock_cia402_hal.cpp src/mock/mock_hal.cpp src/mock/simulated_drive.cpp
-  src/synapticon_interface.cpp)
+set(_sources src/cia402/cia402_hal.cpp src/command_fallback.cpp src/drive_joint_map.cpp src/ethercat/bus_config.cpp
+  src/ethercat/drive_checks.cpp src/ethercat/drive_units.cpp src/ethercat/ethercat_pdo_hal.cpp
+  src/ethercat/joint_config.cpp src/ethercat/robot_config.cpp src/handle_access_report.cpp src/interface_binding.cpp
+  src/mock/mock_cia402_hal.cpp src/mock/mock_hal.cpp src/mock/simulated_drive.cpp src/synapticon_interface.cpp
+  src/transmission_set.cpp)
 
 # The library: hardware interface, HAL interface and everything the HALs share.
 add_library(${PROJECT_NAME} SHARED ${_sources})
@@ -44,12 +45,11 @@ target_include_directories(${PROJECT_NAME}
   PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src
 )
-# SynapticonSystemInterface runs its drives on the SOEM master.
 target_link_libraries(${PROJECT_NAME} PUBLIC
   hardware_interface::hardware_interface pluginlib::pluginlib rclcpp::rclcpp rclcpp_lifecycle::rclcpp_lifecycle
-  soem_source::soem yaml-cpp::yaml-cpp)
+  transmission_interface::transmission_interface yaml-cpp::yaml-cpp)
 
-# The plugins: the hardware interface for ros2_control, and the HALs loaded by name.
+# The plugins: the hardware interface for ros2_control, and the HALs it can load.
 pluginlib_export_plugin_description_file(
   hardware_interface synapticon_interface_plugin.xml)
 pluginlib_export_plugin_description_file(
@@ -81,7 +81,7 @@ ament_export_dependencies(
   pluginlib
   rclcpp
   rclcpp_lifecycle
-  soem_source
+  transmission_interface
   yaml-cpp
 )
 
@@ -108,6 +108,7 @@ if(BUILD_TESTING)
 
   # The parts that live in headers only.
   hardware_test(cia402/test_state_machine HEADERS)
+  hardware_test(test_command_shaping HEADERS)
   hardware_test(test_hal_config HEADERS)
   hardware_test(cia402/test_setpoint_forwarding HEADERS)
   hardware_test(ethercat/test_firmware_version HEADERS)
@@ -115,6 +116,10 @@ if(BUILD_TESTING)
   hardware_test(test_interface_binding)
   hardware_test(test_link_health)
   hardware_test(test_hal_bench)
+  hardware_test(test_handle_access_report)
+  hardware_test(test_drive_joint_map)
+  hardware_test(test_command_fallback)
+  hardware_test(test_transmission_set)
   hardware_test(cia402/test_drive_action_walk USES ${synapticon_control_msgs_TARGETS})
   hardware_test(cia402/test_cia402_hal_failures)
   hardware_test(ethercat/test_bus_config)
@@ -125,10 +130,11 @@ if(BUILD_TESTING)
   hardware_test(ethercat/test_robot_config)
   # The slave_config generator, against a small ESI file built from the example slave_config.
   ament_add_pytest_test(test_esi_to_slave_config test/ethercat/test_esi_to_slave_config.py TIMEOUT 60)
-  # The mock HALs and the simulated drive.
+  # The mock HALs, the simulated drive, and the hardware interface on top of the mock.
   hardware_test(test_mock_hal)
   hardware_test(test_mock_cia402_hal)
   target_include_directories(test_mock_cia402_hal PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+  hardware_test(test_synapticon_interface)
   # drive_check on a simulated drive.
   foreach(check read timing hold move)
     ament_add_test(drive_check_${check} GENERATE_RESULT_FOR_RETURN_CODE_ZERO TIMEOUT 60
@@ -143,6 +149,11 @@ if(BUILD_TESTING)
   ament_add_gmock(test_mock_cia402_drive_actions test/test_mock_cia402_drive_actions.cpp
     SKIP_LINKING_MAIN_LIBRARIES TIMEOUT 600)
   target_link_libraries(test_mock_cia402_drive_actions ${PROJECT_NAME})
+
+  # How long the interface layer takes for many joints, without a bus. A tool to run by hand: timing limits in a test
+  # would fail at random on a machine without real-time scheduling.
+  add_executable(timing_interface_access test/timing_interface_access.cpp)
+  target_link_libraries(timing_interface_access ${PROJECT_NAME})
 endif()
 
 ament_package()

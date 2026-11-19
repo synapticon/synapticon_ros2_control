@@ -1,0 +1,29 @@
+# Example robot with one joint behind a gearbox: the drive turns motor_1, and a SimpleTransmission with a reduction
+# of 4 turns joint_1 a quarter as far. Command joint_1, and motor_1 follows four times as far.
+# example_geared_controllers.yaml configures the controllers for it.
+#
+# Launch with robot:=geared. With disable_transmissions:=true, joint_1 sits directly on the drive instead.
+
+bus:
+  control_frequency: 500     # Hz, the same as update_rate of the controller manager
+  readiness_timeout_s: 20.0  # how long start() waits for every drive to stream valid data
+  # network_interface: eth0  # the drives' network interface, for ethercat_soem
+
+# Wherever a command leaves these out. SimpleTransmission maps no gains, so motor_1 takes the gains of its own entry,
+# which are these too.
+command_defaults:
+  stiffness: 0.4          # Nm/rad
+  damping: 0.1            # Nm s/rad
+  max_joint_torque: 50.0  # Nm, the torque ceiling of the drive
+
+joints:
+  - {name: joint_1, drive: false}                  # the output: no drive of its own, takes the commands
+  - {name: motor_1, position: 0, commanded: false}  # the drive at ring position 0, moved by the transmission
+
+transmissions:
+  - name: gearbox_1
+    plugin: transmission_interface/SimpleTransmission
+    actuators:
+      - {name: motor_1, role: actuator1}
+    joints:
+      - {name: joint_1, role: joint1, mechanical_reduction: 4.0}

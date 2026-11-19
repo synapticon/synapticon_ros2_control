@@ -60,13 +60,20 @@ struct StateSink
   const T* source{ nullptr };
 };
 
-/// A command handle and the field it fills, the command side of StateSink.
+/// A command handle and the field it fills, the command side of StateSink. `joint` and `field` say which field of
+/// which joint's command `destination` is.
 template <typename T>
 struct CommandSource
 {
   hardware_interface::CommandInterface::SharedPtr handle;
   T* destination{ nullptr };
+  std::size_t joint{ 0 };
+  T DriveCommand::*field{ nullptr };
 };
+
+/// The interfaces `joint` declares that only a joint with a drive can carry: the drive's own states, the drive
+/// action and the torque limit. Each as `<joint>/<interface>`.
+std::vector<std::string> drive_only_interfaces(const hardware_interface::ComponentInfo& joint);
 
 /// @brief Links the handles of a component to the drive data, once at configure, and copies between them every
 /// cycle.
@@ -102,6 +109,11 @@ public:
   /// action too, so a held request does not look like a new one in the next cycle.
   RefusedReads pull_commands() const;
 
+  /// Set every command handle named in `released` (as `<joint>/<interface>`) and its field to that field's value in
+  /// `resets`, which has one command per joint. Returns the number of handles that refused the value. Compares
+  /// names, so it is meant for the rare controller switch, not for every cycle.
+  std::size_t reset_released(const std::vector<std::string>& released, const std::vector<DriveCommand>& resets) const;
+
   /// Put the current command fields on their handles, so that a controller which reads a command back starts from
   /// the hardware's value. Returns the number of handles that refused the value.
   std::size_t push_command_seeds() const;
@@ -117,7 +129,7 @@ private:
   bool bind_joint_states(const hardware_interface::ComponentInfo& joint,
                          hardware_interface::HardwareComponentInterface& component, DriveState& state,
                          EthercatSlaveHealth& health);
-  bool bind_joint_commands(const hardware_interface::ComponentInfo& joint,
+  bool bind_joint_commands(const hardware_interface::ComponentInfo& joint, std::size_t index,
                            hardware_interface::HardwareComponentInterface& component, DriveCommand& command);
   bool bind_gpio_states(const hardware_interface::ComponentInfo& gpio,
                         hardware_interface::HardwareComponentInterface& component, EthercatBusHealth& health);

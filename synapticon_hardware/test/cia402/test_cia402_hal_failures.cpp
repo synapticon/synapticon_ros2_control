@@ -724,4 +724,50 @@ TEST(Cia402HalFailures, DisableCancelsAnEnableActionInProgress)
   EXPECT_EQ(drives.active_drive_action(0), DriveAction::NONE);
 }
 
+/// A quick stop that arrives while an enable is still on its way up sends Quick Stop, so the drive goes to Switch On
+/// Disabled instead of finishing the enable on the Enable Operation sent last.
+TEST(Cia402HalFailures, AQuickStopDuringAnEnableTakesTheDriveDown)
+{
+  ScriptedDrives drives({ true });
+  ASSERT_TRUE(drives.start());
+  drives.report(SWITCHED_ON);
+  ASSERT_TRUE(drives.cycle(DriveAction::ENABLE));
+  ASSERT_EQ(drives.controlword(0) & COMMAND_BITS, ENABLE_OPERATION);
+  drives.settle_on_quick_stop();
+  ASSERT_TRUE(drives.cycle(DriveAction::QUICK_STOP));
+  EXPECT_EQ(drives.controlword(0) & COMMAND_BITS, QUICK_STOP);
+  for (int i = 0; i < 5; ++i)
+  {
+    ASSERT_TRUE(drives.cycle(DriveAction::NONE));
+  }
+  EXPECT_EQ(drives.reported(0), SWITCH_ON_DISABLED);
+  EXPECT_EQ(drives.controlword(0) & COMMAND_BITS, QUICK_STOP) << "the held word must not enable the drive again";
+  EXPECT_EQ(drives.active_drive_action(0), DriveAction::NONE);
+}
+
+/// A quick stop does not replace a disable that is on its way down, so the drive still ends without power.
+TEST(Cia402HalFailures, AQuickStopDoesNotReplaceARunningDisable)
+{
+  ScriptedDrives drives({ true });
+  ASSERT_TRUE(drives.start());
+  drives.report(OPERATION_ENABLED);
+  ASSERT_TRUE(drives.enable());
+  drives.move_at(1.0);  // still braking, so the disable waits in Quick Stop Active
+  ASSERT_TRUE(drives.cycle(DriveAction::DISABLE));
+  drives.report(QUICK_STOP_ACTIVE);
+  ASSERT_TRUE(drives.cycle(DriveAction::NONE));
+  ASSERT_EQ(drives.active_drive_action(0), DriveAction::DISABLE);
+  ASSERT_TRUE(drives.cycle(DriveAction::QUICK_STOP));
+  EXPECT_EQ(drives.active_drive_action(0), DriveAction::DISABLE);
+  drives.move_at(0.0);
+  drives.follow_controlword(0);
+  const auto start = Clock::now();
+  while (drives.active_drive_action(0) == DriveAction::DISABLE && Clock::now() - start < WALK_TIMEOUT)
+  {
+    ASSERT_TRUE(drives.cycle(DriveAction::NONE));
+    std::this_thread::sleep_for(std::chrono::milliseconds(10));
+  }
+  EXPECT_EQ(drives.reported(0), SWITCH_ON_DISABLED);
+}
+
 }  // namespace

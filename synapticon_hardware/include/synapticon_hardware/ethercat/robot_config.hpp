@@ -31,6 +31,13 @@ inline constexpr std::array<const char*, 3> COMMAND_DEFAULT_KEYS{ "stiffness", "
 /// The section's switch, kept in the hardware parameters under its own name.
 inline constexpr const char* KEEP_LAST_GIVEN_PARAM = "keep_last_given";
 
+/// @brief The first step of apply_robot_config(): merge the YAML into `config`, without the defaults.
+bool merge_robot_config(HalConfig& config, std::string& error);
+
+/// @brief The second step of apply_robot_config(): give every joint without its own value of a joint parameter the
+/// hardware-wide default of it.
+void apply_joint_defaults(HalConfig& config);
+
 /// @brief Fill `config` from the robot-definition YAML its `robot_config` parameter names, if any.
 ///
 /// The YAML's `bus` entries fill the hardware parameters, and each `joints` entry fills the

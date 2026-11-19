@@ -5,17 +5,17 @@ It needs no kernel module and no EtherCAT master installed on the machine.
 
 | Part | Role |
 |---|---|
-| `EthercatSoemHal` | the `SynapticonHalI` implementation, loaded by its plugin name `ethercat_soem` |
+| `EthercatSoemHal` | the `SynapticonHalI` implementation, loaded by `SynapticonSystemInterface` as `hal` value `ethercat_soem` |
 | `net_raw_shell.sh` | starts a shell or a command with the capability the HAL needs, see below |
 | hardware tests | the HIL suite, see [doc/Testing.md](../synapticon_ros2_control/doc/Testing.md) |
 
 Each drive is described by its slave_config, which `esi_to_slave_config.py` of `synapticon_hardware` generates.
 The `<hardware>` parameter (or the robot definition's `bus` entry) `network_interface` names the network interface
 the drives are wired to.
-To read the state of one drive through this HAL, with the capability of the next section:
+With the example launch, in a shell with the capability of the next section:
 
 ```bash
-ros2 run synapticon_hardware drive_check read --hal ethercat_soem --network-interface <interface>
+ros2 launch synapticon_bringup example_synapticon.launch.py network_interface:=<interface>
 ```
 
 Optional:
@@ -47,7 +47,7 @@ from it inherits:
   ```bash
   "$(ros2 pkg prefix synapticon_ethercat_soem)/lib/synapticon_ethercat_soem/net_raw_shell.sh" --interface <interface>
   source /opt/ros/jazzy/setup.bash && source install/setup.bash   # sudo resets the environment
-  ros2 run synapticon_hardware drive_check read --hal ethercat_soem --network-interface <interface>
+  ros2 launch synapticon_bringup example_synapticon.launch.py network_interface:=<interface>
   ```
 
   A command given after the options runs in place of the shell.

@@ -1,0 +1,26 @@
+<library path="synapticon_controllers">
+  <class name="synapticon_controllers/DriveController"
+         type="synapticon_controllers::DriveController"
+         base_class_type="controller_interface::ControllerInterface">
+    <description>
+      Owns the state machines of the drives: takes drive action requests as services, reports every drive on
+      ~/drive_status and /diagnostics, and stops the joints by itself when a drive faults, if so configured.
+    </description>
+  </class>
+  <class name="synapticon_controllers/EthercatBusMonitorController"
+         type="synapticon_controllers::EthercatBusMonitorController"
+         base_class_type="controller_interface::ControllerInterface">
+    <description>
+      Reports the health of the EtherCAT bus on /diagnostics: the link, the slaves that answer, their AL states
+      and the working counter of the process data.
+    </description>
+  </class>
+  <class name="synapticon_controllers/MotorCommandController"
+         type="synapticon_controllers::MotorCommandController"
+         base_class_type="controller_interface::ControllerInterface">
+    <description>
+      Writes each synapticon_control_msgs/MotorCommand to the command interfaces of its joints: position,
+      velocity, effort, stiffness and damping, the terms of the drive's impedance law.
+    </description>
+  </class>
+</library>

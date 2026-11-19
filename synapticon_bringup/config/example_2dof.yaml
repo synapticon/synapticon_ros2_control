@@ -1,0 +1,31 @@
+# Example robot '2dof' with 2 joint(s), made by generate_example_robot.py.
+# Its controllers are in example_2dof_controllers.yaml.
+#
+# command_defaults fills the stiffness, damping and max_joint_torque wherever a command leaves them out.
+# Impedance joints need all three, from here or from their own entry.
+#
+# Each joint needs a name. The other keys are optional:
+#   position          ring position of its drive on the bus (default 0)
+#   alias             EtherCAT alias, only 0 works: drives are found by ring position
+#   slave_config      slave_config file of the drive (default: the launch argument slave_config)
+#   stiffness         Nm/rad, damping Nm s/rad, max_joint_torque Nm: this joint's own command defaults
+#   energize: false   read and report the drive, but never power it
+#   invert: true      flip position, velocity and effort, for a drive mounted the other way round
+
+bus:
+  control_frequency: 500  # Hz, equal to the update_rate of the controller manager
+  readiness_timeout_s: 20.0  # the time start() gives every drive to send valid data
+  # network_interface: eth0  # network interface of the drives, for ethercat_soem
+  # quick_stop_hold: false  # tests only: no frozen target after a quick stop in impedance mode
+  # sdo_read_attempts: 5  # tries of a bring-up SDO read that gets no valid answer
+  # sdo_retry_wait_s: 1.0  # s between those tries
+
+command_defaults:
+  stiffness: 0.4  # Nm/rad
+  damping: 0.1  # Nm s/rad
+  max_joint_torque: 50.0  # Nm, the torque ceiling of the drive
+  # keep_last_given: true  # repeat the last given value instead of the default
+
+joints:
+  - {name: joint_1, position: 0}
+  - {name: joint_2, position: 1}

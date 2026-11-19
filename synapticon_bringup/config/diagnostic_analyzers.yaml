@@ -1,0 +1,17 @@
+# Groups the reports of the bus monitor and the drive controller for diagnostic_aggregator, which publishes the
+# tree on /diagnostics_agg, for example for rqt_robot_monitor. Each controller prefixes its reports with its name,
+# which the tree leaves out again. Reports of other nodes land under Synapticon/Other.
+
+analyzers:
+  ros__parameters:
+    path: Synapticon
+    bus:
+      type: diagnostic_aggregator/GenericAnalyzer
+      path: EtherCAT bus
+      startswith: ["ethercat_bus_monitor_controller"]
+      remove_prefix: ["ethercat_bus_monitor_controller: "]
+    drives:
+      type: diagnostic_aggregator/GenericAnalyzer
+      path: Drives
+      startswith: ["drive_controller"]
+      remove_prefix: ["drive_controller: "]

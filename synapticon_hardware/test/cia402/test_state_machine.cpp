@@ -161,11 +161,12 @@ INSTANTIATE_TEST_SUITE_P(
                  SWITCH_ON_DISABLED,
                  WalkPath::DIRECT,
                  { CUTV, CUTV, CUTV, CUTV, CUTV, CUTV, CUTV, CUTV, KEEP, CUTV } },
-        // Only transition 11 enters Quick Stop Active, so the walk does not climb to reach it.
+        // Only transition 11 enters Quick Stop Active, so the walk does not climb to reach it. On the way up it sends
+        // Quick Stop, which takes the drive to Switch On Disabled (transitions 7 and 10).
         WalkRow{ "QuickStopActive",
                  QUICK_STOP_ACTIVE,
                  WalkPath::RAMPED,
-                 { KEEP, KEEP, KEEP, KEEP, KEEP, QSTP, QSTP, KEEP, KEEP, KEEP } },
+                 { KEEP, KEEP, KEEP, QSTP, QSTP, QSTP, QSTP, KEEP, KEEP, KEEP } },
         // The states the drive enters by itself, Fault and Unknown cannot be walked to.
         WalkRow{ "Start", START, WalkPath::RAMPED, std::vector<int>(10, KEEP) },
         WalkRow{ "NotReady", NOT_READY_TO_SWITCH_ON, WalkPath::RAMPED, std::vector<int>(10, KEEP) },
@@ -261,16 +262,16 @@ TEST(Arrival, ReachedMeansArrivedExceptForAQuickStopAndTheWayDownFromFault)
 
 TEST(Arrival, ADriveWithoutPowerHasQuickStoppedAlready)
 {
-  for (const DeviceState from :
-       { START, NOT_READY_TO_SWITCH_ON, SWITCH_ON_DISABLED, READY_TO_SWITCH_ON, SWITCHED_ON, FAULT })
+  for (const DeviceState from : { START, NOT_READY_TO_SWITCH_ON, SWITCH_ON_DISABLED, FAULT })
   {
     EXPECT_TRUE(cia402::reached(from, QUICK_STOP_ACTIVE)) << name(from);
   }
 }
 
-TEST(Arrival, ADriveThatMayStillDriveHasNotQuickStopped)
+/// Ready to Switch On and Switched On have no power, but an earlier Enable Operation could still power the drive.
+TEST(Arrival, ADriveThatMayStillDriveOrIsOnItsWayUpHasNotQuickStopped)
 {
-  for (const DeviceState from : { OPERATION_ENABLED, FAULT_REACTION_ACTIVE, UNKNOWN })
+  for (const DeviceState from : { READY_TO_SWITCH_ON, SWITCHED_ON, OPERATION_ENABLED, FAULT_REACTION_ACTIVE, UNKNOWN })
   {
     EXPECT_FALSE(cia402::reached(from, QUICK_STOP_ACTIVE)) << name(from);
   }

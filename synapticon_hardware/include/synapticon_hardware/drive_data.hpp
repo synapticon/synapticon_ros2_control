@@ -45,6 +45,7 @@ constexpr bool is_non_negative_setpoint(double DriveCommand::*field)
 
 /// @brief True when `value` is invalid in the setpoint `field`: infinite, or negative in a field that takes no
 /// negative values. NaN does not count.
+// The rule for missing and invalid values may change with issue #88.
 inline bool is_invalid_setpoint(double DriveCommand::*field, double value)
 {
   return std::isinf(value) || (is_non_negative_setpoint(field) && value < 0.0);

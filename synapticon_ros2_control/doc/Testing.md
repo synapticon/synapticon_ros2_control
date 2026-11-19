@@ -1,13 +1,18 @@
 # Testing
 
-This guide shows how to test the HAL packages.
+This guide shows how to test the packages.
 It starts with tests that need no hardware and ends with tests that move a real drive.
 
 | Test | What you need | Does the motor move? | Section |
 |---|---|---|---|
-| Unit tests | nothing | no | [1](#1-unit-tests) |
+| Unit and mock launch tests | nothing | no | [1](#1-unit-and-mock-launch-tests) |
 | Hardware-in-the-loop suite | one drive, two for the two-drive tests | yes | [3](#3-hardware-in-the-loop-suite) |
-| Drive check | one drive | only `hold` and `move` | [4](#4-drive-check) |
+| ros2_control path test | one drive | yes | [4](#4-ros2_control-path-test) |
+| Robot bring-up test | every drive of the robot | no | [5](#5-robot-bring-up-test) |
+| Multi-joint test | every drive of a robot with two or more | yes | [6](#6-multi-joint-test) |
+| Sections 3 to 6 in one run | as above | yes | [7](#7-all-automated-hardware-tests-in-one-run) |
+| Drive check | one drive | only `hold` and `move` | [8](#8-drive-check) |
+| Manual tests | a person, one drive | yes | [9](#9-manual-tests) |
 
 `colcon test` runs only section 1.
 The hardware tests are built together with the unit tests, but `colcon test` never starts them.
@@ -16,17 +21,20 @@ They run only when you start them yourself.
 Each section is a small test plan: what you need, the commands, what you should see, and how to leave the drive.
 The appendix holds the details of the suite: what it checks, and how the drive behaves on the bench.
 
-## 1. Unit tests
+## 1. Unit and mock launch tests
 
 The unit tests need no drive and no bus.
-They check the CiA 402 state machine, the drive actions, the HALs and the SOEM HAL's process image.
+They check the CiA 402 state machine, the drive actions, the HALs, the SOEM HAL's process image, the ros2_control
+layer, and the example launch on the mock HAL.
 
 They also cover failures that a bench rarely shows:
 
 - bring-up against a scripted drive: old firmware, no torque sensor, objects that cannot be read
 - `Cia402Hal` with drives that fault, never come up, or sit on a failing bus
+- the controllers with missing parameters or interfaces
 - `esi_to_slave_config.py`: for a small ESI file written inline in the test, it must write the bundled example
   slave_config
+- `generate_example_robot.py`: it must describe the example robots
 
 The drive action suite of [section 3](#3-hardware-in-the-loop-suite) runs here too, on simulated drives
 (`mock_cia402`).
@@ -38,12 +46,15 @@ So a change to the suite or to the drive logic shows up before you go to the ben
    ```bash
    source /opt/ros/jazzy/setup.bash
    colcon build --symlink-install --cmake-args -DCMAKE_BUILD_TYPE=Release
-   colcon test --packages-select synapticon_hardware synapticon_ethercat_soem
+   colcon test --packages-select synapticon_hardware synapticon_ethercat_soem synapticon_controllers synapticon_bringup synapticon_description
    colcon test-result --verbose
    ```
 
 2. Expect a summary with `0 errors, 0 failures`.
    When a test fails, `colcon test-result --verbose` lists it with its output.
+
+Each launch test runs in its own ROS domain, with discovery on this machine only.
+So a ROS stack elsewhere on the network never gets its requests, and cannot disturb it.
 
 ## 2. Before any hardware test
 
@@ -106,7 +117,7 @@ It needs a shell with the raw socket capability.
    CFG="$(ros2 pkg prefix synapticon_hardware)/share/synapticon_hardware/config/example_somanet_circulo_safe_motion.yaml"
    ```
 
-When a step fails, see [Troubleshooting](#5-troubleshooting).
+When a step fails, see [Troubleshooting](#10-troubleshooting).
 
 ## 3. Hardware-in-the-loop suite
 
@@ -242,7 +253,274 @@ The EtherCAT HALs share one bench.
 `testing/ethercat_hal_tests.hpp` holds it, together with the EtherCAT tests and the `main` of the test executable.
 Each HAL's test executable only names its HAL and sets it up on the bench's bus.
 
-## 4. Drive check
+With the IgH master, read drive settings (SDO) before `start()`, or while the bench cycles the bus.
+Once the bus is started, IgH answers a blocking read only while the program sends cycles.
+Without them, the read never returns: the test hangs in the kernel, ignores even `kill -9`, and only a reboot frees
+the master.
+
+## 4. ros2_control path test
+
+`hil_ros2_control_test.py` runs the whole path a user runs: the example launch, `SynapticonSystemInterface` and the
+controllers.
+It brings up the 1 DOF example on the `ethercat_soem` HAL and then:
+
+1. enables the drive
+2. ramps 0.3 rad away
+3. quick stops
+4. enables again
+5. ramps back
+6. disables
+
+A watchdog cuts the voltage when the joint strays more than 0.8 rad from its commanded target.
+On a robot with a transmission, the test commands the output joint and switches the drive of its motor.
+Along the way, the test checks that the drive's entry on `/diagnostics` follows the enable and the quick stop.
+
+### Steps
+
+1. Run it in CSP, in the shell of [section 2](#2-before-any-hardware-test):
+
+   ```bash
+   launch_test "$(ros2 pkg prefix synapticon_bringup)/share/synapticon_bringup/test/hil_ros2_control_test.py"
+   ```
+
+2. Wait about 8 s.
+   Right after the bus is released, the drive's mailbox is not ready for the next bring-up.
+
+3. Run it in impedance mode, through `MotorCommandController`:
+
+   ```bash
+   SYNAPTICON_HIL_IMPEDANCE=1 launch_test \
+     "$(ros2 pkg prefix synapticon_bringup)/share/synapticon_bringup/test/hil_ros2_control_test.py"
+   ```
+
+4. Expect `OK` at the end of each run.
+   A failure names the step and the measured position, for example a target not reached within the tracking
+   tolerance.
+
+The test ends with the drive disabled and the bus released.
+
+Settings:
+
+- `SYNAPTICON_HIL_SLAVE_CONFIG` chooses the slave_config for the launch.
+- `SYNAPTICON_HIL_ROBOT` chooses the robot: an example robot with one joint (default `1dof`, its drive at ring
+  position 0), or a robot definition file with one joint. For another drive, use a file, see
+  [Your own bench](#your-own-bench).
+- `SYNAPTICON_HIL_NETWORK_INTERFACE` names the network interface of the drives, and becomes the launch argument
+  `network_interface`. The shell of [section 2](#2-before-any-hardware-test) sets it.
+- `SYNAPTICON_HIL_HAL` names the HAL (default `ethercat_soem`).
+
+`colcon test` runs this test on simulated drives (`mock_cia402`) in both modes.
+So a change to the test or to the stack shows up before you go to the bench.
+
+## 5. Robot bring-up test
+
+`hil_bringup_test.py` brings up a whole example robot and checks every drive.
+It gives no drive power.
+Run it on a multi-drive setup after a change to the robot definition, the slave_config or the bring-up.
+
+It passes when:
+
+- bring-up reports every drive of the robot definition streaming
+- bring-up prints no framed warning block and no torque limit of zero
+- every joint is on `/joint_states` with a finite position
+- every drive is online, without power, free of errors, not latched, and in the requested mode
+- `/diagnostics` has an entry for every drive, online and without power
+- the controllers are active, and the bus monitor reports a complete domain
+
+In impedance mode, bring-up also checks the firmware version and the torque sensor of every drive.
+So an impedance run doubles as the commissioning check of a multi-drive setup.
+
+### Steps
+
+1. Choose the example robot whose drives are all on the bus, for example `28dof`.
+   Every drive of its robot definition must answer at its ring position.
+
+2. Run it in CSP:
+
+   ```bash
+   SYNAPTICON_HIL_ROBOT=28dof launch_test \
+     "$(ros2 pkg prefix synapticon_bringup)/share/synapticon_bringup/test/hil_bringup_test.py"
+   ```
+
+3. Wait about 8 s, then run it in impedance mode:
+
+   ```bash
+   SYNAPTICON_HIL_ROBOT=28dof SYNAPTICON_HIL_IMPEDANCE=1 launch_test \
+     "$(ros2 pkg prefix synapticon_bringup)/share/synapticon_bringup/test/hil_bringup_test.py"
+   ```
+
+4. Expect `OK` at the end of each run.
+   A failed bring-up fails the test at once, and lists its errors and warning blocks.
+
+`SYNAPTICON_HIL_ROBOT` defaults to `1dof`, and also takes a robot definition file.
+`SYNAPTICON_HIL_HAL`, `SYNAPTICON_HIL_NETWORK_INTERFACE` and `SYNAPTICON_HIL_SLAVE_CONFIG` work as in the path test.
+`colcon test` runs this test with the 2 DOF example on simulated drives, in both modes.
+
+## 6. Multi-joint test
+
+`hil_multi_joint_test.py` checks what only a robot with several drives shows, through the running stack.
+Everything that one drive covers stays with the suite and the path test.
+The robot runs in impedance mode, with the fault reaction of the drive controller switched on.
+Each joint moves about 0.2 rad.
+
+It runs these steps on one launch:
+
+1. The control loop with every drive on the bus, without power, for 60 s.
+   The bus report on `/diagnostics` stays OK with a complete domain, and the controller manager prints at most 10
+   overrun warnings per minute.
+2. Drive actions on one named joint: the first joint is enabled and quick stopped, the others stay without power.
+3. One command moves all joints at once, and back.
+   Then a sweep moves one joint after the other by 0.3 rad and back, while the others hold.
+   You can watch every joint move, and the test checks that each command moves its own joint and no other.
+4. The fault reaction across joints: an injected `emergency_stop` holds every joint, latched.
+   An enable is refused until the reaction is cleared. After the clear, an enable brings every joint back without a
+   jump.
+5. All joints are disabled.
+
+A watchdog cuts the voltage of every joint and fails the test when one strays more than 0.8 rad from its target.
+
+### Steps
+
+1. Choose the example robot whose drives are all on the bus, for example `2dof` or `28dof`.
+   Every joint must be free to turn by about 1 rad.
+   The bring-up test of [section 5](#5-robot-bring-up-test) in impedance mode checks the commissioning first.
+
+2. Run it:
+
+   ```bash
+   SYNAPTICON_HIL_ROBOT=28dof launch_test \
+     "$(ros2 pkg prefix synapticon_bringup)/share/synapticon_bringup/test/hil_multi_joint_test.py"
+   ```
+
+3. Expect `OK` at the end, and a line with the overrun count of the soak, for example
+   `Soak of 60 s with 28 drives: 3 overrun warning(s)`.
+
+To only watch every joint move, run the sweep alone with `SYNAPTICON_HIL_SWEEP_ONLY=1`, or
+`run_hil_tests.py --robot <robot> --only sweep` (about 3 s per joint).
+`SYNAPTICON_HIL_SOAK_S` sets the length of the soak in seconds, `SYNAPTICON_HIL_MAX_OVERRUNS` the number of overrun
+warnings it allows (default 10 per minute of soak).
+The default suits a PC without real-time scheduling, which misses a cycle now and then.
+On a real-time PC, set it to 0 for a strict check.
+Overruns also come from other load on the machine (a build, for example), so run the soak on an otherwise idle machine.
+If the limit is exceeded, launch the 1 DOF example for a minute without power and count its overrun warnings:
+a similar count means the machine, not the number of drives.
+`SYNAPTICON_HIL_ROBOT` defaults to `2dof`, and also takes a robot definition file.
+`SYNAPTICON_HIL_HAL`, `SYNAPTICON_HIL_NETWORK_INTERFACE` and `SYNAPTICON_HIL_SLAVE_CONFIG` work as in the path test.
+`colcon test` runs this test with the 2 DOF example on simulated drives, with a 5 s soak and no overrun limit.
+
+## 7. All automated hardware tests in one run
+
+`run_hil_tests.py` runs the automated hardware tests that fit the robot, waits between the runs, prints a summary,
+and exits with 0 only when every run passed.
+It is installed in every build, together with the tests it runs.
+It counts the robot's drives, not its joints: the output of a transmission has no drive.
+Its runs keep ROS discovery on this machine, so they never reach a stack on another bench.
+
+Ctrl-C, a closed terminal or a lost SSH session stop the running test the way its own Ctrl-C would.
+A test that runs out of time is stopped the same way and fails.
+An interrupted run exits with 1 and says how many tests did not run.
+
+With one joint (the default `--robot 1dof`), it runs:
+
+- the suite, in strict mode
+- the path test, in CSP and in impedance mode
+- the bring-up test, in CSP and in impedance mode
+
+With several joints, for example `--robot 2dof` or `--robot 28dof`, it runs only what needs several drives:
+
+- the two-drive tests of the suite, on the robot's first two drives
+- the bring-up test of the whole robot, in CSP and in impedance mode
+- the multi-joint test of [section 6](#6-multi-joint-test)
+
+Prepare the drives as in [section 2](#2-before-any-hardware-test) first.
+Every run moves drives, except the bring-up test.
+
+Run it in the shell of [section 2](#2-before-any-hardware-test):
+
+```bash
+ros2 run synapticon_bringup run_hil_tests.py --network-interface <interface>                   # one drive
+ros2 run synapticon_bringup run_hil_tests.py --network-interface <interface> --robot 28dof     # 28 drives
+```
+
+At the end, on one drive (about 7 minutes), expect this, each line followed by the path of its log:
+
+```text
+===== Summary
+PASS  HIL suite: 53 passed, 4 skipped, skipped: DrivePair.ADisableVoltageOfOneLeavesTheOtherInQuickStop, ...
+PASS  path test, CSP: -
+PASS  path test, impedance: -
+PASS  bring-up 1dof, CSP: -
+PASS  bring-up 1dof, impedance: -
+```
+
+On a multi-drive setup with `--two-drives`, the suite has no skips.
+
+On a robot with several joints, expect:
+
+```text
+===== Summary
+PASS  HIL suite, two-drive tests: 4 passed
+PASS  bring-up 28dof, CSP: -
+PASS  bring-up 28dof, impedance: -
+PASS  multi-joint test 28dof: -
+```
+
+`--only` runs a subset, from `suite`, `path`, `bringup`, `pairs` (the two-drive tests), `joints` (the
+multi-joint test) and `sweep` (the sweep of the multi-joint test alone, to watch every joint move).
+`--two-drives` adds the two-drive tests to the full suite of a one joint run.
+Each run logs to a directory under `~/.ros/log/hil`, which the summary names.
+Ctrl-C or SIGTERM passes on to the running step, which stops as on its own Ctrl-C.
+No later step runs, and the summary marks the step as interrupted.
+
+### Your own bench
+
+The examples expect their drives at ring position 0 and up, each on the example slave_config.
+For any other bench, describe it in a robot definition file of your own and pass that file with `--robot`.
+Every step then takes the drives from it, so a different bench never needs a code change.
+
+Make the two files with the robot generator, outside the package:
+
+```bash
+python3 synapticon_bringup/scripts/generate_example_robot.py --joints 1 --robot my_bench --out-dir ~/bench
+```
+
+Then edit `~/bench/example_my_bench.yaml`:
+
+- `position`: the drive's ring position, as `ethercat slaves` lists it
+- `slave_config`: the drive's own slave_config, as an absolute path
+- under `bus`: `master_id` (ICube HAL) or `network_interface` (SOEM HAL) of your bench.
+  Every step takes the bus settings from here, only the suite always runs at 500 Hz.
+- `max_joint_torque` under `command_defaults`: a torque ceiling in Nm that suits the drive and the test gains below.
+  A joint with its own test gains needs one, or the impedance tests of the suite fail.
+- a section `hil_tests` with the `stiffness` and `damping` the impedance tests move the joint with.
+  Without it they use 15 Nm/rad and 0.5 Nm s/rad, which suit a geared joint.
+  A motor without a gear has far less inertia, so these values make it chatter loudly.
+  Start well below them, for example 2.5 Nm/rad and 0.03 Nm s/rad, and lower the `damping` under
+  `command_defaults` too.
+  When the joints need different values, give each its own under `joints`.
+  A joint without an entry there takes the section's values:
+
+  ```yaml
+  hil_tests:
+    stiffness: 15.0  # Nm/rad, every joint without an entry below
+    damping: 0.5  # Nm s/rad
+    joints:
+      joint_2: {stiffness: 2.5, damping: 0.03}  # the gearless motor
+  ```
+
+The torque ceiling holds in impedance mode. In CSP the drive's own limit applies. For a low limit there, add the
+drive's max torque in Nm at the motor to the `sdo_si:` list of its slave_config, for example
+`- { index: 0x6072, sub_index: 0, type: uint16, si_value: 0.96 }`.
+
+```bash
+ros2 run synapticon_bringup run_hil_tests.py --network-interface <interface> --robot ~/bench/example_my_bench.yaml
+```
+
+With two joints in the file, the two-drive tests use them as the pair, each with its own slave_config.
+So two drives of different models work too: the suite learns the units, the position increment and the brake
+delay of each drive on its own.
+
+## 8. Drive check
 
 `drive_check` talks to one drive through a HAL, with no ros2_control in between.
 Use it first on a new drive or a new slave_config.
@@ -294,6 +572,7 @@ A Ctrl-C during the bring-up ends `hold` and `move` before the drive gets power.
    For `read()` and for `write()` it prints the median, the times that 99 % and 99.9 % of the calls stay below, and
    the worst time.
    No call should fail, and hardly a cycle should come late.
+   [Realtime.md](Realtime.md) shows how to prepare the host for that.
 
 3. Now give the drive power, in CSP. Clear the space around the joint first.
    `hold` keeps the joint where it is: push it, and it pushes back.
@@ -323,12 +602,116 @@ It runs at the real-time priority 60 of the example controller manager, `--rt-pr
 It needs root.
 `drive_check --help` lists every option.
 
-## 5. Troubleshooting
+## 9. Manual tests
+
+### Holding against a load
+
+This test checks that a drive in Quick Stop Active really holds.
+The suite can only infer that from positions.
+Run it once in CSP and once in impedance mode.
+Use a slave_config that sets `0x605A = 6`, as the example config does.
+
+1. Terminal 1, in the shell of [section 2](#2-before-any-hardware-test), launch. For impedance mode, add
+   `impedance:=true`:
+
+   ```bash
+   ros2 launch synapticon_bringup example_synapticon.launch.py robot:=1dof launch_rviz:=false \
+     slave_config:=<your slave_config> network_interface:=<interface>
+   ```
+
+2. Terminal 2, watch the drive state (`device_state_name`, once a second and on every change):
+
+   ```bash
+   ros2 topic echo /drive_controller/drive_status --field drives
+   ```
+
+3. Terminal 3, read the joint's position (`position:` in the output):
+
+   ```bash
+   ros2 topic echo /joint_states --once
+   ```
+
+4. Command that position, so that no old setpoint applies when the drive gets power. In CSP:
+
+   ```bash
+   ros2 topic pub --once /forward_position_controller/commands std_msgs/Float64MultiArray "{data: [<position>]}"
+   ```
+
+   In impedance mode, use a soft spring that a hand can push away, here 0.4 Nm/rad:
+
+   ```bash
+   ros2 topic pub --once /motor_command_controller/commands synapticon_control_msgs/msg/MotorCommand \
+     "{name: [joint_1], position: [<position>], velocity: [0.0], torque_feedforward: [0.0], stiffness: [0.4], damping: [0.1]}"
+   ```
+
+   The spring pulls the joint back only when its torque beats the joint's friction.
+   That torque is the stiffness times the deflection.
+   To change the stiffness, command the current position again with the new value.
+
+5. Enable. Terminal 2 shows Operation Enabled.
+
+   ```bash
+   ros2 service call /drive_controller/set_drive_action synapticon_control_msgs/srv/SetDriveAction "{action: enable, dof_names: []}"
+   ```
+
+6. Push the joint by hand and let go.
+   - Pass in CSP: it does not give way.
+   - Pass in impedance mode: it gives way like a spring and springs back to the commanded position.
+     Push it far, by tens of degrees.
+     With a soft spring, a small deflection pulls too weakly to beat the friction, and the joint stays where it is.
+     On a motor without a gearbox, 0.4 Nm/rad feels limp: with 0.06 Nm of friction, it stops about 9 degrees short.
+     Use the stiffness of the `hil_tests` section there, for example 2.5 Nm/rad.
+   - When it is hard to judge by hand, push while watching
+     `ros2 topic echo /dynamic_joint_states --field interface_values`.
+     In impedance mode, `joint_torque_demand` follows the stiffness times the deflection.
+
+7. Quick stop. Terminal 2 shows Quick Stop Active.
+
+   ```bash
+   ros2 service call /drive_controller/set_drive_action synapticon_control_msgs/srv/SetDriveAction \
+     "{action: quick_stop, dof_names: []}"
+   ```
+
+8. Push the joint again, or hang a load on it, for a few seconds.
+   - Pass in both modes: it behaves as in step 6, and returns to where it stopped.
+   - The state stays Quick Stop Active.
+     A limp joint points to the drive configuration, for example its torque limits, not to the state machine.
+
+9. With the load still on, read the position again and command it as in steps 3 and 4. Then enable again:
+
+   ```bash
+   ros2 topic echo /joint_states --once
+   ros2 topic pub --once /forward_position_controller/commands std_msgs/Float64MultiArray "{data: [<position>]}"
+   ros2 service call /drive_controller/set_drive_action synapticon_control_msgs/srv/SetDriveAction "{action: enable, dof_names: []}"
+   ```
+
+   In impedance mode, command the position with the `MotorCommand` of step 4 instead.
+   Pass: Operation Enabled, and the joint does not jump.
+
+10. Take the load off, or support the joint, while the drive still holds it.
+    A disable removes the power after the ramp, and a joint without a brake would drop the load.
+    Then disable and stop the launch with Ctrl-C:
+
+    ```bash
+    ros2 service call /drive_controller/set_drive_action synapticon_control_msgs/srv/SetDriveAction "{action: disable, dof_names: []}"
+    ```
+
+On a robot with several drives, hold against a load on one joint, and on every joint whose drive model,
+slave_config or mechanics differ.
+The automated tests cover what several drives add: the two-drive tests of the suite
+([section 3](#3-hardware-in-the-loop-suite), step 3), the bring-up of every drive
+([section 5](#5-robot-bring-up-test)), and drive actions, motion and the fault reaction across joints
+([section 6](#6-multi-joint-test)).
+
+## 10. Troubleshooting
 
 Problems show up at one of four moments. Find the moment first, then your symptom.
 
 **Before the bus starts**
 
+- A hardware test started by hand with `launch_test` brings up another robot, or its controllers fail.
+  Another program runs on the same `ROS_DOMAIN_ID`, often a leftover `robot_state_publisher`.
+  Find it with `ros2 node list` and stop it, or use another ID.
 - The network interface cannot be opened.
   The shell has no `CAP_NET_RAW`, or the name is wrong.
   Use the shell of [section 2](#2-before-any-hardware-test), and check the name with `ip link`.
