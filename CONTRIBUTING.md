@@ -12,7 +12,7 @@ The repository ships two dependency manifests:
 | Manifest | Contains | Needed for |
 |---|---|---|
 | `synapticon_ros2_control.repos` | `synapticon_control_msgs` | every build |
-| `ethercat_icube.repos` | `ethercat_driver_ros2`, branch `feat/write-slave-sdo` of the Synapticon fork | the EtherCAT ICube HAL only |
+| `ethercat_icube.repos` | `ethercat_driver_ros2`, the Synapticon fork, pinned to one commit | the EtherCAT ICube HAL only |
 
 A machine without the IgH EtherLab master builds without the EtherCAT ICube HAL.
 The SOEM HAL and the mocks need neither the master nor the driver stack:
