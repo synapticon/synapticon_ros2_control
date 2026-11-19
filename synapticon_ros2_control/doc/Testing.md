@@ -777,7 +777,7 @@ Problems show up at one of four moments. Find the moment first, then your sympto
 - pluginlib reports `Failed to find plugin synapticon_ethercat_icube/SynapticonDrive`.
   The shell lacks the workspace overlay: `source install/setup.bash` and launch again.
 - `/dev/EtherCAT0` refuses access: you have no rights on the device.
-  Use `sudo -E`, a udev rule, or a group. A new group counts only after a new login.
+  Use a udev rule or a group. A new group counts only after a new login.
 - SOEM cannot open the network interface.
   The shell has no `CAP_NET_RAW`, or the name is wrong.
   Use the shell of [section 2](#2-before-any-hardware-test), and check the name with `ip link`.
