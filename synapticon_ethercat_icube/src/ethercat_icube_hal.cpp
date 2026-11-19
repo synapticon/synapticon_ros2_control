@@ -288,6 +288,28 @@ bool EthercatIcubeHal::configure_bus()
 int EthercatIcubeHal::upload(uint16_t position, uint16_t index, uint8_t sub_index, std::vector<uint8_t>& bytes,
                              std::size_t& size, uint32_t& abort_code) const
 {
+  if (bus_active_)
+  {
+    RCLCPP_ERROR(logger(), "SDO read of 0x%04X:%u refused: the bus is active.", index, sub_index);
+    return -1;
+  }
+  return master_upload(position, index, sub_index, bytes, size, abort_code);
+}
+
+int EthercatIcubeHal::download(uint16_t position, uint16_t index, uint8_t sub_index, const std::vector<uint8_t>& bytes,
+                               uint32_t& abort_code) const
+{
+  if (bus_active_)
+  {
+    RCLCPP_ERROR(logger(), "SDO write of 0x%04X:%u refused: the bus is active.", index, sub_index);
+    return -1;
+  }
+  return master_download(position, index, sub_index, bytes, abort_code);
+}
+
+int EthercatIcubeHal::master_upload(uint16_t position, uint16_t index, uint8_t sub_index, std::vector<uint8_t>& bytes,
+                                    std::size_t& size, uint32_t& abort_code) const
+{
   if (!bus_)
   {
     return -1;
@@ -295,8 +317,8 @@ int EthercatIcubeHal::upload(uint16_t position, uint16_t index, uint8_t sub_inde
   return bus_->readSlaveSdo(position, index, sub_index, bytes.data(), bytes.size(), &size, &abort_code);
 }
 
-int EthercatIcubeHal::download(uint16_t position, uint16_t index, uint8_t sub_index, const std::vector<uint8_t>& bytes,
-                               uint32_t& abort_code) const
+int EthercatIcubeHal::master_download(uint16_t position, uint16_t index, uint8_t sub_index,
+                                      const std::vector<uint8_t>& bytes, uint32_t& abort_code) const
 {
   if (!bus_)
   {

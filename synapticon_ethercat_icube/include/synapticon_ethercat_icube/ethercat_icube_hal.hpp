@@ -97,14 +97,18 @@ protected:
   /// Configure the slaves through the master, ready for SDO reads but not active. Virtual so a test can stand in for
   /// the master at bring-up.
   virtual bool configure_bus();
-  /// One SDO upload through the master, only while the bus is configured and not active. A test can answer for the
-  /// drive instead.
+  /// One SDO upload, refused (negative) once the bus is active: nothing cycles the bus during the blocking call, so
+  /// the master would never answer it.
   int upload(uint16_t position, uint16_t index, uint8_t sub_index, std::vector<uint8_t>& bytes, std::size_t& size,
-             uint32_t& abort_code) const override;
-  /// One SDO download through the master, only while the bus is configured and not active. A test can take it
-  /// instead of the drive.
+             uint32_t& abort_code) const final;
+  /// One SDO download, refused (negative) once the bus is active, as upload().
   int download(uint16_t position, uint16_t index, uint8_t sub_index, const std::vector<uint8_t>& bytes,
-               uint32_t& abort_code) const override;
+               uint32_t& abort_code) const final;
+  /// The SDO upload and download through the master. Virtual so a test can answer for the drive instead.
+  virtual int master_upload(uint16_t position, uint16_t index, uint8_t sub_index, std::vector<uint8_t>& bytes,
+                            std::size_t& size, uint32_t& abort_code) const;
+  virtual int master_download(uint16_t position, uint16_t index, uint8_t sub_index, const std::vector<uint8_t>& bytes,
+                              uint32_t& abort_code) const;
   /// Bring the configured slaves to OP and start the cyclic exchange, within readiness_timeout_s. Virtual so a test can
   /// stand in for the master.
   virtual bool activate_bus();

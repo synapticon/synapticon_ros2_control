@@ -176,6 +176,20 @@ public:
     streaming_ = true;
   }
 
+  /// One SDO read and one SDO write of `object` through the HAL. Each true when the drive answered.
+  bool reads(CoeAddress object) const
+  {
+    std::vector<uint8_t> bytes(4);
+    std::size_t size = 0;
+    uint32_t abort_code = 0;
+    return upload(0, object.index, object.subindex, bytes, size, abort_code) == 0;
+  }
+  bool writes(CoeAddress object) const
+  {
+    uint32_t abort_code = 0;
+    return download(0, object.index, object.subindex, { 1, 0, 0, 0 }, abort_code) == 0;
+  }
+
   std::vector<double>& input(std::size_t joint)
   {
     return inputs_[joint];
@@ -208,8 +222,8 @@ protected:
     return operational_;
   }
 
-  int upload(uint16_t position, uint16_t index, uint8_t sub_index, std::vector<uint8_t>& bytes, std::size_t& size,
-             uint32_t& abort_code) const override
+  int master_upload(uint16_t position, uint16_t index, uint8_t sub_index, std::vector<uint8_t>& bytes,
+                    std::size_t& size, uint32_t& abort_code) const override
   {
     const auto found = objects_.find({ position, index, sub_index });
     if (found == objects_.end())
@@ -222,8 +236,8 @@ protected:
     return 0;
   }
 
-  int download(uint16_t position, uint16_t index, uint8_t sub_index, const std::vector<uint8_t>& bytes,
-               uint32_t& /*abort_code*/) const override
+  int master_download(uint16_t position, uint16_t index, uint8_t sub_index, const std::vector<uint8_t>& bytes,
+                      uint32_t& /*abort_code*/) const override
   {
     objects_[{ position, index, sub_index }] = bytes;
     return 0;
@@ -500,6 +514,23 @@ TEST(LostProcessData, IsNotCountedBeforeStreaming)
   hal.input(0)[ec::slot::MODE_DISPLAY] = CSP;
   hal.lose_process_data(true);
   EXPECT_TRUE(hal.start());
+}
+
+/// A blocking SDO access on an active bus would never return, since nothing cycles the bus meanwhile.
+TEST_F(BringUp, RefusesSdoAccessOnceTheBusIsActive)
+{
+  set_up({ joint() });
+  ASSERT_TRUE(hal_.connect());
+  const CoeAddress quick_stop_option = ec::coe::QUICK_STOP_OPTION;
+  EXPECT_TRUE(hal_.reads(quick_stop_option));
+  EXPECT_TRUE(hal_.writes(quick_stop_option));
+  hal_.input(0)[ec::slot::STATUS_WORD] = 0x40;
+  hal_.input(0)[ec::slot::MODE_DISPLAY] = CSP;
+  ASSERT_TRUE(hal_.start());
+  EXPECT_FALSE(hal_.reads(quick_stop_option));
+  EXPECT_FALSE(hal_.writes(quick_stop_option));
+  ASSERT_TRUE(hal_.stop());
+  EXPECT_FALSE(hal_.reads(quick_stop_option)) << "the master stays active until disconnect()";
 }
 
 TEST_F(BringUp, TearDownWhileStreamingStopsTheBus)
