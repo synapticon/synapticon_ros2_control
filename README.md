@@ -289,7 +289,9 @@ Synapticon still calls impedance mode beta.
 | Gear ratio | 0x6091 | |
 | Encoders | motor side for commutation and velocity, output side for position | |
 
-Set the sensor type with OBLAC Drives, or with the IgH master (write, store, read back):
+Set the sensor type with OBLAC Drives, or with the IgH master (write, store, read back).
+Stop the stack and power-cycle the drive first: the store command saves every setting the drive holds, also the
+values that bring-up writes at every start (`sdo:` and `sdo_si:`), which would change the drive's commissioning.
 
 ```bash
 ethercat download -p0 --type uint8 0x2150 1 1             # torque sensor type: Analog Input
