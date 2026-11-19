@@ -76,7 +76,7 @@ Sections 3 to 8 say how to switch each test to the EtherCAT ICube HAL.
 - The drive powered and wired to a network interface of the host.
 - For `ethercat_soem`: no other EtherCAT master on that interface. If the IgH master is installed, the script of
   step 2 stops it.
-- For `ethercat_icube`: the IgH EtherCAT master installed, and access to `/dev/EtherCAT0`.
+- For `ethercat_icube`: the IgH EtherCAT master installed, and access to `/dev/EtherCAT<master_id>` (`/dev/EtherCAT0` for the first master).
   That means root, a udev rule, or a group membership.
 - Room for the joint to turn about one output revolution both ways.
   Nothing attached that a sudden stop could damage.
@@ -776,7 +776,7 @@ Problems show up at one of four moments. Find the moment first, then your sympto
   Find it with `ros2 node list` and stop it, or use another ID.
 - pluginlib reports `Failed to find plugin synapticon_ethercat_icube/SynapticonDrive`.
   The shell lacks the workspace overlay: `source install/setup.bash` and launch again.
-- `/dev/EtherCAT0` refuses access: you have no rights on the device.
+- `/dev/EtherCAT<master_id>` refuses access: you have no rights on the device.
   Use a udev rule or a group. A new group counts only after a new login.
 - SOEM cannot open the network interface.
   The shell has no `CAP_NET_RAW`, or the name is wrong.

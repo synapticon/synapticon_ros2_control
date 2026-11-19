@@ -176,7 +176,7 @@ The SOEM HAL is the default.
 |---|---|---|
 | EtherCAT master | SOEM, a library built with this repository | IgH, a kernel module, installed by hand |
 | Bus address | `network_interface`, for example `eth0` | `master_id` |
-| Rights | the capability `CAP_NET_RAW`, see [above](#223-access-to-the-network-interface) | access to `/dev/EtherCAT0` |
+| Rights | the capability `CAP_NET_RAW`, see [above](#223-access-to-the-network-interface) | access to `/dev/EtherCAT<master_id>` |
 | Command line tool | none | `ethercat` |
 
 For the EtherCAT ICube HAL, use a normal terminal instead of the capability shell, with the IgH master running.
