@@ -139,9 +139,9 @@ public:
   {
     configures_ = false;
   }
-  void fail_bus_activation()
+  void fail_bus_activation(bool fail = true)
   {
-    activates_ = false;
+    activates_ = !fail;
   }
   void fail_exchange()
   {
@@ -337,6 +337,7 @@ TEST_F(BringUp, StartIsRefusedBeforeBringUp)
   EXPECT_FALSE(hal_.start());
 }
 
+/// A bus that does not reach OP in time is released, so a new connect() starts over.
 TEST_F(BringUp, StartFailsWhenTheBusCannotBeActivated)
 {
   set_up({ joint() });
@@ -344,6 +345,15 @@ TEST_F(BringUp, StartFailsWhenTheBusCannotBeActivated)
   hal_.fail_bus_activation();
   EXPECT_FALSE(hal_.start());
   EXPECT_FALSE(hal_.is_streaming());
+  EXPECT_FALSE(hal_.is_connected());
+  EXPECT_FALSE(hal_.start()) << "refused until connect() runs again";
+  EXPECT_EQ(hal_.deactivations(), 0) << "a master that never became active is not deactivated";
+
+  hal_.fail_bus_activation(false);
+  ASSERT_TRUE(hal_.connect());
+  hal_.input(0)[ec::slot::STATUS_WORD] = 0x40;
+  hal_.input(0)[ec::slot::MODE_DISPLAY] = CSP;
+  EXPECT_TRUE(hal_.start());
 }
 
 /// A failed exchange while waiting for the drives stops the bus again.

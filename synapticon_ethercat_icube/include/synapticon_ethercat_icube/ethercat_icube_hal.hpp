@@ -60,11 +60,12 @@ struct EthercatJointConfig : synapticon_hardware::ethercat::JointConfig
 /// @brief The EtherCAT HAL on the IgH master, through ICube's ethercat_driver_ros2.
 ///
 /// Runs ethercat_driver::EthercatBusManager with one SynapticonDrive slave plugin per joint, laid out by the joint's
-/// slave_config. start() activates the bus and exchanges frames until every drive streams a valid statusword, within
-/// readiness_timeout_s. stop() switches the drives off and ends the exchange: the master stays active until
-/// disconnect(), and a later start() resumes the exchange and waits for the drives to return to OP. The PDO buffers
-/// and what works on them come from EthercatPdoHal, the CiA 402 walks, the drive actions and the setpoint forwarding
-/// from Cia402Hal. This class provides the bus.
+/// slave_config. start() activates the bus and exchanges frames until every drive streams a valid statusword, each step
+/// within readiness_timeout_s. A failed activation releases the bus, so the next try starts with connect(). stop()
+/// switches the drives off and ends the exchange: the master stays active until disconnect(), and a later start()
+/// resumes the exchange and waits for the drives to return to OP. The PDO buffers and what works on them come from
+/// EthercatPdoHal, the CiA 402 walks, the drive actions and the setpoint forwarding from Cia402Hal. This class provides
+/// the bus.
 class EthercatIcubeHal : public synapticon_hardware::ethercat::EthercatPdoHal
 {
 public:
@@ -104,7 +105,8 @@ protected:
   /// instead of the drive.
   int download(uint16_t position, uint16_t index, uint8_t sub_index, const std::vector<uint8_t>& bytes,
                uint32_t& abort_code) const override;
-  /// Bring the configured slaves to OP and start the cyclic exchange. Virtual so a test can stand in for the master.
+  /// Bring the configured slaves to OP and start the cyclic exchange, within readiness_timeout_s. Virtual so a test can
+  /// stand in for the master.
   virtual bool activate_bus();
   /// Whether the master reports a complete working counter and every joint's drive online and in OP. Virtual so a test
   /// can stand in for the master.

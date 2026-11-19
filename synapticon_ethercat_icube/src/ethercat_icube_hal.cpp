@@ -124,7 +124,10 @@ bool EthercatIcubeHal::start()
   {
     if (!activate_bus())
     {
-      RCLCPP_ERROR(logger(), "The EtherCAT driver could not bring the bus to OP.");
+      // The master may be half activated, so the bus is released, and only a new connect() can try again.
+      RCLCPP_ERROR(logger(), "The EtherCAT driver could not bring the bus to OP within %.1fs. The bus is released.",
+                   config_.readiness_timeout_s);
+      disconnect();
       return false;
     }
     bus_active_ = true;
@@ -274,7 +277,8 @@ int EthercatIcubeHal::download(uint16_t position, uint16_t index, uint8_t sub_in
 
 bool EthercatIcubeHal::activate_bus()
 {
-  return bus_->activateBus();
+  const auto limit = std::chrono::duration<double>(config_.readiness_timeout_s);
+  return bus_->activateBus(std::chrono::duration_cast<std::chrono::nanoseconds>(limit));
 }
 
 bool EthercatIcubeHal::drives_operational() const
