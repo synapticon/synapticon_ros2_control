@@ -32,7 +32,7 @@ using synapticon_ethercat_icube::EthercatConfig;
 using synapticon_ethercat_icube::EthercatIcubeHal;
 using synapticon_ethercat_icube::EthercatJointConfig;
 using synapticon_hardware::DriveState;
-namespace ec = synapticon_ethercat_icube;
+namespace ec = synapticon_hardware::ethercat;
 using synapticon_hardware::ethercat::CoeAddress;
 
 constexpr int CSP = ec::mode::CSP;
