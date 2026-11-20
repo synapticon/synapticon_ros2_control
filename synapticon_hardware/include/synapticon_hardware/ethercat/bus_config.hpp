@@ -30,10 +30,14 @@ struct BusConfig
   /// tries. The IgH master answers no read of a drive while it reads that drive's object dictionary after a rescan.
   int sdo_read_attempts{ 5 };
   double sdo_retry_wait_s{ 1.0 };
+  /// Cycles in a row without a complete exchange (no frame back, or a short working counter) after which read()
+  /// fails, until a complete exchange comes back. Fewer are bridged with the last data received. Only a cycle whose
+  /// frame was sent counts.
+  int max_bad_cycles{ 10 };
 };
 
-/// @brief Read `control_frequency`, `readiness_timeout_s`, `quick_stop_hold`, `sdo_read_attempts` and
-/// `sdo_retry_wait_s` from `hardware`. Absent ones keep the defaults of BusConfig.
+/// @brief Read `control_frequency`, `readiness_timeout_s`, `quick_stop_hold`, `sdo_read_attempts`, `sdo_retry_wait_s`
+/// and `max_bad_cycles` from `hardware`. Absent ones keep the defaults of BusConfig.
 /// @throws std::invalid_argument for a number that is not above 0, a count below 1, or a flag that is not one.
 BusConfig bus_from(const ParameterMap& hardware);
 

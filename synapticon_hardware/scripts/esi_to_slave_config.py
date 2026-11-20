@@ -209,6 +209,16 @@ VARIANTS = {
     CSP: Variant(CSP, "for CSP", ("units", "startup")),
 }
 
+# Settings that do not depend on the device.
+FIXED_SETTINGS = (
+    ("auto_fault_reset", "false", None),
+    (
+        "auto_state_transitions",
+        "false",
+        "the drive is powered only on request, through the controlword",
+    ),
+)
+
 # The distributed clock activation when the ESI file names none.
 DEFAULT_ASSIGN_ACTIVATE = 0x0300
 
@@ -488,6 +498,7 @@ def header_lines(
             f"{device.assign_activate:#06x}",
             "distributed clock activation from the ESI file",
         ),
+        *FIXED_SETTINGS,
     ]
     for key, value, note in settings:
         lines.append(f"{key}: {value}" + (f"  # {note}" if note else ""))

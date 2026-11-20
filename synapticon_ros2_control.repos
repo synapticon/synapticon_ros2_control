@@ -1,6 +1,10 @@
-# Source dependencies that are not released ROS 2 packages. Import them into the workspace before rosdep:
+# Source dependencies that are not released ROS 2 packages. Every build needs them. Import them into the
+# workspace before rosdep:
 #
 #   vcs import src < src/synapticon_ros2_control/synapticon_ros2_control.repos
+#
+# The EtherCAT ICube HAL additionally needs the driver stack from ethercat_icube.repos, and is built only with
+# SYNAPTICON_HAL_ETHERCAT_ICUBE=ON.
 repositories:
   synapticon_control_msgs:
     type: git

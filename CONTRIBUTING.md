@@ -7,8 +7,15 @@ For how the packages fit together, read [doc/Design.md](synapticon_ros2_control/
 ## Build
 
 Build in a colcon workspace, never from inside the repository.
-The manifest `synapticon_ros2_control.repos` lists the source dependencies that are not released ROS 2 packages
-(`synapticon_control_msgs`):
+The repository ships two dependency manifests:
+
+| Manifest | Contains | Needed for |
+|---|---|---|
+| `synapticon_ros2_control.repos` | `synapticon_control_msgs` | every build |
+| `ethercat_icube.repos` | `ethercat_driver_ros2`, the Synapticon fork, pinned to one commit | the EtherCAT ICube HAL only |
+
+A machine without the IgH EtherLab master builds without the EtherCAT ICube HAL.
+The SOEM HAL and the mocks need neither the master nor the driver stack:
 
 ```bash
 source /opt/ros/jazzy/setup.bash
@@ -19,6 +26,22 @@ vcs import src < src/synapticon_ros2_control/synapticon_ros2_control.repos
 rosdep install --from-paths src --ignore-src -r -y
 colcon build --symlink-install --cmake-args -DCMAKE_BUILD_TYPE=Release
 ```
+
+`synapticon_ethercat_icube` then builds nothing.
+
+With the IgH master installed, set `SYNAPTICON_HAL_ETHERCAT_ICUBE=ON` and import the driver stack as well.
+The variable must be set in the shell that runs rosdep and colcon.
+It switches both the conditional dependencies of `synapticon_ethercat_icube` and its CMake option of the same name.
+
+```bash
+export SYNAPTICON_HAL_ETHERCAT_ICUBE=ON
+vcs import src < src/synapticon_ros2_control/ethercat_icube.repos
+rosdep install --from-paths src --ignore-src -r -y
+colcon build --symlink-install --cmake-clean-cache --cmake-args -DCMAKE_BUILD_TYPE=Release
+```
+
+CMake keeps the value of the first build, and colcon does not reconfigure a package when only the variable changes.
+`--cmake-clean-cache` makes CMake read the variable again. It is needed once, in the first build after a switch.
 
 ### Always build optimised
 
@@ -31,6 +54,7 @@ Check the flags before you measure anything:
 ```bash
 grep CXX_FLAGS build/synapticon_hardware/CMakeFiles/synapticon_hardware.dir/flags.make
 grep CXX_FLAGS build/synapticon_ethercat_soem/CMakeFiles/synapticon_ethercat_soem.dir/flags.make
+grep CXX_FLAGS build/synapticon_ethercat_icube/CMakeFiles/synapticon_ethercat_icube.dir/flags.make
 ```
 
 Expected for `Release`:
@@ -46,7 +70,7 @@ Changing the build type of an existing build directory may need a clean rebuild 
 Unit tests and the launch tests on the mock HAL need no hardware:
 
 ```bash
-colcon test --packages-select synapticon_hardware synapticon_ethercat_soem synapticon_controllers synapticon_bringup synapticon_description
+colcon test --packages-select synapticon_hardware synapticon_ethercat_icube synapticon_ethercat_soem synapticon_controllers synapticon_bringup synapticon_description
 colcon test-result --verbose
 ```
 

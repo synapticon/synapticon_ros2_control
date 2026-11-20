@@ -13,6 +13,7 @@ Read it before you add a feature, a HAL or a controller.
  SynapticonHalI               the HAL: talks to the drives
      |
  EthercatSoemHal              real drives on EtherCAT, through the SOEM library
+ EthercatIcubeHal             real drives on EtherCAT, through ICube's ethercat_driver_ros2 and the IgH master
  MockHal, MockCia402Hal       no drives, or simulated ones
 ```
 
@@ -57,6 +58,11 @@ speed and position, and writes the controlword and the setpoints.
 
 Each HAL with its own dependencies sits in its own package.
 `EthercatSoemHal` is in `synapticon_ethercat_soem`, which links the SOEM library of `soem_source`.
+`EthercatIcubeHal` is in `synapticon_ethercat_icube`, together with its drive plugin `SynapticonDrive`.
+`SynapticonDrive` is a plugin only because ICube's EtherCAT driver loads its slaves by name: inside the HAL, the
+driver's `EthercatBusManager` makes one per drive, as an `ethercat_interface::EcSlave`, from the plugin name, the bus
+address, the slave_config and the buffer layout that the HAL hands it.
+`synapticon_ethercat_icube` is built only with `SYNAPTICON_HAL_ETHERCAT_ICUBE=ON`. Without it, the other HALs remain.
 What every EtherCAT HAL shares is in `synapticon_hardware`, without an EtherCAT dependency: the base class
 `EthercatPdoHal` with the PDO buffers and the bring-up checks, the slave_config format and its generator, the robot
 definition and the hardware tests.
@@ -66,6 +72,7 @@ A HAL is named after how it reaches the drives, then the library, then `Hal`:
 | How the drives are reached | HAL | `hal` |
 |---|---|---|
 | EtherCAT through the SOEM library | `EthercatSoemHal` | `ethercat_soem` |
+| EtherCAT through ICube's `ethercat_driver_ros2` | `EthercatIcubeHal` | `ethercat_icube` |
 | No drives | `MockHal` | `mock` |
 | Simulated CiA 402 drives | `MockCia402Hal` | `mock_cia402` |
 

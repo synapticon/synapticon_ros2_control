@@ -50,7 +50,7 @@ struct EthercatBusHealth
 {
   bool link_up{ false };                 ///< Whether the network port has a carrier.
   uint32_t slaves_responding{ 0 };       ///< How many slaves the master finds.
-  uint8_t al_states{ 0 };                ///< `al_state` flags of every slave, ORed.
+  uint8_t al_states{ 0 };                ///< `al_state` flags of every slave the HAL runs, ORed.
   uint32_t domain_working_counter{ 0 };  ///< Working counter of the last frame.
   uint8_t domain_wc_state{ 0 };          ///< What that counter means, a `wc_state` value.
 };

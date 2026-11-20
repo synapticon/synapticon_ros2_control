@@ -1,0 +1,10 @@
+<library path="synapticon_ethercat_icube">
+  <class name="synapticon_ethercat_icube/SynapticonDrive"
+         type="synapticon_ethercat_icube::SynapticonDrive"
+         base_class_type="ethercat_interface::EcSlave">
+    <description>
+      A SOMANET drive on the EtherCAT driver: its generic CiA 402 drive, with the target position also passed on
+      in the vendor impedance mode. The slave_config of each drive names this plugin.
+    </description>
+  </class>
+</library>

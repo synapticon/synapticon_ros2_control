@@ -7,17 +7,25 @@
 """
 Run the hardware-in-the-loop tests one after the other and print a summary.
 
-The tests ENERGISE AND MOVE the drive at the ring position of joint_1 (see the HIL suite and the
-path test). Run it with the joint free to turn about one revolution and the ROS stack not running,
-inside net_raw_shell.sh --interface <if>:
+The tests ENERGISE AND MOVE the drives. Run it with the joints free to turn about one revolution and
+the ROS stack not running. On the SOEM HAL (the default), inside net_raw_shell.sh --interface <if>:
 
     ros2 run synapticon_bringup run_hil_tests.py --network-interface <if>                  # one drive
     ros2 run synapticon_bringup run_hil_tests.py --network-interface <if> --robot 28dof    # many drives
 
-Steps: the HIL suite of the EtherCAT HAL in strict mode, the ros2_control path test in CSP and in
-impedance mode, and the bring-up test of the example robot in both modes. Every step runs on the HAL
-chosen with --hal. Each step's output goes to the console and to a log file. The exit code is 0 when
-every step passed.
+On the EtherCAT ICube HAL, with the IgH master running:
+
+    ros2 run synapticon_bringup run_hil_tests.py --hal ethercat_icube [--robot 2dof]
+
+The steps depend on the robot. With one joint (the default 1dof): the HIL suite of the EtherCAT HAL in
+strict mode, the ros2_control path test in CSP and in impedance mode, and the bring-up test in both
+modes. With several joints, only what one drive cannot show: the suite's two-drive tests (the
+robot's first two drives), the bring-up of every drive in both modes, and the multi-joint test (a soak
+of the control loop, drive actions on one named joint, a move of all joints at once, a sweep that moves one
+joint after the other, the fault reaction across joints). `--only sweep` runs just the sweep, to watch
+every joint move. --robot also takes a robot definition file, for a bench of your own: every step
+then takes the ring positions, slave_configs and torque ceilings from it. Every step runs on the HAL
+chosen with --hal. Each step's output goes to the console and to a log file. The exit code is 0 when every step passed.
 """
 
 import argparse
@@ -57,6 +65,7 @@ class Step:
 
 # The package and the HIL suite executable of each EtherCAT HAL.
 SUITES = {
+    "ethercat_icube": ("synapticon_ethercat_icube", "ethercat_icube_hil_test"),
     "ethercat_soem": ("synapticon_ethercat_soem", "ethercat_soem_hil_test"),
 }
 

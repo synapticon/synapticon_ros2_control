@@ -52,14 +52,15 @@ std::vector<double> initial_outputs()
   return out;
 }
 
-/// True when the tpdo of the slave_config at `path` has a channel with the state_interface `name`.
-bool maps_state(const std::string& path, std::string_view name)
+/// True when the `pdos` list (tpdo or rpdo) of the slave_config at `path` has a channel whose `key` (state_interface
+/// or command_interface) is `name`.
+bool maps_channel(const std::string& path, const char* pdos, const char* key, std::string_view name)
 {
-  for (const auto& pdo : YAML::LoadFile(path)["tpdo"])
+  for (const auto& pdo : YAML::LoadFile(path)[pdos])
   {
     for (const auto& channel : pdo["channels"])
     {
-      if (channel["state_interface"] && channel["state_interface"].as<std::string>() == name)
+      if (channel[key] && channel[key].as<std::string>() == name)
       {
         return true;
       }
@@ -102,11 +103,20 @@ bool EthercatPdoHal::set_up_drives(const std::vector<JointConfig>& joints, bool 
     {
       slave_config_units_.push_back(read_slave_config_units(joint.slave_config_file));
       // The ramped stops wait for the joint to stand still, which a joint without velocity feedback always seems to.
-      if (joint.energize && !maps_state(joint.slave_config_file, "velocity"))
+      if (joint.energize && !maps_channel(joint.slave_config_file, "tpdo", "state_interface", "velocity"))
       {
         RCLCPP_ERROR(log(),
                      "Joint '%s' gets power, but its slave_config maps no velocity state (0x606C, state_interface "
                      "velocity). The HAL needs it to tell when the joint stands still.",
+                     joint.name.c_str());
+        return false;
+      }
+      // Only the controlword of the HAL switches a drive on and off.
+      if (joint.energize && !maps_channel(joint.slave_config_file, "rpdo", "command_interface", CONTROL_WORD_CHANNEL))
+      {
+        RCLCPP_ERROR(log(),
+                     "Joint '%s' gets power, but its slave_config does not route the controlword (0x6040, "
+                     "command_interface control_word). Without it the HAL cannot switch the drive on or off.",
                      joint.name.c_str());
         return false;
       }

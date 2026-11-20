@@ -71,8 +71,9 @@ Usage: drive_check <read|timing|hold|move> [--config <slave_config.yaml>] [optio
   hold     ENERGISES: enable and hold the present position
   move     ENERGISES AND MOVES: move back and forth by --travel-deg at 1 rad/s
 
-  --hal NAME         HAL plugin: ethercat_soem (default) or mock_cia402
+  --hal NAME         HAL plugin: ethercat_soem (default), ethercat_icube or mock_cia402
   --config PATH      the drive's slave_config (default: the bundled example, which fits one drive model only)
+  --master-id N      IgH master index, for ethercat_icube (default 0)
   --network-interface IF   network interface of the drive, required by ethercat_soem
   --ring-position N  place of the drive on the ring, counted from 0 (default 0)
   --duration S       run time, 0 until Ctrl-C or SIGTERM (default 10)
@@ -94,6 +95,7 @@ struct Options
   std::string check;
   std::string hal{ "ethercat_soem" };
   std::string config;
+  std::string master_id;
   std::string network_interface;
   uint16_t ring_position{ 0 };
   double duration{ 10.0 };
@@ -155,6 +157,10 @@ std::optional<Options> parse_options(int argc, char** argv)
   const std::map<std::string, std::function<void(const std::string&)>> valued = {
     { "--hal", [&](const std::string& v) { o.hal = v; } },
     { "--config", [&](const std::string& v) { o.config = v; } },
+    { "--master-id",
+      [&](const std::string& v) {
+        o.master_id = std::to_string(read_whole_number_in("--master-id", v, 0, UINT32_MAX));
+      } },
     { "--network-interface", [&](const std::string& v) { o.network_interface = v; } },
     { "--ring-position",
       [&](const std::string& v) {
@@ -262,6 +268,10 @@ synapticon_hardware::HalConfig hal_config(const Options& o, int mode_of_operatio
   synapticon_hardware::HalConfig config;
   auto& hardware = config.hardware_parameters;
   hardware["control_frequency"] = std::to_string(CYCLE_HZ);
+  if (!o.master_id.empty())
+  {
+    hardware["master_id"] = o.master_id;
+  }
   if (!o.network_interface.empty())
   {
     hardware["network_interface"] = o.network_interface;
@@ -499,6 +509,11 @@ void print_durations(const std::string& call, std::vector<double> samples)
 
 int check_timing(SynapticonHalI& hal, const Options& o)
 {
+  // The per-cycle INFO logs of the EtherCAT driver below ethercat_icube would land inside the timed calls.
+  if (rcutils_logging_set_logger_level("EthercatDriver", RCUTILS_LOG_SEVERITY_WARN) != RCUTILS_RET_OK)
+  {
+    std::cerr << "Could not quiet the EtherCAT driver logs, they may inflate the times\n";
+  }
   const double seconds = o.duration > 0.0 ? o.duration : 600.0;
   std::vector<double> read_us, write_us;
   read_us.reserve(static_cast<std::size_t>(seconds * CYCLE_HZ) + 1);

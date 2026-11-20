@@ -10,8 +10,9 @@ It needs no kernel module and no EtherCAT master installed on the machine.
 | hardware tests | the HIL suite, see [doc/Testing.md](../synapticon_ros2_control/doc/Testing.md) |
 
 Each drive is described by its slave_config, which `esi_to_slave_config.py` of `synapticon_hardware` generates.
-The `<hardware>` parameter (or the robot definition's `bus` entry) `network_interface` names the network interface
-the drives are wired to.
+The HAL reads the same robot definition and slave_config files as the EtherCAT ICube HAL.
+In place of the IgH master index, the `<hardware>` parameter (or the robot definition's `bus` entry)
+`network_interface` names the network interface the drives are wired to.
 With the example launch, in a shell with the capability of the next section:
 
 ```bash

@@ -5,7 +5,7 @@
     <description>
       The ros2_control hardware for Synapticon SOMANET drives, the same for every mode and any number of joints.
       It exports what the URDF declares and connects it to the drives through the HAL that the hardware parameter
-      hal names: ethercat_soem for drives on EtherCAT, mock or mock_cia402 without hardware.
+      hal names: ethercat_soem or ethercat_icube for drives on EtherCAT, mock or mock_cia402 without hardware.
     </description>
   </class>
 </library>

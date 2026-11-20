@@ -7,7 +7,7 @@
 /// @file
 /// @brief Counting the process data cycles in a row that came back incomplete.
 
-namespace synapticon_ethercat_soem
+namespace synapticon_hardware::ethercat
 {
 
 /// @brief The frame in flight, and the cycles in a row without complete process data while the count runs.
@@ -47,4 +47,4 @@ private:
   int bad_{ 0 };
 };
 
-}  // namespace synapticon_ethercat_soem
+}  // namespace synapticon_hardware::ethercat

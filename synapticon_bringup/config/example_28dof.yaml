@@ -13,6 +13,7 @@
 #   invert: true      flip position, velocity and effort, for a drive mounted the other way round
 
 bus:
+  master_id: 0  # IgH master, for ethercat_icube
   control_frequency: 500  # Hz, equal to the update_rate of the controller manager
   readiness_timeout_s: 20.0  # the time start() gives every drive to send valid data
   # network_interface: eth0  # network interface of the drives, for ethercat_soem

@@ -8,6 +8,8 @@
 vendor_id: 0x000022d2
 product_id: 0x00000302
 assign_activate: 0x0300  # distributed clock activation from the ESI file
+auto_fault_reset: false
+auto_state_transitions: false  # the drive is powered only on request, through the controlword
 
 # Startup SDOs are written in PRE-OP at every bring-up. Check each value for your drive and your machine.
 # Each value is read back after the write and must match, unless its entry has 'verify: false'. That is for

@@ -7,11 +7,11 @@
 
 #include <gtest/gtest.h>
 
-#include "bad_cycle_count.hpp"
+#include "synapticon_hardware/ethercat/bad_cycle_count.hpp"
 
 namespace
 {
-using synapticon_ethercat_soem::BadCycleCount;
+using synapticon_hardware::ethercat::BadCycleCount;
 using Change = BadCycleCount::Change;
 
 /// One exchange: a frame goes out and comes back `complete` or not.

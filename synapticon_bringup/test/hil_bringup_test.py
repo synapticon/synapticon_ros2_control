@@ -14,9 +14,9 @@ definition on the bus. It never enables a drive, so nothing moves:
 SYNAPTICON_HIL_ROBOT selects the example robot (default 1dof, for example 28dof) or names a
 robot definition file, and
 SYNAPTICON_HIL_HAL the HAL (default ethercat_soem, with its network interface in
-SYNAPTICON_HIL_NETWORK_INTERFACE). colcon test runs it on simulated drives (mock_cia402). CSP by
-default, SYNAPTICON_HIL_IMPEDANCE=1 brings the robot up in impedance mode, where the EtherCAT HAL
-also checks the firmware version and the torque sensor of every drive.
+SYNAPTICON_HIL_NETWORK_INTERFACE, or ethercat_icube). colcon test runs it on simulated drives
+(mock_cia402). CSP by default, SYNAPTICON_HIL_IMPEDANCE=1 brings the robot up in impedance mode,
+where the EtherCAT HAL also checks the firmware version and the torque sensor of every drive.
 SYNAPTICON_HIL_SLAVE_CONFIG selects the slave_config (default: the installed example config).
 
 Checks: every drive of the robot definition streams, the bring-up prints no framed warning block,

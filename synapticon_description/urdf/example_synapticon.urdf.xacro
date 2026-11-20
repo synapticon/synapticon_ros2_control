@@ -23,8 +23,8 @@
   <xacro:arg name="impedance" default="false"/>
   <!-- slave_config for the joints whose entry names none. -->
   <xacro:arg name="default_slave_config" default=""/>
-  <!-- The HAL below the hardware interface: ethercat_soem for drives on EtherCAT, mock (commands come back as
-       states) or mock_cia402 (simulated CiA 402 drives). -->
+  <!-- The HAL below the hardware interface: ethercat_soem or ethercat_icube for drives on EtherCAT, mock (commands
+       come back as states) or mock_cia402 (simulated CiA 402 drives). -->
   <xacro:arg name="hal" default="ethercat_soem"/>
   <!-- For ethercat_soem: the network interface of the drives. Empty takes the one of the robot definition. -->
   <xacro:arg name="network_interface" default=""/>

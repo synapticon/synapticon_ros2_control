@@ -1,0 +1,10 @@
+# The EtherCAT driver stack behind the EtherCAT ICube HAL, which needs the IgH EtherLab master at build
+# and run time. For a build with that HAL, import it after synapticon_ros2_control.repos:
+#
+#   vcs import src < src/synapticon_ros2_control/synapticon_ros2_control.repos
+#   vcs import src < src/synapticon_ros2_control/ethercat_icube.repos
+repositories:
+  ethercat_driver_ros2:
+    type: git
+    url: https://github.com/synapticon/ethercat_driver_ros2.git
+    version: 580b1b8ee500c6899237ef99aabf1432af6dbb49

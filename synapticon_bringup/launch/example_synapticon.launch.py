@@ -11,8 +11,9 @@
 # Without hardware, on simulated drives:
 #   ros2 launch synapticon_bringup example_synapticon.launch.py robot:=geared hal:=mock_cia402
 #
-# On real drives, in impedance mode:
+# On real drives, in impedance mode, through the SOEM HAL or through the EtherCAT ICube HAL:
 #   ros2 launch synapticon_bringup example_synapticon.launch.py impedance:=true network_interface:=<interface>
+#   ros2 launch synapticon_bringup example_synapticon.launch.py impedance:=true hal:=ethercat_icube
 #
 # Then move a joint, in CSP with one position per joint in rad:
 #   ros2 topic pub --once /forward_position_controller/commands std_msgs/msg/Float64MultiArray "{data: [1.2]}"
@@ -95,7 +96,7 @@ def _declarations():
             "hal",
             "ethercat_soem",
             None,
-            "ethercat_soem for real drives, mock or mock_cia402 for none.",
+            "ethercat_soem or ethercat_icube for real drives, mock or mock_cia402 for none.",
         ),
         (
             "network_interface",

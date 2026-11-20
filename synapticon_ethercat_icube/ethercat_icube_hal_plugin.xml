@@ -1,0 +1,9 @@
+<library path="synapticon_ethercat_icube">
+  <class name="ethercat_icube"
+         type="synapticon_ethercat_icube::EthercatIcubeHal"
+         base_class_type="synapticon_hardware::SynapticonHalI">
+    <description>
+      SOMANET drives on EtherCAT, through the IgH master and ICube's ethercat_driver_ros2.
+    </description>
+  </class>
+</library>

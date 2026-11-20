@@ -23,13 +23,14 @@ The appendix holds the details of the suite: what it checks, and how the drive b
 
 ## 1. Unit and mock launch tests
 
-The unit tests need no drive and no bus.
+The unit tests need no drive and no bus, and no IgH master for the build without it.
 They check the CiA 402 state machine, the drive actions, the HALs, the SOEM HAL's process image, the ros2_control
 layer, and the example launch on the mock HAL.
 
 They also cover failures that a bench rarely shows:
 
-- bring-up against a scripted drive: old firmware, no torque sensor, objects that cannot be read
+- bring-up against a scripted drive: old firmware, no torque sensor, objects that cannot be read, and for the
+  EtherCAT ICube HAL a bus that does not activate
 - `Cia402Hal` with drives that fault, never come up, or sit on a failing bus
 - the controllers with missing parameters or interfaces
 - `esi_to_slave_config.py`: for a small ESI file written inline in the test, it must write the bundled example
@@ -46,7 +47,7 @@ So a change to the suite or to the drive logic shows up before you go to the ben
    ```bash
    source /opt/ros/jazzy/setup.bash
    colcon build --symlink-install --cmake-args -DCMAKE_BUILD_TYPE=Release
-   colcon test --packages-select synapticon_hardware synapticon_ethercat_soem synapticon_controllers synapticon_bringup synapticon_description
+   colcon test --packages-select synapticon_hardware synapticon_ethercat_icube synapticon_ethercat_soem synapticon_controllers synapticon_bringup synapticon_description
    colcon test-result --verbose
    ```
 
@@ -58,22 +59,30 @@ So a ROS stack elsewhere on the network never gets its requests, and cannot dist
 
 ## 2. Before any hardware test
 
-All hardware tests run on the SOEM HAL, `ethercat_soem`.
-SOEM is an EtherCAT master that runs as a normal program.
-It needs a shell with the raw socket capability.
+All hardware tests run on one of the two EtherCAT HALs:
+
+- `ethercat_soem`, an EtherCAT master that runs as a normal program, the default.
+  It needs a shell with the raw socket capability.
+- `ethercat_icube`, on the IgH master, see [With the EtherCAT ICube HAL](#with-the-ethercat-icube-hal)
+
+Sections 3 to 8 say how to switch each test to the EtherCAT ICube HAL.
 
 ### What you need
 
 - A SOMANET drive on firmware 5.6.11 or newer.
   For a joint in impedance mode, bring-up refuses older firmware, or firmware it cannot read.
   For the other modes it only warns.
+  [FirmwareUpdate.md](FirmwareUpdate.md) shows how to update.
 - The drive powered and wired to a network interface of the host.
-- No other EtherCAT master on that interface. If the IgH master is installed, the script of step 2 stops it.
+- For `ethercat_soem`: no other EtherCAT master on that interface. If the IgH master is installed, the script of
+  step 2 stops it.
+- For `ethercat_icube`: the IgH EtherCAT master installed, and access to `/dev/EtherCAT<master_id>` (`/dev/EtherCAT0` for the first master).
+  That means root, a udev rule, or a group membership.
 - Room for the joint to turn about one output revolution both ways.
   Nothing attached that a sudden stop could damage.
   Keep a hand near the power switch or the e-stop.
 - For the impedance tests: a torque sensor configured on the drive, so `0x2150:1` (sensor type) is not 0.
-- The workspace built with tests (the default), in `Release`.
+- The workspace built with the HAL under test and with tests (the default), in `Release`.
 
 ### Steps
 
@@ -93,7 +102,7 @@ It needs a shell with the raw socket capability.
    With `--interface`, the script does three things.
    It stops the IgH master if it runs, brings the interface up, and sets `SYNAPTICON_HIL_NETWORK_INTERFACE` for the
    tests.
-   Run the hardware tests in this shell, and `exit` it when you are done.
+   Run the SOEM tests in this shell, and `exit` it when you are done.
    If the script stopped the IgH master, it starts it again when the shell ends.
 
 3. Check that the build is optimised.
@@ -103,6 +112,7 @@ It needs a shell with the raw socket capability.
    ```bash
    grep CXX_FLAGS build/synapticon_hardware/CMakeFiles/synapticon_hardware.dir/flags.make
    grep CXX_FLAGS build/synapticon_ethercat_soem/CMakeFiles/synapticon_ethercat_soem.dir/flags.make
+   grep CXX_FLAGS build/synapticon_ethercat_icube/CMakeFiles/synapticon_ethercat_icube.dir/flags.make
    ```
 
    Each line should contain `-O3 -DNDEBUG`.
@@ -119,10 +129,36 @@ It needs a shell with the raw socket capability.
 
 When a step fails, see [Troubleshooting](#10-troubleshooting).
 
+### With the EtherCAT ICube HAL
+
+The EtherCAT ICube HAL runs on the IgH master, so it needs no raw socket shell.
+Use a normal terminal with the workspace sourced in place of step 2, not the shell of step 2: that shell stops the
+IgH master.
+
+1. Start the master, and check that it sees the drive:
+
+   ```bash
+   sudo systemctl start ethercat
+   ethercat slaves -v
+   ```
+
+   Expect your drive with its product code, its revision and the state `PREOP`.
+   The Circulo of the example slave_config has the product code `0x00000302`.
+   Note the alias and the ring position.
+   For one drive directly on the network interface, both are usually `0`.
+
+2. Source the workspace, then go on with steps 3 and 4 above:
+
+   ```bash
+   source /opt/ros/jazzy/setup.bash
+   source install/setup.bash
+   ```
+
 ## 3. Hardware-in-the-loop suite
 
-`ethercat_soem_hil_test` runs `EthercatSoemHal` directly at 500 Hz, without ros2_control.
-It holds two kinds of tests:
+`ethercat_soem_hil_test` runs `EthercatSoemHal` directly at 500 Hz, the default bus rate, without ros2_control.
+`ethercat_icube_hil_test` does the same with `EthercatIcubeHal`.
+They hold two kinds of tests:
 
 - the drive action suite, which works on any HAL and also runs on simulated drives in `colcon test`
 - the EtherCAT tests, which bring the drive up with one change each and check what bring-up reports
@@ -148,7 +184,7 @@ Ctrl-C or SIGTERM fails the running test the same way, then the suite releases t
 
    A run takes about five minutes.
    The usual gtest options work, for example `--gtest_filter=*QuickStop*`.
-   The timeout ends a bring-up that never returns.
+   The timeout ends a bring-up that never returns (see [Releasing the bus](#releasing-the-bus)).
    Call the binary directly as above, because `ros2 run` does not pass the timeout's signal on.
 
 2. With one drive, expect:
@@ -165,7 +201,19 @@ Ctrl-C or SIGTERM fails the running test the same way, then the suite releases t
    A failed test is listed under `[  FAILED  ]`.
    When the watchdog trips, it prints `WATCHDOG: travelled more than ...` with the statusword of that moment.
 
-3. With a second drive of the same model on the bus, also run the two-drive tests:
+   For the EtherCAT ICube HAL, run its binary the same way, in the terminal of [With the EtherCAT ICube HAL](#with-the-ethercat-icube-hal):
+
+   ```bash
+   SYNAPTICON_HIL_STRICT=1 timeout -s KILL 900 \
+     "$(ros2 pkg prefix synapticon_ethercat_icube)/lib/synapticon_ethercat_icube/ethercat_icube_hil_test"
+   ```
+
+   Expect the same, with 52 passed: the SOEM HAL has one bring-up test more.
+   A test stuck in the bus activation of the EtherCAT driver ignores SIGINT and SIGTERM, so keep `-s KILL`.
+
+3. With a second drive on the bus, also run the two-drive tests.
+   A drive of another model needs its own slave_config, given in a robot definition (see
+   [Your own bench](#your-own-bench)):
 
    ```bash
    timeout -s KILL 900 "$(ros2 pkg prefix synapticon_ethercat_soem)/lib/synapticon_ethercat_soem/ethercat_soem_hil_test" \
@@ -175,6 +223,7 @@ Ctrl-C or SIGTERM fails the running test the same way, then the suite releases t
    Expect 4 passed.
    Here the watchdog cuts both drives when either one strays too far from its commanded position.
    With only one drive on the bus, `--two-drives` fails the bring-up at once, before any drive gets power.
+   For the EtherCAT ICube HAL, use `ethercat_icube_hil_test` of `synapticon_ethercat_icube` in the same way.
 
 Without `SYNAPTICON_HIL_STRICT=1`, an impedance test skips when the impedance bring-up fails.
 That keeps a bench without a torque sensor usable.
@@ -191,9 +240,10 @@ Write it down, and look into it when it comes back.
 
 | Variable | Default | Meaning |
 |---|---|---|
-| `SYNAPTICON_HIL_ROBOT` | unset | robot definition of the bench: its first joint is the bench drive, its second the second drive |
-| `SYNAPTICON_HIL_SLAVE_CONFIG` | the installed example slave_config | base slave_config |
-| `SYNAPTICON_HIL_NETWORK_INTERFACE` | unset | network interface of the drives, required |
+| `SYNAPTICON_HIL_ROBOT` | unset | robot definition file of the bench, see [Your own bench](#your-own-bench). Its first joint is the drive under test, its second the second drive. Its `bus` section sets the bus, except `control_frequency`: the suite always runs at 500 Hz |
+| `SYNAPTICON_HIL_SLAVE_CONFIG` | the installed example slave_config | base slave_config of a drive that names none |
+| `SYNAPTICON_HIL_NETWORK_INTERFACE` | the robot file's `network_interface` | network interface of the drives, needed by `ethercat_soem_hil_test` |
+| `SYNAPTICON_HIL_MASTER` | the robot file's `master_id`, or `0` | IgH master index, `ethercat_icube_hil_test` only |
 | `SYNAPTICON_HIL_ALIAS` | `0` | slave alias, only `0` is supported |
 | `SYNAPTICON_HIL_POSITION` | `0`, or the robot file's | ring position, overrides the robot file |
 | `SYNAPTICON_HIL_POSITION_2` | the robot file's second joint, or `SYNAPTICON_HIL_POSITION` + 1 | ring position of the second drive, for `--two-drives` |
@@ -262,7 +312,8 @@ the master.
 
 `hil_ros2_control_test.py` runs the whole path a user runs: the example launch, `SynapticonSystemInterface` and the
 controllers.
-It brings up the 1 DOF example on the `ethercat_soem` HAL and then:
+It brings up the 1 DOF example on the HAL of `SYNAPTICON_HIL_HAL` (`ethercat_soem` by default, or `ethercat_icube`) and
+then:
 
 1. enables the drive
 2. ramps 0.3 rad away
@@ -308,6 +359,7 @@ Settings:
 - `SYNAPTICON_HIL_NETWORK_INTERFACE` names the network interface of the drives, and becomes the launch argument
   `network_interface`. The shell of [section 2](#2-before-any-hardware-test) sets it.
 - `SYNAPTICON_HIL_HAL` names the HAL (default `ethercat_soem`).
+  For `ethercat_icube`, run in the terminal of [With the EtherCAT ICube HAL](#with-the-ethercat-icube-hal), without `SYNAPTICON_HIL_NETWORK_INTERFACE`.
 
 `colcon test` runs this test on simulated drives (`mock_cia402`) in both modes.
 So a change to the test or to the stack shows up before you go to the bench.
@@ -442,6 +494,9 @@ ros2 run synapticon_bringup run_hil_tests.py --network-interface <interface>    
 ros2 run synapticon_bringup run_hil_tests.py --network-interface <interface> --robot 28dof     # 28 drives
 ```
 
+To run every step on the EtherCAT ICube HAL, use `--hal ethercat_icube` without `--network-interface`, in the
+terminal of [With the EtherCAT ICube HAL](#with-the-ethercat-icube-hal).
+
 At the end, on one drive (about 7 minutes), expect this, each line followed by the path of its log:
 
 ```text
@@ -453,7 +508,7 @@ PASS  bring-up 1dof, CSP: -
 PASS  bring-up 1dof, impedance: -
 ```
 
-On a multi-drive setup with `--two-drives`, the suite has no skips.
+On the EtherCAT ICube HAL the suite has one test less, so 52 pass.
 
 On a robot with several joints, expect:
 
@@ -529,6 +584,7 @@ Choose the HAL with `--hal`:
 
 - `ethercat_soem` (the default), with `--network-interface`, in the shell of
   [section 2](#2-before-any-hardware-test)
+- `ethercat_icube`, with `--master-id` (0 by default), in the terminal of [With the EtherCAT ICube HAL](#with-the-ethercat-icube-hal)
 - `mock_cia402`, a simulated drive, which `colcon test` uses for every check
 
 There are four checks:
@@ -562,6 +618,9 @@ A Ctrl-C during the bring-up ends `hold` and `move` before the drive gets power.
    The log names the units it read from the drive ("one raw step is").
    The printed position, in rad, follows your hand.
    And the statusword says Switch On Disabled: in its low byte, bit 6 is set and bits 0 to 3 are clear.
+
+   On the EtherCAT ICube HAL, use `--hal ethercat_icube --master-id 0` in place of `--network-interface "$IF"`, here
+   and in the steps below.
 
 2. Time the exchange, still without power:
 
@@ -618,6 +677,9 @@ Use a slave_config that sets `0x605A = 6`, as the example config does.
    ros2 launch synapticon_bringup example_synapticon.launch.py robot:=1dof launch_rviz:=false \
      slave_config:=<your slave_config> network_interface:=<interface>
    ```
+
+   On the EtherCAT ICube HAL, use `hal:=ethercat_icube` in place of `network_interface:=<interface>`, in the
+   terminal of [With the EtherCAT ICube HAL](#with-the-ethercat-icube-hal).
 
 2. Terminal 2, watch the drive state (`device_state_name`, once a second and on every change):
 
@@ -712,7 +774,11 @@ Problems show up at one of four moments. Find the moment first, then your sympto
 - A hardware test started by hand with `launch_test` brings up another robot, or its controllers fail.
   Another program runs on the same `ROS_DOMAIN_ID`, often a leftover `robot_state_publisher`.
   Find it with `ros2 node list` and stop it, or use another ID.
-- The network interface cannot be opened.
+- pluginlib reports `Failed to find plugin synapticon_ethercat_icube/SynapticonDrive`.
+  The shell lacks the workspace overlay: `source install/setup.bash` and launch again.
+- `/dev/EtherCAT<master_id>` refuses access: you have no rights on the device.
+  Use a udev rule or a group. A new group counts only after a new login.
+- SOEM cannot open the network interface.
   The shell has no `CAP_NET_RAW`, or the name is wrong.
   Use the shell of [section 2](#2-before-any-hardware-test), and check the name with `ip link`.
 - Bring-up refuses a joint that gets power, because its slave_config maps no velocity state.
@@ -721,13 +787,20 @@ Problems show up at one of four moments. Find the moment first, then your sympto
 
 **While the bus comes up**
 
-- No EtherCAT slave answers.
+- The IgH master does not activate.
+  Another program holds it, or the `ec_` kernel modules are not loaded.
+  Stop that program, or check the modules with `lsmod | grep ec_`.
+- SOEM finds no EtherCAT slave.
   If the interface is down, the message says so: bring it up, as the script of section 2 does.
-  Otherwise another master may still hold the interface (stop it), or the drive has no power or sits on another
+  Otherwise the IgH master may still hold the interface (stop it), or the drive has no power or sits on another
   interface (check power and cable).
 - The drive does not reach OP.
-  It refuses an index or a type in the PDO mapping of its slave_config.
+  It refuses an index or a type in the PDO mapping of its slave_config. On the IgH master, `dmesg` and
+  `ethercat slaves` tell why.
   Generate the slave_config from the drive's ESI file.
+- Settings reads (SDO) fail at random with `Input/output error`, on a drive with Ethernet over EtherCAT such as the
+  Integro. NetworkManager sends traffic through the drive's `eoe` interface.
+  See [NewDriveModel.md](NewDriveModel.md#ethernet-over-ethercat).
 - Bring-up warns `No valid answer to the SDO read` and tries again, or refuses with `UNITS OF A DRIVE UNKNOWN`.
   After a rescan of the bus, the IgH master reads each drive's object dictionary, and meanwhile the drive answers no
   other read. A rescan can follow when a program releases the master.
@@ -738,7 +811,7 @@ Problems show up at one of four moments. Find the moment first, then your sympto
   The gear ratio (`0x6091`) cannot be read or is 0, or the encoders `0x2012:9` and `0x2010:12` do not name encoder 1
   or 2. Unlike the drive's units, these have no `units:` override in the slave_config. Fix them on the drive.
 - Bring-up refuses an impedance joint because of its firmware.
-  The drive runs a version older than 5.6.11. Update it.
+  The drive runs a version older than 5.6.11. Update it, see [FirmwareUpdate.md](FirmwareUpdate.md).
 
 **While the data starts to flow**
 
@@ -868,8 +941,14 @@ These observations explain why some tests retry, wait or allow for things.
 
 - **Right after the bus is released, the drive's mailbox may not be ready.**
   Then either the first config SDO of the next bring-up gets lost, or every SDO read fails and bring-up refuses.
+  The EtherCAT ICube HAL then goes on, with only "Failed to download config SDO" in the log.
   The SOEM HAL writes a lost SDO once more, and refuses the bring-up when that fails too.
   Every `sdo_si` entry without `verify: false` is read back after the write, written once more when the drive kept
   another value, and the bring-up is refused when the second write does not take either.
   The suite waits after every release and writes `0x605A` first.
   It repeats a bring-up that failed, or whose read-back shows that a value did not take.
+- **A bring-up on the EtherCAT ICube HAL can wait forever,** with the slave in PREOP and its error flag set.
+  It happens now and then right after a test released the bus, for example with the drive in a following error
+  fault raised just after a reset and enable.
+  The bus activation in the EtherCAT driver has no timeout.
+  That is why step 1 of [section 3](#3-hardware-in-the-loop-suite) runs the suite under a kill timeout.

@@ -4,7 +4,8 @@
 // Copyright (c) 2026 b-robotized GmbH
 
 /// @file
-/// @brief One drive's process image: its layout, and the bytes it reads and writes.
+/// @brief One drive's process image: its layout, and the bytes it reads and writes, as the EtherCAT ICube HAL's
+/// generic CiA 402 drive does.
 
 #include <cmath>
 #include <cstdint>

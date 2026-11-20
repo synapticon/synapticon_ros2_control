@@ -13,7 +13,8 @@ ros2_control hardware interface, controllers and examples for Synapticon SOMANET
      - 2.2.1. [ROS 2](#221-ros-2)
      - 2.2.2. [This package](#222-this-package)
      - 2.2.3. [Access to the network interface](#223-access-to-the-network-interface)
-     - 2.2.4. [Try it without hardware](#224-try-it-without-hardware)
+     - 2.2.4. [Choose an EtherCAT HAL](#224-choose-an-ethercat-hal)
+     - 2.2.5. [Try it without hardware](#225-try-it-without-hardware)
    - 2.3. [Packages](#23-packages)
 3. [Prepare a drive](#3-prepare-a-drive)
 4. [Test your drive](#4-test-your-drive)
@@ -35,8 +36,8 @@ It takes you from the installation to a joint that follows your commands, withou
 real drives.
 
 One hardware interface serves every mode and any number of drives.
-Below it, a hardware abstraction layer (HAL) talks to the drives: the EtherCAT HAL for real drives, or a mock for a
-test without hardware.
+Below it, a hardware abstraction layer (HAL) talks to the drives: one of two EtherCAT HALs for real drives, or a mock
+for a test without hardware.
 This HAL sits below the ros2_control hardware interface, which ros2_control itself sometimes also calls a HAL.
 
 | | Supported |
@@ -44,13 +45,16 @@ This HAL sits below the ros2_control hardware interface, which ros2_control itse
 | ROS 2 | Jazzy |
 | Drives | SOMANET drives with firmware 5.6.11 or newer, tested on a Circulo Safe Motion |
 | Modes | Impedance (-6), cyclic synchronous position CSP (8) and velocity CSV (9). Torque control is impedance with stiffness and damping at 0 ([details](#7-impedance-and-the-effort-command)) |
-| EtherCAT | The SOEM master library in user space, built with this repository |
+| EtherCAT | The SOEM master library in user space, built with this repository, or the IgH EtherCAT master through `ethercat_driver_ros2` ([choosing](#224-choose-an-ethercat-hal)) |
 
 ## 2. Overview
 
 ### 2.1. Hardware
 
-Configure the drives with [OBLAC Drives](https://www.synapticon.com/en/products/oblac-drives) before the first use.
+Commission each drive with a commissioning tool, for example
+[OBLAC Drives](https://www.synapticon.com/en/products/oblac-drives), before the first use.
+The stack reads what it needs from the drive, its units among them, and never changes its commissioning (see
+[Commissioning and units](synapticon_ros2_control/doc/NewDriveModel.md#commissioning-and-units)).
 Detailed instructions and wiring diagrams for all the devices are in the
 [Synapticon documentation](https://www.synapticon.com/en/support/dokumentation).
 The drives can be daisy chained in any order, as the figure shows.
@@ -87,7 +91,23 @@ in another. The listener prints what the talker says.
 #### 2.2.2. This package
 
 Use ROS 2 Jazzy on Ubuntu 24.04 and a colcon workspace.
-The build needs no EtherCAT master installed: the SOEM library comes with this repository.
+Choose one of two builds:
+
+- **Without IgH.** The mocks and the SOEM HAL, the default for real drives.
+  The build needs no EtherCAT master installed: the SOEM library comes with this repository.
+- **With IgH.** Adds the EtherCAT ICube HAL. The build needs the user-space library of the IgH EtherCAT master
+  (`libethercat`). Running the HAL also needs the master's kernel module on the machine.
+  The master is not a ROS package, so neither `vcs` nor `rosdep` installs it.
+  Install it first, for example with [ICube's guide](https://github.com/ICube-Robotics/ethercat_driver_ros2/blob/main/ethercat_driver_ros2/sphinx/quickstart/installation.rst).
+  A build-only machine can configure the master with `--disable-kernel`, as the CI job does.
+
+The environment variable `SYNAPTICON_HAL_ETHERCAT_ICUBE=ON` adds the EtherCAT ICube HAL to the build.
+It switches the dependencies of `synapticon_ethercat_icube` and its CMake option. Without it, that package builds
+nothing. Keep the variable set in the shell you build in.
+CMake keeps the value of the first build, and colcon does not reconfigure a package when only the variable changes.
+To switch a workspace that was built before, add `--cmake-clean-cache` to the next `colcon build`.
+
+Without IgH:
 
 ```bash
 source /opt/ros/jazzy/setup.bash
@@ -95,6 +115,21 @@ mkdir -p ~/ws/src && cd ~/ws/src
 git clone git@github.com:synapticon/synapticon_ros2_control.git
 cd ~/ws
 vcs import src < src/synapticon_ros2_control/synapticon_ros2_control.repos
+rosdep install --from-paths src --ignore-src -r -y
+colcon build --symlink-install --cmake-args -DCMAKE_BUILD_TYPE=Release
+source install/setup.bash
+```
+
+Or with IgH, which also imports the EtherCAT driver:
+
+```bash
+source /opt/ros/jazzy/setup.bash
+export SYNAPTICON_HAL_ETHERCAT_ICUBE=ON
+mkdir -p ~/ws/src && cd ~/ws/src
+git clone git@github.com:synapticon/synapticon_ros2_control.git
+cd ~/ws
+vcs import src < src/synapticon_ros2_control/synapticon_ros2_control.repos
+vcs import src < src/synapticon_ros2_control/ethercat_icube.repos
 rosdep install --from-paths src --ignore-src -r -y
 colcon build --symlink-install --cmake-args -DCMAKE_BUILD_TYPE=Release
 source install/setup.bash
@@ -131,7 +166,32 @@ To check that the drive answers, read it for a few seconds. This never powers it
 ros2 run synapticon_hardware drive_check read --network-interface <interface>
 ```
 
-#### 2.2.4. Try it without hardware
+#### 2.2.4. Choose an EtherCAT HAL
+
+Both EtherCAT HALs drive the same drives with the same robot definition and slave_config files, and behave the same
+above the HAL.
+The SOEM HAL is the default.
+
+| | `ethercat_soem` | `ethercat_icube` |
+|---|---|---|
+| EtherCAT master | SOEM, a library built with this repository | IgH, a kernel module, installed by hand |
+| Bus address | `network_interface`, for example `eth0` | `master_id` |
+| Rights | the capability `CAP_NET_RAW`, see [above](#223-access-to-the-network-interface) | access to `/dev/EtherCAT<master_id>` |
+| Command line tool | none | `ethercat` |
+
+For the EtherCAT ICube HAL, use a normal terminal instead of the capability shell, with the IgH master running.
+Check that it lists the drive:
+
+```bash
+sudo systemctl start ethercat
+ethercat slaves   # one line per drive, in PREOP while the stack is stopped
+```
+
+Then pass `hal:=ethercat_icube` to the launch and `--hal ethercat_icube` to the tools, in place of the network
+interface.
+The commands below that use the `ethercat` tool need the IgH master.
+
+#### 2.2.5. Try it without hardware
 
 ```bash
 ros2 launch synapticon_bringup example_synapticon.launch.py hal:=mock
@@ -153,6 +213,7 @@ The mock echoes the command as state, so the answer is `[0.75]`.
 | `synapticon_hardware` | `SynapticonSystemInterface` (the hardware interface), the HAL interface `SynapticonHalI`, the CiA 402 helpers, the code the EtherCAT HALs share, the slave_config generator, `MockHal` |
 | `synapticon_ethercat_soem` | `EthercatSoemHal`, the EtherCAT HAL through the SOEM library: the capability script, the hardware tests |
 | `soem_source` | The SOEM EtherCAT master library, vendored unmodified |
+| `synapticon_ethercat_icube` | `EthercatIcubeHal`, the EtherCAT HAL through ICube's `ethercat_driver_ros2`: its drive slave plugin, the hardware tests |
 | `synapticon_controllers` | `DriveController` (drive states and actions, fault reaction), `MotorCommandController` (impedance commands), `EthercatBusMonitorController` (bus health) |
 | `synapticon_bringup` | The example launch file, robot definitions and controller configurations |
 | `synapticon_description` | The example URDF and its xacro macros, with the motor and flywheel meshes |
@@ -163,12 +224,12 @@ controllers
     |
 SynapticonSystemInterface   ros2_control hardware interface, the same for every mode
     |
-SynapticonHalI              hal: ethercat_soem | mock | mock_cia402
-    |                \
-EthercatSoemHal     MockHal (no bus, commands echo back as state)
-    |               MockCia402Hal (simulated CiA 402 drives)
-SOEM library
-    |
+SynapticonHalI              hal: ethercat_soem | ethercat_icube | mock | mock_cia402
+    |                  |                   \
+EthercatSoemHal     EthercatIcubeHal     MockHal (no bus, commands echo back as state)
+    |                  |                 MockCia402Hal (simulated CiA 402 drives)
+SOEM library        IgH master
+    |                  |
 EtherCAT bus
 ```
 
@@ -177,6 +238,9 @@ EtherCAT bus
 ## 3. Prepare a drive
 
 Do these steps once per drive before the first run on hardware.
+For a drive model other than the Circulo Safe Motion, read
+[doc/NewDriveModel.md](synapticon_ros2_control/doc/NewDriveModel.md) first: wiring, network setup, units and gains
+can differ.
 
 ### 3.1. Check the firmware
 
@@ -185,6 +249,13 @@ Bring-up refuses a joint in impedance mode on older firmware, or when it cannot 
 other modes.
 Bring-up reads the version and names it in the log when it is too old.
 Update it with OBLAC Drives.
+With the IgH master, read the version with the stack stopped:
+
+```bash
+ethercat upload -p0 --type string 0x100a 0   # for example v5.6.11, -p0 is the drive's ring position
+```
+
+To update without OBLAC Drives, see [doc/FirmwareUpdate.md](synapticon_ros2_control/doc/FirmwareUpdate.md).
 
 ### 3.2. Generate a slave_config
 
@@ -204,8 +275,12 @@ ros2 run synapticon_hardware esi_to_slave_config.py --esi SOMANET_CiA_402_v5.6.1
 ```
 
 If you pick the wrong ones, bring-up tells you the product code of the drive it found.
+With the IgH master, `ethercat slaves -v` shows both ("Product code" and "Revision number").
 
 One file serves CSP and impedance mode, with the impedance gains in the map.
+It routes the controlword to the drive and sets `auto_state_transitions: false`, so that only the HAL switches the
+drive on and off. Both HALs refuse a joint that gets power without that routing, and the EtherCAT ICube HAL refuses
+any slave_config without that line. A file generated before needs the line added once.
 Its `sdo:` block writes a few settings at every bring-up. Check each one for your drive, the comments explain them.
 A setting whose unit depends on the drive goes into the `sdo_si:` block instead, in SI units: bring-up converts it
 with the units it reads from the drive.
@@ -225,17 +300,15 @@ Synapticon still calls impedance mode beta.
 | Gear ratio | 0x6091 | |
 | Encoders | motor side for commutation and velocity, output side for position | |
 
-Synapticon recommends type 1 (Analog Input). Write 1 to 0x2150:1, for example with OBLAC Drives, and store it on the
-drive.
-A drive without a physical torque sensor keeps its analog coefficients at 0, and then works with the motor torque.
+Set the sensor type with OBLAC Drives, or with the IgH master (write, store, read back).
+Stop the stack and power-cycle the drive first: the store command saves every setting the drive holds, also the
+values that bring-up writes at every start (`sdo:` and `sdo_si:`), which would change the drive's commissioning.
 
-Three more settings on the drive must be right: the gear ratio in 0x6091, the encoder on the motor side for
-commutation and velocity, and the encoder on the output side for position.
-Synapticon still calls impedance mode beta.
-
-Finally, the torque limit. The drive clamps the output of the impedance law to MaxJointTorque (0x2054).
-If 0 is stored there, the joint has power but no torque, and bring-up warns about it.
-Store a limit on the drive, or set `max_joint_torque` in the robot definition.
+```bash
+ethercat download -p0 --type uint8 0x2150 1 1             # torque sensor type: Analog Input
+ethercat download -p0 --type uint32 0x1010 1 0x65766173   # store the settings on the drive
+ethercat upload -p0 --type uint8 0x2150 1                 # expected: 0x01 1
+```
 
 ### 3.4. Check the quick stop setting
 
@@ -258,6 +331,7 @@ Without one, they use the bundled example, which fits only the Circulo Safe Moti
 Bring-up refuses it on another drive model.
 
 Run the tests in the shell of [Access to the network interface](#223-access-to-the-network-interface), with the stack stopped.
+For the EtherCAT ICube HAL, see [Choose an EtherCAT HAL](#224-choose-an-ethercat-hal).
 
 ### 4.1. Run the tests
 
@@ -272,6 +346,14 @@ Then run every automated hardware test in one go, about 7 minutes:
 
 ```bash
 SYNAPTICON_HIL_SLAVE_CONFIG="$CFG" ros2 run synapticon_bringup run_hil_tests.py --network-interface "$IF"
+```
+
+The same with the EtherCAT ICube HAL, with the IgH master running:
+
+```bash
+ros2 run synapticon_hardware drive_check read --config "$CFG" --hal ethercat_icube
+ros2 run synapticon_hardware drive_check move --config "$CFG" --hal ethercat_icube
+SYNAPTICON_HIL_SLAVE_CONFIG="$CFG" ros2 run synapticon_bringup run_hil_tests.py --hal ethercat_icube
 ```
 
 The summary at the end shows PASS or FAIL for each step.
@@ -294,9 +376,16 @@ For one drive it looks like this:
 
 ```yaml
 bus:
-  network_interface: eth0   # where the drives are wired
-  control_frequency: 1000   # Hz, the same as update_rate of the controller manager
-  readiness_timeout_s: 25.0 # how long bring-up waits for every drive to send valid data
+  network_interface: eth0   # where the drives are wired, for ethercat_soem
+  master_id: 0              # the IgH master, for ethercat_icube
+  control_frequency: 500    # Hz, the same as update_rate of the controller manager
+  readiness_timeout_s: 20.0 # how long bring-up waits for every drive to send valid data
+
+command_defaults:           # for every command that leaves these out
+  stiffness: 0.4            # Nm/rad
+  damping: 0.1              # Nm s/rad
+  max_joint_torque: 50.0    # Nm, the torque ceiling of the drive
+  keep_last_given: false    # true: repeat the last given value instead
 
 joints:
   - name: joint_1
@@ -361,6 +450,7 @@ A real robot brings its own URDF and launch file.
 ## 6. Run on hardware
 
 Keep the joints free to move, and launch from the shell of [Access to the network interface](#223-access-to-the-network-interface).
+For the EtherCAT ICube HAL, replace `network_interface:=<interface>` with `hal:=ethercat_icube` below, see [Choose an EtherCAT HAL](#224-choose-an-ethercat-hal).
 After the launch, the drives are not energised. Energising is always a separate, explicit step.
 
 ### 6.1. Position control (CSP)
@@ -414,8 +504,8 @@ How the drives are reached, and how they are controlled:
 
 | Argument | Default | Meaning |
 |---|---|---|
-| `hal` | `ethercat_soem` | real drives; `mock` for none, `mock_cia402` for simulated ones that need an enable to move |
-| `network_interface` | `''` | the drives' network interface; empty takes the robot definition's |
+| `hal` | `ethercat_soem` | `ethercat_soem` or `ethercat_icube` for real drives; `mock` for none, `mock_cia402` for simulated ones that need an enable to move |
+| `network_interface` | `''` | the drives' network interface, for `ethercat_soem`; empty takes the robot definition's |
 | `slave_config` | the bundled example | for every joint that names none in the robot definition |
 | `impedance` | `false` | `true`: impedance mode (-6), its commands, and `motor_command_controller` |
 | `command_controller` | from the mode | the controller that takes the joint commands |
@@ -579,6 +669,8 @@ This needs as many joints as motors in each transmission.
 |---|---|
 | [doc/HowTo.md](synapticon_ros2_control/doc/HowTo.md) | Diagnostics on a running system |
 | [doc/Testing.md](synapticon_ros2_control/doc/Testing.md) | Unit tests, hardware-in-the-loop tests, manual tests |
+| [doc/NewDriveModel.md](synapticon_ros2_control/doc/NewDriveModel.md) | What to check on a drive model other than the Circulo |
+| [doc/FirmwareUpdate.md](synapticon_ros2_control/doc/FirmwareUpdate.md) | Updating the drive firmware over EtherCAT |
 | [doc/QuickStop.md](synapticon_ros2_control/doc/QuickStop.md) | Quick stop options and behaviour |
 | [doc/ControlLayers.md](synapticon_ros2_control/doc/ControlLayers.md) | Motion controller, fault reaction and drive, and who stops what |
 | [doc/Realtime.md](synapticon_ros2_control/doc/Realtime.md) | Real-time setup of the host |
