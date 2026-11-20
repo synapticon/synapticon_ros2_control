@@ -11,7 +11,9 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <functional>
 #include <optional>
+#include <string>
 #include <vector>
 
 #include "synapticon_hardware/ethercat/slave_config.hpp"
@@ -27,6 +29,9 @@ struct MappedChannel
   std::optional<std::size_t> slot;  ///< in the HAL's buffer, nothing for a channel the HAL has no slot for
 };
 
+/// Where a channel sits in a larger process image: its bit offset from the start of that image, or nothing.
+using ChannelLocator = std::function<std::optional<std::size_t>(const PdoChannel& channel)>;
+
 /// @brief One drive's process image layout and its conversion to and from the HAL's buffers.
 ///
 /// The PDOs of the slave_config follow each other in mapping order, each entry right after the one before. A channel
@@ -40,6 +45,18 @@ public:
   /// The layout of `config` for a joint in `mode_of_operation`, with its channels assigned to the buffer slots of the
   /// PDO channel tables by their interface names.
   ProcessImage(const SlaveConfig& config, int mode_of_operation);
+
+  /// @brief Place each channel where the master put it, in place of the packed layout from bit 0.
+  ///
+  /// For a master that lays out the process data itself. The bytes passed to read_inputs() and write_outputs() are
+  /// then the master's whole images. output_bytes() and input_bytes() keep the sizes of the packed layout.
+  ///
+  /// @param[in]  locate_output  The bit offset of each rpdo channel in the output image
+  /// @param[in]  locate_input   The bit offset of each tpdo channel in the input image
+  /// @param[out] error          The first channel that has no place, or that does not start on a byte. A bool or
+  ///                            bitN channel must keep its bit within the byte, which its mask fixes.
+  /// @return true when every channel has its place. On false, the layout is unchanged.
+  bool relocate(const ChannelLocator& locate_output, const ChannelLocator& locate_input, std::string& error);
 
   /// The size of the drive's output (master to drive) and input (drive to master) bytes.
   std::size_t output_bytes() const;

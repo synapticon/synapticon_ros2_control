@@ -11,7 +11,9 @@
 #include <cstdint>
 #include <cstring>
 #include <limits>
+#include <optional>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include <gtest/gtest.h>
@@ -144,6 +146,84 @@ TEST(ExampleDrive, HasTheSizesOfItsPdos)
   const ProcessImage image(*config, CSP);
   EXPECT_EQ(image.output_bytes(), 27u);  // controlword, mode, six 32-bit entries
   EXPECT_EQ(image.input_bytes(), 43u);   // 0x1A00, the diagnostics with the 8-byte error report
+}
+
+// --- Relocation -----------------------------------------------------------------------------
+
+/// A locator that puts each channel of `offsets` (object index to byte offset) at that byte, and has no place for others.
+ChannelLocator at_bytes(std::vector<std::pair<uint16_t, std::size_t>> offsets)
+{
+  return [offsets](const PdoChannel& channel) -> std::optional<std::size_t> {
+    for (const auto& [index, byte] : offsets)
+    {
+      if (index == channel.index)
+      {
+        return byte * 8;
+      }
+    }
+    return std::nullopt;
+  };
+}
+
+/// The small drive's entries scattered in a 64-byte image, in another order than in the slave_config.
+const auto SCATTERED_OUTPUTS =
+    at_bytes({ { 0x6040, 40 }, { 0x6060, 10 }, { 0x607A, 20 }, { 0x60FF, 30 }, { 0x60FE, 50 } });
+const auto SCATTERED_INPUTS = at_bytes({ { 0x6041, 33 }, { 0x6061, 3 }, { 0x6064, 12 }, { 0x203F, 50 } });
+
+TEST(Relocation, ReadsAndWritesTheChannelsWhereTheMasterPutThem)
+{
+  ProcessImage image(small_drive(), CSP);
+  std::string error;
+  ASSERT_TRUE(image.relocate(SCATTERED_OUTPUTS, SCATTERED_INPUTS, error)) << error;
+  EXPECT_EQ(image.output_bytes(), 15u);  // the sizes of the packed layout
+  EXPECT_EQ(image.input_bytes(), 15u);
+
+  std::vector<uint8_t> in(64, 0);
+  put<uint16_t>(in, 33, 0x0237);
+  put<int8_t>(in, 3, CSP);
+  put<int32_t>(in, 12, -100);
+  std::vector<double> inputs(ec::layout::INPUT_SIZE, 0.0);
+  image.read_inputs(in.data(), inputs);
+  EXPECT_EQ(inputs[ec::slot::STATUS_WORD], 0x0237);
+  EXPECT_EQ(inputs[ec::slot::MODE_DISPLAY], CSP);
+  EXPECT_EQ(inputs[ec::slot::ACTUAL_POSITION], -199.0);
+
+  std::vector<uint8_t> out(64, UNTOUCHED);
+  std::vector<double> outputs(ec::layout::OUTPUT_SIZE, NaN);
+  outputs[ec::slot::CONTROL_WORD] = 0x000F;
+  outputs[ec::slot::TARGET_POSITION] = 1234;
+  image.write_outputs(outputs, out.data());
+  EXPECT_EQ(at<uint16_t>(out, 40), 0x000F);
+  EXPECT_EQ(at<int8_t>(out, 10), CSP);
+  EXPECT_EQ(at<int32_t>(out, 20), 1234);
+  EXPECT_EQ(out[0], UNTOUCHED);   // nothing at the packed offsets
+  EXPECT_EQ(out[50], UNTOUCHED);  // the channel without a command
+}
+
+TEST(Relocation, IsRefusedForAChannelWithoutAPlace)
+{
+  ProcessImage image(small_drive(), CSP);
+  std::string error;
+  EXPECT_FALSE(image.relocate(at_bytes({ { 0x6040, 0 } }), SCATTERED_INPUTS, error));
+  EXPECT_NE(error.find("0x6060:0"), std::string::npos) << error;
+}
+
+TEST(Relocation, IsRefusedForAChannelThatDoesNotStartOnAByte)
+{
+  ProcessImage image(small_drive(), CSP);
+  const ChannelLocator off_by_a_bit = [](const PdoChannel& channel) -> std::optional<std::size_t> {
+    return channel.index == 0x6041 ? 3 : 64;
+  };
+  std::string error;
+  EXPECT_FALSE(image.relocate(SCATTERED_OUTPUTS, off_by_a_bit, error));
+  EXPECT_NE(error.find("0x6041:0"), std::string::npos) << error;
+
+  // Unchanged after the refusal: still the packed layout.
+  std::vector<uint8_t> in(15, 0);
+  put<uint16_t>(in, IN_SW, 0x0237);
+  std::vector<double> inputs(ec::layout::INPUT_SIZE, 0.0);
+  image.read_inputs(in.data(), inputs);
+  EXPECT_EQ(inputs[ec::slot::STATUS_WORD], 0x0237);
 }
 
 // --- Inputs ---------------------------------------------------------------------------------
