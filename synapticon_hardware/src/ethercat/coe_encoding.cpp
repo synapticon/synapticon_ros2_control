@@ -6,7 +6,7 @@
 /// @file
 /// @brief Startup SDO values and PDO mapping entries as the bytes a drive takes.
 
-#include "coe_encoding.hpp"
+#include "synapticon_hardware/ethercat/coe_encoding.hpp"
 
 #include <cinttypes>
 #include <cstdio>
@@ -14,7 +14,7 @@
 #include <stdexcept>
 #include <string>
 
-namespace synapticon_ethercat_soem
+namespace synapticon_hardware::ethercat
 {
 
 namespace
@@ -140,4 +140,4 @@ std::vector<uint8_t> pdo_entry_bytes(const PdoChannel& channel)
   return little_endian(entry, 4);
 }
 
-}  // namespace synapticon_ethercat_soem
+}  // namespace synapticon_hardware::ethercat

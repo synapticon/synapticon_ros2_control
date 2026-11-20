@@ -21,6 +21,11 @@
 #include "synapticon_hardware/hal_config.hpp"
 #include "synapticon_hardware/link_health.hpp"
 
+namespace synapticon_hardware::ethercat
+{
+struct StartupSdo;
+}  // namespace synapticon_hardware::ethercat
+
 namespace synapticon_ethercat_soem
 {
 
@@ -28,8 +33,7 @@ using synapticon_hardware::DriveState;
 using synapticon_hardware::HalConfig;
 using synapticon_hardware::LinkHealth;
 using synapticon_hardware::ethercat::JointConfig;
-
-struct StartupSdo;
+using synapticon_hardware::ethercat::StartupSdo;
 
 /// @brief Bus-wide settings for a Synapticon drive segment on a SOEM master.
 struct SoemConfig : synapticon_hardware::ethercat::BusConfig

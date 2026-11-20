@@ -15,11 +15,11 @@
 
 #include <ament_index_cpp/get_package_share_directory.hpp>
 
-#include "slave_config.hpp"
+#include "synapticon_hardware/ethercat/slave_config.hpp"
 
 namespace
 {
-using namespace synapticon_ethercat_soem;
+using namespace synapticon_hardware::ethercat;
 
 std::string example_path()
 {

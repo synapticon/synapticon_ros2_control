@@ -35,12 +35,12 @@ extern "C" {
 #include "ethercat.h"
 }
 
-#include "coe_encoding.hpp"
 #include "error_list.hpp"
 #include "process_data_mapping.hpp"
-#include "process_image.hpp"
-#include "slave_config.hpp"
 #include "synapticon_hardware/ethercat/bad_cycle_count.hpp"
+#include "synapticon_hardware/ethercat/coe_encoding.hpp"
+#include "synapticon_hardware/ethercat/process_image.hpp"
+#include "synapticon_hardware/ethercat/slave_config.hpp"
 #include "synapticon_hardware/ethercat/robot_config.hpp"
 #include "synapticon_hardware/hal_config.hpp"
 
@@ -51,6 +51,10 @@ namespace
 {
 namespace ec = synapticon_hardware::ethercat;
 using ec::BadCycleCount;
+using ec::load_slave_config;
+using ec::Pdo;
+using ec::ProcessImage;
+using ec::SlaveConfig;
 
 constexpr const char* LOGGER_NAME = "EthercatSoemHal";
 constexpr uint16_t SM_RXPDO_ASSIGN = 0x1C12;

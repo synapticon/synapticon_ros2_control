@@ -4,9 +4,9 @@
 // Copyright (c) 2026 b-robotized GmbH
 
 /// @file
-/// @brief One drive's process image for the SOEM HAL.
+/// @brief One drive's process image for the EtherCAT HALs that move the bytes themselves.
 
-#include "process_image.hpp"
+#include "synapticon_hardware/ethercat/process_image.hpp"
 
 #include <cmath>
 #include <cstdint>
@@ -16,7 +16,7 @@
 #include "synapticon_hardware/ethercat/coe_objects.hpp"
 #include "synapticon_hardware/ethercat/pdo_channels.hpp"
 
-namespace synapticon_ethercat_soem
+namespace synapticon_hardware::ethercat
 {
 
 namespace
@@ -245,4 +245,4 @@ void ProcessImage::write_outputs(const std::vector<double>& outputs, uint8_t* by
   }
 }
 
-}  // namespace synapticon_ethercat_soem
+}  // namespace synapticon_hardware::ethercat

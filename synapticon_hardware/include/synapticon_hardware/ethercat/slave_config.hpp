@@ -6,9 +6,9 @@
 #pragma once
 
 /// @file
-/// @brief A drive's slave_config YAML as the SOEM HAL reads it: identity, startup SDOs and the PDO mapping.
+/// @brief A drive's slave_config YAML as the EtherCAT HALs read it: identity, startup SDOs and the PDO mapping.
 ///
-/// The format is the one of the slave_config files the EtherCAT HALs share. Only the keys the SOEM HAL needs are read.
+/// The format is the one of the slave_config files the EtherCAT HALs share. Only the keys these HALs need are read.
 
 #include <cstdint>
 #include <limits>
@@ -16,7 +16,7 @@
 #include <string>
 #include <vector>
 
-namespace synapticon_ethercat_soem
+namespace synapticon_hardware::ethercat
 {
 
 /// The kind of value a PDO entry or SDO carries.
@@ -87,4 +87,4 @@ struct SlaveConfig
 /// a PDO channel does not fit the byte access of the process image.
 std::optional<SlaveConfig> load_slave_config(const std::string& path, std::string& error);
 
-}  // namespace synapticon_ethercat_soem
+}  // namespace synapticon_hardware::ethercat

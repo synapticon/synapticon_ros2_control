@@ -14,7 +14,7 @@ What else is in the package:
 | `SynapticonHalI` | the HAL interface: lifecycle, cyclic read and write, drive actions |
 | CiA 402 helpers | the drive state machine, the walks of the drive actions and the setpoint forwarding, for every HAL |
 | `MockHal`, `MockCia402Hal` | HALs without drives: commands come back as states, or a simulated drive answers |
-| EtherCAT helpers | what every EtherCAT HAL shares: `EthercatPdoHal`, object indices, PDO channels, the bus, joint and robot configuration, the checks at bring-up |
+| EtherCAT helpers | what every EtherCAT HAL shares: `EthercatPdoHal`, object indices, PDO channels, the slave_config loader, the process image, the bus, joint and robot configuration, the checks at bring-up |
 | `esi_to_slave_config.py` | makes a drive's slave_config from its ESI file |
 | `config/example_somanet_circulo_safe_motion.yaml` | an example slave_config for one SOMANET Circulo |
 | `drive_check` | basic checks of one drive through any HAL, see [Testing.md](../synapticon_ros2_control/doc/Testing.md) |

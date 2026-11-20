@@ -31,12 +31,9 @@ find_package(yaml-cpp REQUIRED)
 set(_deps pluginlib rclcpp synapticon_hardware)
 
 add_library(${PROJECT_NAME} SHARED
-  src/coe_encoding.cpp
   src/error_list.cpp
   src/ethercat_soem_hal.cpp
   src/process_data_mapping.cpp
-  src/process_image.cpp
-  src/slave_config.cpp
 )
 target_include_directories(${PROJECT_NAME}
   PUBLIC
@@ -67,10 +64,8 @@ if(BUILD_TESTING)
   find_package(ament_cmake_gmock REQUIRED)
   find_package(ament_index_cpp REQUIRED)
 
-  # The slave_config, the process image and its mapping, the object dictionary encodings, SOEM's error list and the
-  # HAL without a bus.
-  foreach(test_name test_slave_config test_process_image test_process_data_mapping test_coe_encoding test_error_list
-                    test_ethercat_soem_hal)
+  # The process data mapping, SOEM's error list and the HAL without a bus.
+  foreach(test_name test_process_data_mapping test_error_list test_ethercat_soem_hal)
     ament_add_gmock(${test_name} test/${test_name}.cpp)
     target_link_libraries(${test_name} ${PROJECT_NAME} ament_index_cpp::ament_index_cpp)
     target_include_directories(${test_name} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)

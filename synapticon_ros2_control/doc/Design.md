@@ -64,8 +64,8 @@ driver's `EthercatBusManager` makes one per drive, as an `ethercat_interface::Ec
 address, the slave_config and the buffer layout that the HAL hands it.
 `synapticon_ethercat_icube` is built only with `SYNAPTICON_HAL_ETHERCAT_ICUBE=ON`. Without it, the other HALs remain.
 What every EtherCAT HAL shares is in `synapticon_hardware`, without an EtherCAT dependency: the base class
-`EthercatPdoHal` with the PDO buffers and the bring-up checks, the slave_config format and its generator, the robot
-definition and the hardware tests.
+`EthercatPdoHal` with the PDO buffers and the bring-up checks, the slave_config format, its loader and its generator,
+the process image that converts a drive's PDO bytes, the robot definition and the hardware tests.
 
 A HAL is named after how it reaches the drives, then the library, then `Hal`:
 

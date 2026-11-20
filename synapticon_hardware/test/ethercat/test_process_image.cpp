@@ -18,12 +18,12 @@
 
 #include <ament_index_cpp/get_package_share_directory.hpp>
 
-#include "process_image.hpp"
+#include "synapticon_hardware/ethercat/process_image.hpp"
 #include "synapticon_hardware/ethercat/pdo_channels.hpp"
 
 namespace
 {
-using namespace synapticon_ethercat_soem;
+using namespace synapticon_hardware::ethercat;
 namespace ec = synapticon_hardware::ethercat;
 
 constexpr double NaN = std::numeric_limits<double>::quiet_NaN();

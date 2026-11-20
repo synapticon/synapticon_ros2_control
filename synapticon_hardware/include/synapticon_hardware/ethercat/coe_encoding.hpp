@@ -13,9 +13,9 @@
 #include <string>
 #include <vector>
 
-#include "slave_config.hpp"
+#include "synapticon_hardware/ethercat/slave_config.hpp"
 
-namespace synapticon_ethercat_soem
+namespace synapticon_hardware::ethercat
 {
 
 /// The little-endian bytes of a startup SDO's value, as its type gives them. A negative value of an unsigned object
@@ -30,4 +30,4 @@ std::string coe_value_text(const ValueType& type, const std::vector<uint8_t>& by
 /// The four bytes of the PDO mapping entry for `channel`: its index, sub-index and bit length, little-endian.
 std::vector<uint8_t> pdo_entry_bytes(const PdoChannel& channel);
 
-}  // namespace synapticon_ethercat_soem
+}  // namespace synapticon_hardware::ethercat

@@ -14,9 +14,9 @@
 #include <optional>
 #include <vector>
 
-#include "slave_config.hpp"
+#include "synapticon_hardware/ethercat/slave_config.hpp"
 
-namespace synapticon_ethercat_soem
+namespace synapticon_hardware::ethercat
 {
 
 /// A channel, its place in the drive's output or input bytes, and its slot in the HAL's buffer.
@@ -72,4 +72,4 @@ double read_value(const uint8_t* bytes, std::size_t bit_offset, const ValueType&
 /// to the field's range, except that a negative value of an unsigned field wraps as two's complement.
 void write_value(uint8_t* bytes, std::size_t bit_offset, const ValueType& type, uint8_t mask, double value);
 
-}  // namespace synapticon_ethercat_soem
+}  // namespace synapticon_hardware::ethercat

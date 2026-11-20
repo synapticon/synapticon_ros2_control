@@ -4,9 +4,9 @@
 // Copyright (c) 2026 b-robotized GmbH
 
 /// @file
-/// @brief Reading a drive's slave_config YAML for the SOEM HAL.
+/// @brief Reading a drive's slave_config YAML for the EtherCAT HALs.
 
-#include "slave_config.hpp"
+#include "synapticon_hardware/ethercat/slave_config.hpp"
 
 #include <cstddef>
 #include <cstdio>
@@ -17,9 +17,9 @@
 
 #include <yaml-cpp/yaml.h>
 
-#include "coe_encoding.hpp"
+#include "synapticon_hardware/ethercat/coe_encoding.hpp"
 
-namespace synapticon_ethercat_soem
+namespace synapticon_hardware::ethercat
 {
 
 namespace
@@ -221,4 +221,4 @@ std::optional<SlaveConfig> load_slave_config(const std::string& path, std::strin
   }
 }
 
-}  // namespace synapticon_ethercat_soem
+}  // namespace synapticon_hardware::ethercat

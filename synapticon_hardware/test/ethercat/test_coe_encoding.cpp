@@ -14,11 +14,11 @@
 
 #include <gtest/gtest.h>
 
-#include "coe_encoding.hpp"
+#include "synapticon_hardware/ethercat/coe_encoding.hpp"
 
 namespace
 {
-using namespace synapticon_ethercat_soem;
+using namespace synapticon_hardware::ethercat;
 using Bytes = std::vector<uint8_t>;
 
 StartupSdo sdo(const char* type, const std::string& value)
