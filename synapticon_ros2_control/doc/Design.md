@@ -66,6 +66,8 @@ address, the slave_config and the buffer layout that the HAL hands it.
 What every EtherCAT HAL shares is in `synapticon_hardware`, without an EtherCAT dependency: the base class
 `EthercatPdoHal` with the PDO buffers and the bring-up checks, the slave_config format, its loader and its generator,
 the process image that converts a drive's PDO bytes, the robot definition and the hardware tests.
+A HAL whose master lays out the process data itself places the process image's channels where the master put them
+(`ProcessImage::relocate()`).
 
 A HAL is named after how it reaches the drives, then the library, then `Hal`:
 

@@ -10,8 +10,10 @@
 
 #include <cmath>
 #include <cstdint>
+#include <cstdio>
 #include <cstring>
 #include <string>
+#include <utility>
 
 #include "synapticon_hardware/ethercat/coe_objects.hpp"
 #include "synapticon_hardware/ethercat/pdo_channels.hpp"
@@ -43,6 +45,34 @@ std::size_t lay_out(const std::vector<Pdo>& pdos, SlotOf slot_of, std::vector<Ma
     }
   }
   return (bits + 7) / 8;
+}
+
+/// The channels of `mapped` at the bit offsets `locate` gives, in `moved`. False, with `error` set, at the first
+/// channel that has no place or would change its position within a byte.
+bool place(const std::vector<MappedChannel>& mapped, const ChannelLocator& locate, const char* section,
+           std::vector<MappedChannel>& moved, std::string& error)
+{
+  moved = mapped;
+  for (auto& entry : moved)
+  {
+    char object[16];
+    std::snprintf(object, sizeof(object), "0x%04X:%u", entry.channel.index, entry.channel.sub_index);
+    const auto offset = locate(entry.channel);
+    if (!offset)
+    {
+      error = std::string(section) + " channel " + object + " is not in the master's process data";
+      return false;
+    }
+    if (*offset % 8 != entry.bit_offset % 8)
+    {
+      error = std::string(section) + " channel " + object + " is at bit " + std::to_string(*offset % 8) +
+              " of a byte in the master's process data, but at bit " + std::to_string(entry.bit_offset % 8) +
+              " in the slave_config";
+      return false;
+    }
+    entry.bit_offset = *offset;
+  }
+  return true;
 }
 
 /// The little-endian integer of `bits` bits at byte `at` of `bytes`.
@@ -158,6 +188,19 @@ ProcessImage::ProcessImage(const SlaveConfig& config, int mode_of_operation) : m
 {
   output_bytes_ = lay_out(config.rpdo, ec::output_slot, outputs_);
   input_bytes_ = lay_out(config.tpdo, ec::input_slot, inputs_);
+}
+
+bool ProcessImage::relocate(const ChannelLocator& locate_output, const ChannelLocator& locate_input, std::string& error)
+{
+  std::vector<MappedChannel> outputs;
+  std::vector<MappedChannel> inputs;
+  if (!place(outputs_, locate_output, "rpdo", outputs, error) || !place(inputs_, locate_input, "tpdo", inputs, error))
+  {
+    return false;
+  }
+  outputs_ = std::move(outputs);
+  inputs_ = std::move(inputs);
+  return true;
 }
 
 std::size_t ProcessImage::output_bytes() const
