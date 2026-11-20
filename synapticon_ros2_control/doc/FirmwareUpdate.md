@@ -124,6 +124,8 @@ The firmware cannot be read back from the drive, so this package is your way bac
 
 ## 4. Write the SII
 
+The SII comes first, then the firmware. Synapticon's own update tool, OBLAC Drives, does it in the same order, and
+writes the package's SII at every firmware update.
 Skip this step if the package has no SII file.
 The SII must be written in **INIT**, not in BOOT:
 
@@ -139,7 +141,7 @@ Then **power-cycle the drive**, so that it starts with the new SII.
 
 ## 5. Flash the firmware
 
-Switch to BOOT and check that the drive got there:
+Every file written over FoE needs the drive in BOOT. Switch to it and check that the drive got there:
 
 ```bash
 ethercat states -p0 BOOT
@@ -147,7 +149,8 @@ ethercat slaves -p0           # must show BOOT
 ```
 
 Transfer the firmware. The file must arrive on the drive under the name `app_firmware.bin`.
-`foe_write` uses the local file name, so copy the binary to that name first:
+The packages name the binary after the drive and version instead, and `foe_write` uses the local file name,
+so copy the binary to that name first:
 
 ```bash
 cp app_<...>.bin app_firmware.bin
